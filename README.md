@@ -5,7 +5,7 @@ Admin workbench for APQC process mapping. Python 3, Flask, and SQLite on your ma
 ## Run
 
 ```bash
-cd ~/Desktop/Cursor
+cd /Users/arjuna/Cursor
 git fetch origin
 git checkout cursor/aetria-phase1-admin-6386
 git pull
@@ -18,16 +18,16 @@ python seed.py
 python app.py
 ```
 
-Open **http://localhost:8765/login**
+`python app.py` starts the site in the background and opens **http://localhost:8765/login**. You can close the Terminal window. The site stays up.
 
-If the terminal says `Address already in use`, the old file server is still on that port:
+Stop it with:
 
 ```bash
-kill $(lsof -t -iTCP:8765 -sTCP:LISTEN)
-python app.py
+cd /Users/arjuna/Cursor
+python app.py --stop
 ```
 
-Leave that window open. Sign in as `admin@aetria.com` / `password123`.
+Sign in as `admin@aetria.com` / `password123`.
 
 `operator@aetria.com` is the same Admin role. `area@aetria.com`, `admin@acme.com`, and `viewer@acme.com` can sign in, but area filtering is not on yet.
 

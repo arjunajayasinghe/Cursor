@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import os
 import re
+import signal
+import socket
+import subprocess
+import sys
+import time
 from functools import wraps
 from io import BytesIO
 from pathlib import Path
@@ -1025,8 +1030,111 @@ def create_app():
     return app
 
 
-if __name__ == "__main__":
+def _port_open(port: int) -> bool:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.settimeout(0.3)
+        return sock.connect_ex(("127.0.0.1", port)) == 0
+
+
+def _runtime_dir() -> Path:
+    path = Path(__file__).resolve().parent / "data"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _pid_file() -> Path:
+    return _runtime_dir() / "aetria.pid"
+
+
+def _read_pid() -> int | None:
+    try:
+        return int(_pid_file().read_text().strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _pid_alive(pid: int | None) -> bool:
+    if not pid:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _open_login(port: int) -> None:
+    if sys.platform != "darwin":
+        return
+    subprocess.Popen(["open", f"http://localhost:{port}/login"])
+
+
+def _serve(port: int, debug: bool) -> None:
+    if hasattr(signal, "SIGHUP"):
+        signal.signal(signal.SIGHUP, signal.SIG_IGN)
     init_db()
-    port = int(os.environ.get("PORT", "8765"))
     print(f"Aetria Admin workbench → http://localhost:{port}/login")
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port, debug=debug, use_reloader=debug)
+
+
+def _stop_server(port: int) -> None:
+    pid = _read_pid()
+    if _pid_alive(pid):
+        try:
+            os.killpg(pid, signal.SIGTERM)
+        except OSError:
+            os.kill(pid, signal.SIGTERM)
+        _pid_file().unlink(missing_ok=True)
+        print("Aetria stopped.")
+        return
+    _pid_file().unlink(missing_ok=True)
+    if _port_open(port):
+        print("Aetria is still running in a Terminal window. Press Ctrl+C there, then run python app.py again.")
+        return
+    print("Aetria is not running.")
+
+
+def _start_in_background(port: int) -> None:
+    if _port_open(port):
+        print(f"Aetria is already running at http://localhost:{port}/login")
+        print("You can close this window. The site stays up.")
+        _open_login(port)
+        return
+    log_path = _runtime_dir() / "aetria.log"
+    log_handle = open(log_path, "a", buffering=1)
+    env = os.environ.copy()
+    env["AETRIA_DETACHED"] = "1"
+    proc = subprocess.Popen(
+        [sys.executable, str(Path(__file__).resolve())],
+        cwd=str(Path(__file__).resolve().parent),
+        env=env,
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,
+    )
+    _pid_file().write_text(str(proc.pid))
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        if _port_open(port):
+            print(f"Aetria is running at http://localhost:{port}/login")
+            print("You can close this window. The site stays up.")
+            print("Stop it later with: python app.py --stop")
+            _open_login(port)
+            return
+        if proc.poll() is not None:
+            break
+        time.sleep(0.1)
+    print(f"Aetria did not start. The log is {log_path}")
+    sys.exit(1)
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "8765"))
+    if "--stop" in sys.argv:
+        _stop_server(port)
+    elif os.environ.get("AETRIA_DETACHED") == "1":
+        _serve(port, debug=False)
+    elif "--foreground" in sys.argv:
+        _serve(port, debug=True)
+    else:
+        _start_in_background(port)
