@@ -4,12 +4,12 @@
 <header class="page-head">
   <p class="eyebrow">L1–L5</p>
   <h1>Assign to a company</h1>
-  <p class="lede">Pick a company, the Consumer Products master, and a value stream. “Use suggested processes” copies that branch and keeps the APQC parents and numbers.</p>
+  <p class="lede">Each company has its own value streams. This stream uses levels {{ allowed_levels|join(', ') }}.</p>
 </header>
 <section class="panel">
   <form method="get" class="grid-2">
     <label>Company
-      <select name="company_id">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+      <select name="company_id" onchange="this.form.submit()">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
     </label>
     <label>Master
       <select name="master_id">{% for m in masters %}<option value="{{ m.id }}" {% if m.id == master_id %}selected{% endif %}>{{ m.industry }} {{ m.version }}</option>{% endfor %}</select>

@@ -36,7 +36,7 @@ Sign in as `admin@aetria.com` / `password123`.
 - Dashboard with masters, companies, assignments, workshops, critical points, and automation
 - Several APQC masters (industry + version). Seed loads **Consumer Products 8.0** (`CP8.0`, about 2,039 elements, L1–L5)
 - Companies, including a short name used in file names
-- Value streams with suggested hierarchy IDs. On this master, O2C is **3.5** and **9.2** (2.3 is product development)
+- Value streams belong to a company. Each stream chooses its own APQC levels (L1–L5). Hierarchy IDs are added by hand or by upload, not generated
 - Assign L1–L5 to a company by value stream. APQC hierarchy and numbers stay
 - Excel **download** only
 - Workshops: meeting minutes, diagrams, critical points

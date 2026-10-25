@@ -2,60 +2,90 @@
 {% block title %}Value streams · Aetria{% endblock %}
 {% block body %}
 <header class="page-head">
-  <p class="eyebrow">Assignment seeds</p>
+  <p class="eyebrow">Per company</p>
   <h1>Value streams</h1>
-  <p class="lede">Suggested APQC codes come from this Consumer Products 8.0 master. Example: O2C starts at 3.5 (sales plans) and 9.2 (revenue accounting). In this file, 2.3 is product development, not order to cash.</p>
+  <p class="lede">Each company keeps its own streams. Tick the APQC levels that customer uses. Hierarchy IDs stay empty until you add them.</p>
 </header>
-<section class="panel">
-  <h2>Add a value stream</h2>
-  <form method="post" class="grid-2">
-    <input type="hidden" name="action" value="stream" />
-    <label>Code<input name="code" required placeholder="O2C" /></label>
-    <label>Name<input name="name" required placeholder="Order to Cash" /></label>
-    <label>Description<input name="description" /></label>
-    <div><button class="btn" type="submit">Add</button></div>
-  </form>
-</section>
-<section class="panel" style="margin-top:0.75rem">
-  <h2>Add a suggested process</h2>
-  <form method="post" class="grid-2">
-    <input type="hidden" name="action" value="suggestion" />
-    <label>Value stream
-      <select name="value_stream_id" required>
-        {% for s in streams %}<option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
-      </select>
-    </label>
-    <label>Hierarchy ID<input name="process_code" required placeholder="3.5" /></label>
-    <label>Note<input name="note" placeholder="Why this code" /></label>
-    <div><button class="btn" type="submit">Add suggestion</button></div>
-  </form>
-  <form method="post" action="{{ url_for('value_stream_upload') }}" enctype="multipart/form-data" class="row-form" style="margin-top:0.8rem">
-    <label>Mapping file<input type="file" name="file" accept=".csv,.xlsx" required /></label>
-    <button class="btn secondary" type="submit">Upload mapping</button>
-  </form>
-  <p class="muted">CSV columns: valueStream, processCode, note</p>
-</section>
-<section class="panel" style="margin-top:0.75rem">
-  <table>
-    <thead><tr><th>Code</th><th>Name</th><th>Suggested hierarchy IDs</th></tr></thead>
-    <tbody>
-      {% for s in streams %}
-      <tr>
-        <td class="mono">{{ s.code }}</td>
-        <td>{{ s.name }}<div class="muted">{{ s.description }}</div></td>
-        <td>
-          {% for g in suggestions if g.value_stream_id == s.id %}
-          <form method="post" action="{{ url_for('suggestion_delete', suggestion_id=g.id) }}" style="display:inline">
-            <span class="badge">{{ g.process_code }}</span>
-            <button class="btn tiny danger" type="submit">×</button>
-          </form>
-          {% endfor %}
-        </td>
-      </tr>
-      {% else %}
-      <tr><td colspan="3" class="muted">No value streams yet.</td></tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+
+<nav class="company-switch">
+  {% for c in companies %}
+  <a class="{% if c.id == company_id %}on{% endif %}" href="{{ url_for('value_streams', company_id=c.id) }}">
+    <b>{{ c.short_name }}</b>
+    <span>{{ c.name }}</span>
+  </a>
+  {% else %}
+  <span class="muted">Add a company first.</span>
+  {% endfor %}
+</nav>
+
+<div class="workbench">
+  <section class="stream-grid">
+    {% for s in streams %}
+    <article class="stream-card">
+      <div class="stream-top">
+        <div>
+          <div class="mono stream-code">{{ s.code }}</div>
+          <h2>{{ s.name }}</h2>
+          {% if s.description %}<p class="muted">{{ s.description }}</p>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('value_stream_delete', stream_id=s.id) }}" onsubmit="return confirm('Remove this value stream?')">
+          <button class="btn tiny danger" type="submit">Delete</button>
+        </form>
+      </div>
+      <form method="post" class="level-row">
+        <input type="hidden" name="action" value="levels" />
+        <input type="hidden" name="company_id" value="{{ company_id }}" />
+        <input type="hidden" name="value_stream_id" value="{{ s.id }}" />
+        {% for n in level_numbers %}
+        <label class="level-pick"><input type="checkbox" name="level" value="{{ n }}" {% if n in s.level_set %}checked{% endif %} /> L{{ n }}</label>
+        {% endfor %}
+        <button class="btn tiny" type="submit">Save levels</button>
+      </form>
+      <div class="chip-row">
+        {% for g in suggestions if g.value_stream_id == s.id %}
+        <form method="post" action="{{ url_for('suggestion_delete', suggestion_id=g.id) }}">
+          <input type="hidden" name="company_id" value="{{ company_id }}" />
+          <span class="badge">{{ g.process_code }}</span>
+          <button class="btn tiny danger" type="submit">×</button>
+        </form>
+        {% else %}
+        <span class="muted">No hierarchy IDs yet.</span>
+        {% endfor %}
+      </div>
+      <form method="post" class="inline-add">
+        <input type="hidden" name="action" value="suggestion" />
+        <input type="hidden" name="company_id" value="{{ company_id }}" />
+        <input type="hidden" name="value_stream_id" value="{{ s.id }}" />
+        <input name="process_code" placeholder="Hierarchy ID" required />
+        <button class="btn tiny secondary" type="submit">Add</button>
+      </form>
+    </article>
+    {% else %}
+    <p class="muted">This company has no value streams yet.</p>
+    {% endfor %}
+  </section>
+
+  <aside class="panel composer">
+    <h2>Add a stream</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="stream" />
+      <input type="hidden" name="company_id" value="{{ company_id }}" />
+      <label>Code<input name="code" required placeholder="O2C" /></label>
+      <label>Name<input name="name" required placeholder="Order to Cash" /></label>
+      <label>Description<input name="description" /></label>
+      <div class="level-row">
+        {% for n in level_numbers %}
+        <label class="level-pick"><input type="checkbox" name="level" value="{{ n }}" checked /> L{{ n }}</label>
+        {% endfor %}
+      </div>
+      <button class="btn" type="submit">Add stream</button>
+    </form>
+    <form method="post" action="{{ url_for('value_stream_upload') }}" enctype="multipart/form-data" class="stack-form">
+      <input type="hidden" name="company_id" value="{{ company_id }}" />
+      <label>Mapping file<input type="file" name="file" accept=".csv,.xlsx" required /></label>
+      <button class="btn secondary" type="submit">Upload mapping</button>
+      <p class="muted">Columns: valueStream, processCode, note</p>
+    </form>
+  </aside>
+</div>
 {% endblock %}

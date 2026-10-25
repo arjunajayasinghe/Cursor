@@ -94,6 +94,27 @@ GUIDELINE_ROWS = [
 assert [row[0] for row in GUIDELINE_ROWS] == EXCEL_HEADERS
 assert GREEN_HEADER_COUNT < len(EXCEL_HEADERS)
 
+def normalize_levels(raw) -> str:
+    if isinstance(raw, str):
+        parts = raw.split(",")
+    else:
+        parts = list(raw or [])
+    picked: list[int] = []
+    for part in parts:
+        try:
+            number = int(str(part).strip())
+        except ValueError:
+            continue
+        if 1 <= number <= 5 and number not in picked:
+            picked.append(number)
+    picked.sort()
+    return ",".join(str(number) for number in picked) or "1,2,3,4,5"
+
+
+def levels_of(text: str | None) -> set[int]:
+    return {int(part) for part in normalize_levels(text).split(",")}
+
+
 ROLES = ("ADMIN", "AETRIA_AREA", "COMPANY_ADMIN", "AREA_EDITOR", "VIEWER")
 
 ROLE_LABELS = {

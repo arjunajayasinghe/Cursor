@@ -69,29 +69,24 @@ def main() -> None:
             """,
             (beta, "Beta Industries", "BETA", "Consumer Products", "Beta Admin", "admin@beta.com", "", now),
         )
-        streams = [
-            ("O2C", "Order to Cash", "CP 8.0: sales plans (3.5) and revenue accounting (9.2).", ["3.5", "9.2"], 1),
-            ("P2P", "Procure to Pay", "CP 8.0: procure materials (4.2) and accounts payable (9.6).", ["4.2", "9.6"], 2),
-            ("R2R", "Record to Report", "CP 8.0: general accounting and reporting (9.3).", ["9.3"], 3),
-            ("H2R", "Hire to Retire", "CP 8.0: recruit (7.2) through redeploy and retire (7.6).", ["7.2", "7.6"], 4),
-            ("I2P", "Idea to Product", "CP 8.0: ideas (2.2) and develop products (2.3).", ["2.2", "2.3"], 5),
+        stream_rows = [
+            (acme, "O2C", "Order to Cash", "1,2,3,4,5", 1),
+            (acme, "P2P", "Procure to Pay", "1,2,3,4", 2),
+            (beta, "R2R", "Record to Report", "1,2,3", 1),
+            (beta, "H2R", "Hire to Retire", "2,3,4,5", 2),
         ]
         stream_ids = {}
-        for code, name, desc, codes, sort_order in streams:
+        for company_id, code, name, levels, sort_order in stream_rows:
             sid = new_id()
-            stream_ids[code] = sid
+            stream_ids[(company_id, code)] = sid
             conn.execute(
-                "INSERT INTO value_streams (id, code, name, description, sort_order) VALUES (?,?,?,?,?)",
-                (sid, code, name, desc, sort_order),
+                """
+                INSERT INTO value_streams
+                (id, company_id, code, name, description, levels, sort_order)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (sid, company_id, code, name, "", levels, sort_order),
             )
-            for process_code in codes:
-                conn.execute(
-                    """
-                    INSERT INTO value_stream_suggestions (id, value_stream_id, process_code, note)
-                    VALUES (?,?,?,?)
-                    """,
-                    (new_id(), sid, process_code, desc),
-                )
         master_id = new_id()
         conn.execute(
             """
@@ -119,15 +114,15 @@ def main() -> None:
             ("Confirm the credit policy with finance before go-live.", master_id),
         )
 
-    for company_id, code in ((acme, "O2C"), (acme, "P2P"), (beta, "R2R")):
-        codes = [row["process_code"] for row in fetchall(
-            "SELECT process_code FROM value_stream_suggestions WHERE value_stream_id = ?",
-            (stream_ids[code],),
-        )]
-        node_ids, missing = expand_codes(master_id, codes)
+    for company_id, code, process_codes in (
+        (acme, "O2C", ["3.5", "9.2"]),
+        (acme, "P2P", ["4.2", "9.6"]),
+        (beta, "R2R", ["9.3"]),
+    ):
+        node_ids, missing = expand_codes(master_id, process_codes)
         if missing:
-            raise SystemExit(f"Missing suggestion codes for {code}: {missing}")
-        save_assignment(company_id, master_id, stream_ids[code], node_ids)
+            raise SystemExit(f"Missing process codes for {code}: {missing}")
+        save_assignment(company_id, master_id, stream_ids[(company_id, code)], node_ids)
 
     o2c_node = None
     with get_db() as conn:
@@ -150,7 +145,7 @@ def main() -> None:
             (
                 workshop_id,
                 acme,
-                stream_ids["O2C"],
+                stream_ids[(acme, "O2C")],
                 "O2C discovery",
                 "2026-10-18",
                 "Walked sales plans and customer credit. Credit check stays a critical point.",
@@ -199,7 +194,7 @@ def main() -> None:
                 new_id(),
                 acme,
                 workshop_id,
-                stream_ids["O2C"],
+                stream_ids[(acme, "O2C")],
                 o2c_node,
                 "Credit check before invoicing",
                 "9.2.1 must stay in the company map. Do not drop it when trimming O2C.",
@@ -217,7 +212,7 @@ def main() -> None:
             (
                 new_id(),
                 acme,
-                stream_ids["P2P"],
+                stream_ids[(acme, "P2P")],
                 procure["id"] if procure else None,
                 "Supplier contract match",
                 "Match PO, receipt, and invoice before payment.",

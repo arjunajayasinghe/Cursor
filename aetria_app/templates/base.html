@@ -39,5 +39,26 @@
         {% block body %}{% endblock %}
       </main>
     </div>
+    <script>
+      document.querySelectorAll("form").forEach(function (form) {
+        var company = form.querySelector("[name=company_id]");
+        var stream = form.querySelector("[name=value_stream_id][data-filter]");
+        if (!company || !stream) return;
+        var options = Array.prototype.slice.call(stream.options);
+        function apply() {
+          options.forEach(function (opt) {
+            if (!opt.value) { opt.hidden = false; return; }
+            opt.hidden = opt.getAttribute("data-company") !== company.value;
+          });
+          var selected = stream.selectedOptions[0];
+          if (selected && selected.hidden) {
+            var next = options.find(function (opt) { return opt.value && !opt.hidden; });
+            stream.value = next ? next.value : "";
+          }
+        }
+        company.addEventListener("change", apply);
+        apply();
+      });
+    </script>
   </body>
 </html>

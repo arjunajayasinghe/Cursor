@@ -24,7 +24,7 @@
     <label>Title<input name="title" required value="{{ edit.title if edit else '' }}" /></label>
     <label>Owner<input name="owner" value="{{ edit.owner if edit else '' }}" /></label>
     <label>Value stream
-      <select name="value_stream_id"><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select>
+      <select name="value_stream_id" data-filter><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" data-company="{{ s.company_id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.company_short }} — {{ s.code }}</option>{% endfor %}</select>
     </label>
     <label>Workshop
       <select name="workshop_id"><option value="">None</option>{% for w in workshops %}<option value="{{ w.id }}" {% if (edit and edit.workshop_id == w.id) or (not edit and preset_workshop == w.id) %}selected{% endif %}>{{ w.short_name }} — {{ w.title }}</option>{% endfor %}</select>

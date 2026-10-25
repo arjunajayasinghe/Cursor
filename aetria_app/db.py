@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import re
 import sqlite3
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -144,10 +145,13 @@ CREATE TABLE IF NOT EXISTS companies (
 
 CREATE TABLE IF NOT EXISTS value_streams (
   id TEXT PRIMARY KEY,
-  code TEXT NOT NULL UNIQUE,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT NOT NULL DEFAULT '',
-  sort_order INTEGER NOT NULL DEFAULT 0
+  levels TEXT NOT NULL DEFAULT '1,2,3,4,5',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(company_id, code)
 );
 
 CREATE TABLE IF NOT EXISTS value_stream_suggestions (
@@ -228,15 +232,184 @@ CREATE INDEX IF NOT EXISTS idx_assign_company ON assignments(company_id, value_s
 """
 
 
+def _column_names(conn, table: str) -> list[str]:
+    if using_postgres():
+        rows = conn.execute(
+            """
+            SELECT column_name FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = ?
+            """,
+            (table,),
+        ).fetchall()
+        return [row["column_name"] for row in rows]
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return [row[1] for row in rows]
+
+
+def _companies_using_stream(conn, stream_id: str) -> list[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    queries = (
+        "SELECT company_id FROM assignments WHERE value_stream_id = ?",
+        "SELECT company_id FROM company_streams WHERE value_stream_id = ?",
+        "SELECT company_id FROM workshops WHERE value_stream_id = ?",
+        "SELECT company_id FROM critical_points WHERE value_stream_id = ?",
+        "SELECT company_id FROM automation_points WHERE value_stream_id = ?",
+    )
+    for sql in queries:
+        for row in conn.execute(sql, (stream_id,)).fetchall():
+            company_id = row["company_id"]
+            if company_id and company_id not in seen:
+                seen.add(company_id)
+                found.append(company_id)
+    return found
+
+
+def _point_stream_at_company(conn, old_id: str, new_id: str, company_id: str) -> None:
+    for table in (
+        "assignments",
+        "company_streams",
+        "workshops",
+        "critical_points",
+        "automation_points",
+    ):
+        conn.execute(
+            f"UPDATE {table} SET value_stream_id = ? WHERE value_stream_id = ? AND company_id = ?",
+            (new_id, old_id, company_id),
+        )
+
+
+def _migrate_value_streams(conn) -> None:
+    """Give each value stream a company and a level set. Existing rows are kept."""
+    columns = _column_names(conn, "value_streams")
+    if "company_id" in columns and "levels" in columns:
+        return
+    companies = [row["id"] for row in conn.execute("SELECT id FROM companies ORDER BY name").fetchall()]
+    old_rows = conn.execute("SELECT * FROM value_streams").fetchall()
+    plans = []
+    for row in old_rows:
+        owners = _companies_using_stream(conn, row["id"]) or companies[:1]
+        plans.append((row, owners))
+
+    if using_postgres():
+        if "company_id" not in columns:
+            conn.execute("ALTER TABLE value_streams ADD COLUMN company_id TEXT")
+        if "levels" not in columns:
+            conn.execute("ALTER TABLE value_streams ADD COLUMN levels TEXT NOT NULL DEFAULT '1,2,3,4,5'")
+        conn.execute("ALTER TABLE value_streams DROP CONSTRAINT IF EXISTS value_streams_code_key")
+    else:
+        conn.commit()
+        conn.execute("PRAGMA foreign_keys = OFF")
+        conn.execute("PRAGMA legacy_alter_table = ON")
+        conn.execute("ALTER TABLE value_streams RENAME TO value_streams_old")
+        conn.execute(
+            """
+            CREATE TABLE value_streams (
+              id TEXT PRIMARY KEY,
+              company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+              code TEXT NOT NULL,
+              name TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              levels TEXT NOT NULL DEFAULT '1,2,3,4,5',
+              sort_order INTEGER NOT NULL DEFAULT 0,
+              UNIQUE(company_id, code)
+            )
+            """
+        )
+
+    for row, owners in plans:
+        levels = row["levels"] if "levels" in row.keys() else "1,2,3,4,5"
+        first, *rest = owners or [""]
+        if not first:
+            continue
+        if using_postgres():
+            conn.execute(
+                "UPDATE value_streams SET company_id = ?, levels = COALESCE(levels, '1,2,3,4,5') WHERE id = ?",
+                (first, row["id"]),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO value_streams (id, company_id, code, name, description, levels, sort_order)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (row["id"], first, row["code"], row["name"], row["description"], levels or "1,2,3,4,5", row["sort_order"]),
+            )
+        for company_id in rest:
+            new_stream_id = uuid.uuid4().hex
+            conn.execute(
+                """
+                INSERT INTO value_streams (id, company_id, code, name, description, levels, sort_order)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                (new_stream_id, company_id, row["code"], row["name"], row["description"], levels or "1,2,3,4,5", row["sort_order"]),
+            )
+            _point_stream_at_company(conn, row["id"], new_stream_id, company_id)
+
+    if using_postgres():
+        conn.execute("ALTER TABLE value_streams ALTER COLUMN company_id SET NOT NULL")
+        conn.execute(
+            """
+            DO $$ BEGIN
+              ALTER TABLE value_streams
+                ADD CONSTRAINT value_streams_company_fk
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE;
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$
+            """
+        )
+        conn.execute(
+            """
+            DO $$ BEGIN
+              ALTER TABLE value_streams
+                ADD CONSTRAINT value_streams_company_code UNIQUE (company_id, code);
+            EXCEPTION WHEN duplicate_object THEN NULL;
+            END $$
+            """
+        )
+    else:
+        conn.execute("DROP TABLE value_streams_old")
+        conn.execute("PRAGMA legacy_alter_table = OFF")
+        conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("DELETE FROM value_stream_suggestions")
+
+
+def _repair_renamed_stream_fks(conn) -> None:
+    """SQLite rewrites foreign keys when a table is renamed. Point them back."""
+    if using_postgres():
+        return
+    broken = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE sql LIKE '%value_streams_old%' LIMIT 1"
+    ).fetchone()
+    if not broken:
+        return
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA writable_schema = ON")
+    conn.execute(
+        """
+        UPDATE sqlite_master
+        SET sql = replace(sql, 'value_streams_old', 'value_streams')
+        WHERE sql LIKE '%value_streams_old%'
+        """
+    )
+    conn.execute("PRAGMA writable_schema = OFF")
+    conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        _repair_renamed_stream_fks(conn)
+        if _column_names(conn, "value_streams"):
+            _migrate_value_streams(conn)
         conn.execute(
             """
             INSERT INTO schema_meta (key, value) VALUES (?, ?)
             ON CONFLICT(key) DO UPDATE SET value = excluded.value
             """,
-            ("version", "2"),
+            ("version", "3"),
         )
 
 

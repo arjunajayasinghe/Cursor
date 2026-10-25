@@ -13,7 +13,7 @@
       <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
     </label>
     <label>Value stream
-      <select name="value_stream_id"><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}">{{ s.code }}</option>{% endfor %}</select>
+      <select name="value_stream_id" data-filter><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" data-company="{{ s.company_id }}">{{ s.company_short }} — {{ s.code }}</option>{% endfor %}</select>
     </label>
     <label>Title<input name="title" required /></label>
     <label>Date<input name="held_on" type="date" required /></label>

@@ -41,7 +41,9 @@ from aetria_app.services import (
     expand_codes,
     fetchall,
     fetchone,
+    levels_of,
     load_nodes,
+    normalize_levels,
     new_id,
     parse_suggestion_upload,
     import_master_file,
@@ -124,6 +126,7 @@ NAV_ALIAS = {
     "user_update": "users",
     "distribute_download": "distribute",
     "value_stream_upload": "value_streams",
+    "value_stream_delete": "value_streams",
     "suggestion_delete": "value_streams",
 }
 
@@ -181,7 +184,7 @@ def dashboard():
     companies = fetchall(
         """
         SELECT c.*,
-          (SELECT COUNT(*) FROM company_streams s WHERE s.company_id = c.id) AS streams,
+          (SELECT COUNT(*) FROM value_streams v WHERE v.company_id = c.id) AS streams,
           (SELECT COUNT(*) FROM assignments a WHERE a.company_id = c.id) AS processes
         FROM companies c
         ORDER BY c.name
@@ -303,7 +306,7 @@ def companies():
     rows = fetchall(
         """
         SELECT c.*,
-          (SELECT COUNT(*) FROM company_streams s WHERE s.company_id = c.id) AS streams,
+          (SELECT COUNT(*) FROM value_streams v WHERE v.company_id = c.id) AS streams,
           (SELECT COUNT(*) FROM assignments a WHERE a.company_id = c.id) AS processes
         FROM companies c
         ORDER BY c.name
@@ -362,9 +365,40 @@ def company_form(company_id: str | None = None):
 @admin_required
 def company_delete(company_id: str):
     with get_db() as conn:
+        conn.execute(
+            "DELETE FROM workshop_files WHERE workshop_id IN (SELECT id FROM workshops WHERE company_id = ?)",
+            (company_id,),
+        )
+        for table in (
+            "automation_points",
+            "critical_points",
+            "workshops",
+            "assignments",
+            "company_streams",
+            "value_stream_suggestions",
+        ):
+            if table == "value_stream_suggestions":
+                conn.execute(
+                    "DELETE FROM value_stream_suggestions WHERE value_stream_id IN (SELECT id FROM value_streams WHERE company_id = ?)",
+                    (company_id,),
+                )
+            else:
+                conn.execute(f"DELETE FROM {table} WHERE company_id = ?", (company_id,))
+        conn.execute("DELETE FROM value_streams WHERE company_id = ?", (company_id,))
         conn.execute("DELETE FROM companies WHERE id = ?", (company_id,))
     flash("Company removed", "ok")
     return redirect(url_for("companies"))
+
+
+def _load_streams(company_id: str | None = None) -> list[dict]:
+    sql = """
+        SELECT v.*, c.short_name AS company_short, c.name AS company_name
+        FROM value_streams v
+        JOIN companies c ON c.id = v.company_id
+    """
+    if company_id:
+        return fetchall(sql + " WHERE v.company_id = ? ORDER BY v.sort_order, v.code", (company_id,))
+    return fetchall(sql + " ORDER BY c.name, v.sort_order, v.code")
 
 
 @app.route("/value-streams", methods=["GET", "POST"])
@@ -372,26 +406,38 @@ def company_delete(company_id: str):
 def value_streams():
     if request.method == "POST":
         action = request.form.get("action")
+        company_id = request.form.get("company_id") or ""
         if action == "stream":
             code = re.sub(r"[^A-Za-z0-9]", "", (request.form.get("code") or "")).upper()
             name = (request.form.get("name") or "").strip()
             description = (request.form.get("description") or "").strip()
-            if len(code) < 2 or not name:
-                flash("Code and name are required", "error")
+            levels = normalize_levels(request.form.getlist("level"))
+            if len(code) < 2 or not name or not company_id:
+                flash("Company, code, and name are required", "error")
             else:
                 try:
                     with get_db() as conn:
-                        count = conn.execute("SELECT COUNT(*) AS c FROM value_streams").fetchone()["c"]
+                        count = conn.execute(
+                            "SELECT COUNT(*) AS c FROM value_streams WHERE company_id = ?",
+                            (company_id,),
+                        ).fetchone()["c"]
                         conn.execute(
                             """
-                            INSERT INTO value_streams (id, code, name, description, sort_order)
-                            VALUES (?,?,?,?,?)
+                            INSERT INTO value_streams
+                            (id, company_id, code, name, description, levels, sort_order)
+                            VALUES (?,?,?,?,?,?,?)
                             """,
-                            (new_id(), code, name, description, int(count) + 1),
+                            (new_id(), company_id, code, name, description, levels, int(count) + 1),
                         )
                     flash("Value stream added", "ok")
                 except Exception:
-                    flash("That value stream code already exists", "error")
+                    flash("That value stream code already exists for this company", "error")
+        elif action == "levels":
+            stream_id = request.form.get("value_stream_id") or ""
+            levels = normalize_levels(request.form.getlist("level"))
+            with get_db() as conn:
+                conn.execute("UPDATE value_streams SET levels = ? WHERE id = ?", (levels, stream_id))
+            flash("Levels saved", "ok")
         elif action == "suggestion":
             stream_id = request.form.get("value_stream_id") or ""
             process_code = (request.form.get("process_code") or "").strip()
@@ -412,17 +458,30 @@ def value_streams():
                     flash("Suggestion added", "ok")
                 except Exception:
                     flash("That suggestion is already on the value stream", "error")
-        return redirect(url_for("value_streams"))
-    streams = fetchall("SELECT * FROM value_streams ORDER BY sort_order, code")
+        return redirect(url_for("value_streams", company_id=request.form.get("company_id") or ""))
+    companies = fetchall("SELECT * FROM companies ORDER BY name")
+    company_id = request.args.get("company_id") or (companies[0]["id"] if companies else "")
+    streams = _load_streams(company_id)
+    for stream in streams:
+        stream["level_set"] = levels_of(stream.get("levels"))
     suggestions = fetchall(
         """
         SELECT s.*, v.code AS stream_code
         FROM value_stream_suggestions s
         JOIN value_streams v ON v.id = s.value_stream_id
+        WHERE v.company_id = ?
         ORDER BY v.sort_order, s.process_code
-        """
+        """,
+        (company_id,),
     )
-    return render_template("streams.html", streams=streams, suggestions=suggestions)
+    return render_template(
+        "streams.html",
+        companies=companies,
+        company_id=company_id,
+        streams=streams,
+        suggestions=suggestions,
+        level_numbers=[1, 2, 3, 4, 5],
+    )
 
 
 @app.route("/value-streams/upload", methods=["POST"])
@@ -431,19 +490,19 @@ def value_stream_upload():
     upload = request.files.get("file")
     if not upload or not upload.filename:
         flash("Choose a mapping file", "error")
-        return redirect(url_for("value_streams"))
+        return redirect(url_for("value_streams", company_id=request.form.get("company_id") or ""))
     try:
         rows = parse_suggestion_upload(upload.filename, upload.read())
     except Exception as exc:
         flash(str(exc), "error")
-        return redirect(url_for("value_streams"))
+        return redirect(url_for("value_streams", company_id=request.form.get("company_id") or ""))
     added = 0
     missing = []
     with get_db() as conn:
         for row in rows:
             stream = conn.execute(
-                "SELECT id FROM value_streams WHERE code = ?",
-                (row["stream"].upper(),),
+                "SELECT id FROM value_streams WHERE company_id = ? AND code = ?",
+                (request.form.get("company_id") or "", row["stream"].upper()),
             ).fetchone()
             if not stream:
                 missing.append(row["stream"])
@@ -469,16 +528,37 @@ def value_stream_upload():
         flash(f"Added {added}. Unknown value streams: {', '.join(sorted(set(missing)))}", "error")
     else:
         flash(f"Mapping upload added {added} suggestions", "ok")
-    return redirect(url_for("value_streams"))
+    return redirect(url_for("value_streams", company_id=request.form.get("company_id") or ""))
 
 
 @app.route("/value-streams/suggestions/<suggestion_id>/delete", methods=["POST"])
 @admin_required
 def suggestion_delete(suggestion_id: str):
+    row = fetchone(
+        """
+        SELECT v.company_id FROM value_stream_suggestions s
+        JOIN value_streams v ON v.id = s.value_stream_id
+        WHERE s.id = ?
+        """,
+        (suggestion_id,),
+    )
     with get_db() as conn:
         conn.execute("DELETE FROM value_stream_suggestions WHERE id = ?", (suggestion_id,))
     flash("Suggestion removed", "ok")
-    return redirect(url_for("value_streams"))
+    return redirect(url_for("value_streams", company_id=(row or {}).get("company_id", "")))
+
+
+@app.route("/value-streams/<stream_id>/delete", methods=["POST"])
+@admin_required
+def value_stream_delete(stream_id: str):
+    row = fetchone("SELECT company_id FROM value_streams WHERE id = ?", (stream_id,))
+    with get_db() as conn:
+        conn.execute("DELETE FROM value_stream_suggestions WHERE value_stream_id = ?", (stream_id,))
+        conn.execute("DELETE FROM assignments WHERE value_stream_id = ?", (stream_id,))
+        conn.execute("DELETE FROM company_streams WHERE value_stream_id = ?", (stream_id,))
+        conn.execute("DELETE FROM value_streams WHERE id = ?", (stream_id,))
+    flash("Value stream removed", "ok")
+    return redirect(url_for("value_streams", company_id=(row or {}).get("company_id", "")))
 
 
 @app.route("/assign", methods=["GET", "POST"])
@@ -486,10 +566,14 @@ def suggestion_delete(suggestion_id: str):
 def assign():
     companies = fetchall("SELECT * FROM companies ORDER BY name")
     masters = fetchall("SELECT * FROM apqc_masters ORDER BY industry, version")
-    streams = fetchall("SELECT * FROM value_streams ORDER BY sort_order, code")
     company_id = request.values.get("company_id") or (companies[0]["id"] if companies else "")
+    streams = _load_streams(company_id)
     master_id = request.values.get("master_id") or (masters[0]["id"] if masters else "")
-    stream_id = request.values.get("value_stream_id") or (streams[0]["id"] if streams else "")
+    stream_id = request.values.get("value_stream_id") or ""
+    if stream_id not in {row["id"] for row in streams}:
+        stream_id = streams[0]["id"] if streams else ""
+    current_stream = next((row for row in streams if row["id"] == stream_id), None)
+    allowed_levels = levels_of(current_stream.get("levels") if current_stream else None)
 
     if request.method == "POST":
         if not company_id or not master_id or not stream_id:
@@ -543,9 +627,11 @@ def assign():
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
-        shown = [n for n in nodes if n["id"] in suggested_ids]
+        shown = [n for n in nodes if n["id"] in suggested_ids and int(n["level"]) in allowed_levels]
     else:
-        shown = _filter_nodes(nodes, area=area, q=q, max_level=2 if not q and not area else None)
+        cap = None if (q or area or max(allowed_levels) > 2) else 2
+        shown = _filter_nodes(nodes, area=area, q=q, max_level=cap)
+        shown = [n for n in shown if int(n["level"]) in allowed_levels]
     return render_template(
         "assign.html",
         companies=companies,
@@ -554,6 +640,7 @@ def assign():
         company_id=company_id,
         master_id=master_id,
         stream_id=stream_id,
+        allowed_levels=sorted(allowed_levels),
         nodes=shown[:400],
         truncated=len(shown) > 400,
         selected=selected,
@@ -632,7 +719,7 @@ def workshops():
         "workshops.html",
         workshops=rows,
         companies=fetchall("SELECT * FROM companies ORDER BY name"),
-        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+        streams=_load_streams(),
     )
 
 
@@ -774,7 +861,7 @@ def critical_points():
         points=rows,
         edit=edit,
         companies=fetchall("SELECT * FROM companies ORDER BY name"),
-        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+        streams=_load_streams(),
         workshops=fetchall(
             """
             SELECT w.id, w.title, c.short_name
@@ -859,7 +946,7 @@ def automation():
         points=rows,
         edit=edit,
         companies=fetchall("SELECT * FROM companies ORDER BY name"),
-        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+        streams=_load_streams(),
         processes=_process_options(),
     )
 

@@ -15,7 +15,7 @@
     </label>
     <label>Title<input name="title" required value="{{ edit.title if edit else '' }}" /></label>
     <label>Value stream
-      <select name="value_stream_id"><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select>
+      <select name="value_stream_id" data-filter><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" data-company="{{ s.company_id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.company_short }} — {{ s.code }}</option>{% endfor %}</select>
     </label>
     <label>Process
       <select name="process_node_id"><option value="">None</option>{% for p in processes %}<option value="{{ p.id }}" {% if edit and edit.process_node_id == p.id %}selected{% endif %}>{{ p.short_name }} {{ p.code }} {{ p.name }}</option>{% endfor %}</select>
