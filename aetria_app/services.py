@@ -109,9 +109,9 @@ def assign_branch(company_id: str, master_node_id: str, assigned_by_id: str | No
             """
             INSERT INTO process_assignments (id, company_id, master_node_id, assigned_by_id, assigned_at)
             VALUES (?,?,?,?,?)
-            ON CONFLICT(company_id, master_node_id) DO UPDATE SET
-              assigned_at=excluded.assigned_at,
-              assigned_by_id=excluded.assigned_by_id
+            ON CONFLICT (company_id, master_node_id) DO UPDATE SET
+              assigned_at = EXCLUDED.assigned_at,
+              assigned_by_id = EXCLUDED.assigned_by_id
             """,
             (aid, company_id, master_node_id, assigned_by_id, now),
         )

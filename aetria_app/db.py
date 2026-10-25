@@ -1,15 +1,71 @@
-"""SQLite helpers for Aetria Process Mapping."""
+"""Database access — SQLite locally, Postgres when DATABASE_URL is set (hosting)."""
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any, Iterator
 
-DB_PATH = Path(os.environ.get("AETRIA_DB", Path(__file__).resolve().parent.parent / "data" / "aetria.db"))
+DB_PATH = Path(
+    os.environ.get(
+        "AETRIA_DB",
+        Path(__file__).resolve().parent.parent / "data" / "aetria.db",
+    )
+)
+
+DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 
 
-def connect() -> sqlite3.Connection:
+def using_postgres() -> bool:
+    return DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+
+class _PgConnection:
+    """Thin wrapper so call sites can keep using ? placeholders and .fetchone()/.fetchall()."""
+
+    def __init__(self, conn):
+        self._conn = conn
+
+    def execute(self, sql: str, params: tuple | list | None = None):
+        sql_pg = sql.replace("?", "%s")
+        cur = self._conn.cursor()
+        cur.execute(sql_pg, params or ())
+        return cur
+
+    def executescript(self, script: str) -> None:
+        cur = self._conn.cursor()
+        # strip SQL comments, split on semicolons
+        cleaned = re.sub(r"--.*?$", "", script, flags=re.M)
+        for stmt in cleaned.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                cur.execute(stmt)
+
+    def commit(self) -> None:
+        self._conn.commit()
+
+    def rollback(self) -> None:
+        self._conn.rollback()
+
+    def close(self) -> None:
+        self._conn.close()
+
+
+def connect():
+    if using_postgres():
+        import psycopg2
+        from psycopg2.extras import RealDictCursor
+
+        # Railway/Render sometimes use postgres://
+        url = DATABASE_URL
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        raw = psycopg2.connect(url, cursor_factory=RealDictCursor)
+        raw.autocommit = False
+        return _PgConnection(raw)
+
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
@@ -18,7 +74,7 @@ def connect() -> sqlite3.Connection:
 
 
 @contextmanager
-def get_db():
+def get_db() -> Iterator[Any]:
     conn = connect()
     try:
         yield conn
@@ -99,3 +155,32 @@ CREATE INDEX IF NOT EXISTS idx_nodes_code ON process_nodes(company_id, code);
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript(SCHEMA)
+
+
+def reset_db() -> None:
+    """Wipe existing data, then recreate schema. Safe for SQLite and Postgres."""
+    if using_postgres():
+        with get_db() as conn:
+            conn.executescript(
+                """
+                DROP TABLE IF EXISTS area_scopes CASCADE;
+                DROP TABLE IF EXISTS process_assignments CASCADE;
+                DROP TABLE IF EXISTS process_nodes CASCADE;
+                DROP TABLE IF EXISTS value_streams CASCADE;
+                DROP TABLE IF EXISTS memberships CASCADE;
+                DROP TABLE IF EXISTS companies CASCADE;
+                DROP TABLE IF EXISTS users CASCADE;
+                """
+            )
+    else:
+        if DB_PATH.exists():
+            DB_PATH.unlink()
+    init_db()
+
+
+def row_to_dict(row: Any) -> dict[str, Any]:
+    if row is None:
+        return {}
+    if isinstance(row, dict):
+        return dict(row)
+    return dict(row)

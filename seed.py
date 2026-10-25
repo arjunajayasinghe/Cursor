@@ -10,14 +10,12 @@ from werkzeug.security import generate_password_hash
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from aetria_app.db import DB_PATH, get_db, init_db
+from aetria_app.db import get_db, reset_db
 from aetria_app.services import assign_branch, new_id
 
 
 def main() -> None:
-    if DB_PATH.exists():
-        DB_PATH.unlink()
-    init_db()
+    reset_db()
     pw = generate_password_hash("password123")
 
     with get_db() as conn:

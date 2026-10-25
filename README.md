@@ -2,7 +2,7 @@
 
 Multi-tenant APQC-style process mapping MVP.
 
-**Stack:** Python 3 + Flask + SQLite + plain HTML/CSS (no Node.js, no Next.js).
+**Stack:** Python 3 + Flask + SQLite (local) / Postgres (hosting) + plain HTML/CSS.
 
 ## Run on your Mac
 
@@ -25,6 +25,10 @@ python app.py
 Open: **http://localhost:8765/login**
 
 Login: `operator@aetria.com` / `password123`
+
+## Hosting (Postgres)
+
+Set `DATABASE_URL` to a `postgresql://…` (or `postgres://…`) connection string, then run `python seed.py` once and start `python app.py`. Without `DATABASE_URL`, the app uses SQLite at `data/aetria.db`.
 
 ## Seeded users
 

@@ -156,7 +156,7 @@ def login():
         if not user["is_aetria_operator"]:
             with get_db() as conn:
                 m = conn.execute(
-                    "SELECT company_id FROM memberships WHERE user_id = ? ORDER BY rowid LIMIT 1",
+                    "SELECT company_id FROM memberships WHERE user_id = ? ORDER BY id LIMIT 1",
                     (user["id"],),
                 ).fetchone()
                 session["active_company_id"] = m["company_id"] if m else None
