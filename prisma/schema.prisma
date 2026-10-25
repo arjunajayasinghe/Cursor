@@ -1,0 +1,129 @@
+// Aetria Process Mapping — domain model
+// SQLite for local MVP; schema is Postgres-ready (swap provider + url).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum CompanyRole {
+  ADMIN
+  AREA_EDITOR
+  VIEWER
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  passwordHash      String
+  name              String
+  isAetriaOperator  Boolean  @default(false)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  memberships       Membership[]
+  assignmentsMade   ProcessAssignment[] @relation("AssignedBy")
+}
+
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships  Membership[]
+  processNodes ProcessNode[]
+  assignments  ProcessAssignment[]
+  valueStreams ValueStream[]
+}
+
+model Membership {
+  id        String      @id @default(cuid())
+  userId    String
+  companyId String
+  role      CompanyRole
+  createdAt DateTime    @default(now())
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  areaScopes AreaScope[]
+
+  @@unique([userId, companyId])
+}
+
+/// APQC-style process node. companyId null = Aetria Solution master library.
+model ProcessNode {
+  id           String   @id @default(cuid())
+  companyId    String? // null = master (AS)
+  parentId     String?
+  code         String
+  name         String
+  description  String   @default("")
+  level        Int      @default(1)
+  sortOrder    Int      @default(0)
+  masterNodeId String? // for company copies: link back to master
+  valueStreamId String?
+  isHidden     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  company     Company?     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  parent      ProcessNode? @relation("ProcessTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children    ProcessNode[] @relation("ProcessTree")
+  masterNode  ProcessNode? @relation("MasterCopy", fields: [masterNodeId], references: [id], onDelete: SetNull)
+  copies      ProcessNode[] @relation("MasterCopy")
+  valueStream ValueStream? @relation(fields: [valueStreamId], references: [id], onDelete: SetNull)
+
+  assignments ProcessAssignment[]
+  areaScopes  AreaScope[]
+
+  @@index([companyId, parentId])
+  @@index([companyId, code])
+  @@index([masterNodeId])
+}
+
+/// Which master process branches are assigned/pushed to a company.
+model ProcessAssignment {
+  id           String   @id @default(cuid())
+  companyId    String
+  masterNodeId String
+  assignedAt   DateTime @default(now())
+  assignedById String?
+
+  company    Company     @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  masterNode ProcessNode @relation(fields: [masterNodeId], references: [id], onDelete: Cascade)
+  assignedBy User?       @relation("AssignedBy", fields: [assignedById], references: [id], onDelete: SetNull)
+
+  @@unique([companyId, masterNodeId])
+}
+
+/// Area editor may edit only these company process nodes (and descendants).
+model AreaScope {
+  id             String @id @default(cuid())
+  membershipId   String
+  processNodeId  String
+
+  membership  Membership  @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  processNode ProcessNode @relation(fields: [processNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([membershipId, processNodeId])
+}
+
+model ValueStream {
+  id        String   @id @default(cuid())
+  companyId String? // null = available on master; company copies may reference company VS
+  name      String
+  code      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  company  Company?      @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  processes ProcessNode[]
+
+  @@unique([companyId, code])
+}
