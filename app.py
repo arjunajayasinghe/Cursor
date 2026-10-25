@@ -41,9 +41,10 @@ from aetria_app.services import (
     expand_codes,
     fetchall,
     fetchone,
+    depth_of,
     levels_of,
+    levels_through,
     load_nodes,
-    normalize_levels,
     new_id,
     parse_suggestion_upload,
     import_master_file,
@@ -432,7 +433,7 @@ def value_streams():
             code = re.sub(r"[^A-Za-z0-9]", "", (request.form.get("code") or "")).upper()
             name = (request.form.get("name") or "").strip()
             description = (request.form.get("description") or "").strip()
-            levels = normalize_levels(request.form.getlist("level"))
+            levels = levels_through(request.form.get("depth") or 5)
             if len(code) < 2 or not name or not company_id:
                 flash("Company, code, and name are required", "error")
             else:
@@ -455,10 +456,10 @@ def value_streams():
                     flash("That value stream code already exists for this company", "error")
         elif action == "levels":
             stream_id = request.form.get("value_stream_id") or ""
-            levels = normalize_levels(request.form.getlist("level"))
+            levels = levels_through(request.form.get("depth") or 5)
             with get_db() as conn:
                 conn.execute("UPDATE value_streams SET levels = ? WHERE id = ?", (levels, stream_id))
-            flash("Levels saved", "ok")
+            flash("Value stream now opens through L" + str(depth_of(levels)), "ok")
         elif action == "suggestion":
             stream_id = request.form.get("value_stream_id") or ""
             process_code = (request.form.get("process_code") or "").strip()
@@ -485,6 +486,7 @@ def value_streams():
     streams = _load_streams(company_id)
     for stream in streams:
         stream["level_set"] = levels_of(stream.get("levels"))
+        stream["depth"] = depth_of(stream.get("levels"))
     suggestions = fetchall(
         """
         SELECT s.*, v.code AS stream_code
@@ -593,8 +595,11 @@ def assign():
     stream_id = request.values.get("value_stream_id") or ""
     if stream_id not in {row["id"] for row in streams}:
         stream_id = streams[0]["id"] if streams else ""
+    for stream in streams:
+        stream["depth"] = depth_of(stream.get("levels"))
     current_stream = next((row for row in streams if row["id"] == stream_id), None)
     allowed_levels = levels_of(current_stream.get("levels") if current_stream else None)
+    stream_depth = depth_of(current_stream.get("levels") if current_stream else None)
 
     if request.method == "POST":
         if not company_id or not master_id or not stream_id:
@@ -644,6 +649,8 @@ def assign():
     view = request.args.get("view") or "outline"
     if view not in {"outline", "suggested", "assigned", "1", "2", "3", "4", "5"}:
         view = "outline"
+    if view in {"1", "2", "3", "4", "5"} and int(view) > stream_depth:
+        view = str(stream_depth)
     area = request.args.get("area") or ""
     q = (request.args.get("q") or "").strip()
     areas = _areas(nodes)
@@ -652,7 +659,7 @@ def assign():
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
-        shown = [n for n in nodes if n["id"] in suggested_ids]
+        shown = [n for n in nodes if n["id"] in suggested_ids and int(n["level"]) <= stream_depth]
     elif view in {"1", "2", "3", "4", "5"}:
         depth = int(view)
         matched = _filter_nodes(nodes, area=area, q=q, max_level=depth)
@@ -661,7 +668,8 @@ def assign():
         else:
             shown = matched
     else:
-        shown = _filter_nodes(nodes, area=area, q=q)
+        depth = stream_depth
+        shown = [n for n in _filter_nodes(nodes, area=area, q=q) if int(n["level"]) <= stream_depth]
     shown_ids = {node["id"] for node in shown}
     visible_parents = {node.get("parent_id") for node in shown if node.get("parent_id") in shown_ids}
     for node in shown:
@@ -678,6 +686,7 @@ def assign():
         master_id=master_id,
         stream_id=stream_id,
         allowed_levels=sorted(allowed_levels),
+        stream_depth=stream_depth,
         level_counts=_level_counts(nodes),
         depth=depth,
         nodes=shown,

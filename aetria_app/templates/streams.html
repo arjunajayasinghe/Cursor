@@ -4,7 +4,7 @@
 <header class="page-head">
   <p class="eyebrow">Per company</p>
   <h1>Value streams</h1>
-  <p class="lede">Each company keeps its own streams. Tick the APQC levels that customer uses. Hierarchy IDs stay empty until you add them.</p>
+  <p class="lede">Each company keeps its own streams. Choose how far that stream opens. L1 is the categories. L1 to L3 opens the categories, the process groups, and the processes.</p>
 </header>
 
 <nav class="company-switch">
@@ -32,14 +32,17 @@
           <button class="btn tiny danger" type="submit">Delete</button>
         </form>
       </div>
-      <form method="post" class="level-row">
+      <form method="post">
         <input type="hidden" name="action" value="levels" />
         <input type="hidden" name="company_id" value="{{ company_id }}" />
         <input type="hidden" name="value_stream_id" value="{{ s.id }}" />
-        {% for n in level_numbers %}
-        <label class="level-pick"><input type="checkbox" name="level" value="{{ n }}" {% if n in s.level_set %}checked{% endif %} /> L{{ n }}</label>
-        {% endfor %}
-        <button class="btn tiny" type="submit">Save levels</button>
+        <label>Opens through
+          <select name="depth" onchange="this.form.submit()">
+            {% for n in level_numbers %}
+            <option value="{{ n }}" {% if s.depth == n %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
       </form>
       <div class="chip-row">
         {% for g in suggestions if g.value_stream_id == s.id %}
@@ -73,11 +76,13 @@
       <label>Code<input name="code" required placeholder="O2C" /></label>
       <label>Name<input name="name" required placeholder="Order to Cash" /></label>
       <label>Description<input name="description" /></label>
-      <div class="level-row">
-        {% for n in level_numbers %}
-        <label class="level-pick"><input type="checkbox" name="level" value="{{ n }}" checked /> L{{ n }}</label>
-        {% endfor %}
-      </div>
+      <label>Opens through
+        <select name="depth">
+          {% for n in level_numbers %}
+          <option value="{{ n }}" {% if n == 5 %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
       <button class="btn" type="submit">Add stream</button>
     </form>
     <form method="post" action="{{ url_for('value_stream_upload') }}" enctype="multipart/form-data" class="stack-form">

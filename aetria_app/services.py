@@ -115,6 +115,19 @@ def levels_of(text: str | None) -> set[int]:
     return {int(part) for part in normalize_levels(text).split(",")}
 
 
+def depth_of(text: str | None) -> int:
+    return max(levels_of(text))
+
+
+def levels_through(depth) -> str:
+    try:
+        number = int(str(depth).strip())
+    except (TypeError, ValueError):
+        number = 5
+    number = min(5, max(1, number))
+    return ",".join(str(n) for n in range(1, number + 1))
+
+
 ROLES = ("ADMIN", "AETRIA_AREA", "COMPANY_ADMIN", "AREA_EDITOR", "VIEWER")
 
 ROLE_LABELS = {

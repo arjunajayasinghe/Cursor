@@ -15,12 +15,12 @@
       <select name="master_id">{% for m in masters %}<option value="{{ m.id }}" {% if m.id == master_id %}selected{% endif %}>{{ m.industry }} {{ m.version }}</option>{% endfor %}</select>
     </label>
     <label>Value stream
-      <select name="value_stream_id">{% for s in streams %}<option value="{{ s.id }}" {% if s.id == stream_id %}selected{% endif %}>{{ s.code }} — {{ s.name }}</option>{% endfor %}</select>
+      <select name="value_stream_id" onchange="this.form.submit()">{% for s in streams %}<option value="{{ s.id }}" {% if s.id == stream_id %}selected{% endif %}>{{ s.code }} — {{ s.name }} · {% if s.depth == 1 %}L1{% else %}L1 to L{{ s.depth }}{% endif %}</option>{% endfor %}</select>
     </label>
     <label>Level
       <select name="view">
         <option value="outline" {% if view == 'outline' %}selected{% endif %}>Tree, open with the arrow</option>
-        {% for n in [1, 2, 3, 4, 5] %}
+        {% for n in [1, 2, 3, 4, 5] if n <= stream_depth %}
         <option value="{{ n }}" {% if view == n|string %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
         {% endfor %}
         <option value="suggested" {% if view == 'suggested' %}selected{% endif %}>Suggested branch</option>
@@ -34,7 +34,7 @@
     <div><button class="btn" type="submit">Refresh list</button></div>
   </form>
   <p class="level-jumps">
-    {% for number, count in level_counts %}
+    {% for number, count in level_counts if number <= stream_depth %}
     <a class="{% if view == number|string %}on{% endif %}" href="{{ url_for('assign', company_id=company_id, master_id=master_id, value_stream_id=stream_id, view=number, area=area, q=q) }}">L{{ number }} <b>{{ count }}</b></a>
     {% endfor %}
   </p>
