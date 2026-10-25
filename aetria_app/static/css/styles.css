@@ -203,6 +203,6 @@ textarea { resize: vertical; }
   .shell { grid-template-columns: 1fr; }
   .nav { position: sticky; top: 0; z-index: 2; }
   .nav nav { flex-direction: row; overflow: auto; }
-  .stats, .split, .grid-2, .workbench { grid-template-columns: 1fr; }
+  .stats, .split, .grid-2, .workbench, .filter-bar { grid-template-columns: 1fr; }
   .row-head { flex-direction: column; align-items: flex-start; }
 }
