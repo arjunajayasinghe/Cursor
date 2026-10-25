@@ -45,5 +45,9 @@ prisma/*.db
 prisma/*.db-journal
 *.db
 *.db-journal
+data/
+.venv/
+__pycache__/
+*.pyc
 
 /src/generated/prisma

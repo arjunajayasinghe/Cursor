@@ -1,51 +1,50 @@
-# Aetria Process Mapping
+# Aetria Process Mapping (Python)
 
-Multi-tenant process mapping MVP — **plain HTML + CSS + JS** UI (same style as Restoring the Pride / nayakenz.lk), with a small **Node + Express + Prisma/SQLite** API for auth, tenants, and Excel.
+Multi-tenant APQC-style process mapping MVP.
 
-## Why this stack
+**Stack:** Python 3 + Flask + SQLite + plain HTML/CSS (no Node.js, no Next.js).
 
-- Frontend: static HTML/CSS/JS (easy to open and host like Pride)
-- Backend: Express + SQLite (needed for logins, companies, assignments, export)
+## Run on your Mac
 
-## Quick start
+You already have Conda/`python` — no npm needed.
 
 ```bash
-npm install
-cp .env.example .env
-npx prisma migrate dev
-npm run seed
-npm run dev
+cd ~/Desktop/Cursor
+git fetch origin
+git checkout cursor/aetria-python-mvp-6386
+git pull
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python seed.py
+python app.py
 ```
 
-Open **http://localhost:3456/login.html**  
-(Use port **3456** so it does not clash with other apps on 3000.)
+Open: **http://localhost:8765/login**
 
-## Seeded logins
+Login: `operator@aetria.com` / `password123`
+
+## Seeded users
 
 Password for all: `password123`
 
 | Email | Role |
 |-------|------|
-| `operator@aetria.com` | Aetria operator (master + company switch) |
-| `admin@acme.com` | Acme admin |
-| `editor@acme.com` | Acme area editor (branch `3.3` only) |
-| `viewer@acme.com` | Acme viewer |
-| `admin@beta.com` | Beta admin |
+| operator@aetria.com | Aetria operator |
+| admin@acme.com | Acme admin |
+| editor@acme.com | Area editor (branch 3.3) |
+| viewer@acme.com | Viewer |
+| admin@beta.com | Beta admin |
 
 ## Features
 
-1. AS master tree, search, bulk CSV/Excel upload  
-2. Assign/push branches to a company  
-3. Company workspace (assigned tree only)  
-4. Area-scoped editing  
-5. Aetria workspace switcher  
-6. Value-stream Excel export (**stub** columns — real template TODO)
+- AS master tree, search, bulk CSV/Excel upload  
+- Assign/push to companies  
+- Company workspace + area scopes  
+- Stub value-stream Excel export  
 
 ## Stubbed
 
-- Excel export layout (placeholder only)
-- Integrations / OAuth
-
-## Deploy tip
-
-Same idea as Pride: run `npm start` behind Railway/Render/Fly and point a domain at it.
+Excel layout is a placeholder until the client template is provided.
