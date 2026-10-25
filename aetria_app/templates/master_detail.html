@@ -4,7 +4,7 @@
 <header class="page-head">
   <p class="eyebrow">{{ master.industry }} · {{ master.version }}</p>
   <h1>{{ master.name }}</h1>
-  <p class="lede">{{ total }} processes. Upload keeps Metrics Available? and Element Description when the file has them. Use Remark for Admin notes. The list shows L1–L2 until you search or pick an area.</p>
+  <p class="lede">{{ total }} processes, L1 through L5, in the same order as the upload. L1 and L2 stay open. Open a row to see L3, L4, and L5. Filter by area, level, or hierarchy ID the way you would in Excel.</p>
 </header>
 <section class="panel">
   <h2>Upload L1–L5</h2>
@@ -15,28 +15,47 @@
   </form>
 </section>
 <section class="panel" style="margin-top:0.75rem">
-  <form method="get" class="row-form">
+  <form method="get" class="filter-bar">
     <label>Area
       <select name="area">
         <option value="">All areas</option>
         {% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
       </select>
     </label>
-    <label>Search<input name="q" value="{{ q }}" placeholder="Code or name" /></label>
+    <label>Level
+      <select name="level">
+        <option value="" {% if not level %}selected{% endif %}>L1–L5</option>
+        <option value="1" {% if level == '1' %}selected{% endif %}>L1 Category</option>
+        <option value="2" {% if level == '2' %}selected{% endif %}>L2 Process group</option>
+        <option value="3" {% if level == '3' %}selected{% endif %}>L3 Process</option>
+        <option value="4" {% if level == '4' %}selected{% endif %}>L4 Activity</option>
+        <option value="5" {% if level == '5' %}selected{% endif %}>L5 Task</option>
+      </select>
+    </label>
+    <label>Hierarchy ID
+      <input name="q" value="{{ q }}" placeholder="1.1.1, APQC ID, or name" />
+    </label>
     <button class="btn" type="submit">Show</button>
   </form>
-  {% if truncated %}<p class="muted">Showing the first 250 matches. Narrow the search.</p>{% endif %}
-  <table>
+  <p class="muted">{{ shown_count }} rows in this view.</p>
+  <table class="process-tree">
     <thead>
       <tr><th>Hierarchy ID</th><th>Level</th><th>APQC ID</th><th>Process</th><th>Metrics</th><th>Element description</th><th>Remark</th></tr>
     </thead>
     <tbody>
       {% for n in nodes %}
-      <tr>
-        <td class="mono">{{ n.code }}</td>
+      <tr data-id="{{ n.id }}" data-parent="{{ n.parent_id or '' }}" data-level="{{ n.level }}" {% if collapse and n.level > 2 %}hidden{% endif %}>
+        <td class="mono tree-id">
+          {% if n.has_children %}
+          <button type="button" class="tree-toggle" data-id="{{ n.id }}" aria-expanded="{{ 'false' if collapse and n.level >= 2 else 'true' }}" aria-label="Open or close children">▸</button>
+          {% else %}
+          <span class="tree-spacer"></span>
+          {% endif %}
+          {{ n.code }}
+        </td>
         <td>{{ n.level_label or n.level }}</td>
         <td class="mono">{{ n.apqc_id }}</td>
-        <td style="padding-left: {{ 8 + n.depth * 12 }}px">{{ n.name }}</td>
+        <td style="padding-left: {{ 8 + n.depth * 16 }}px">{{ n.name }}</td>
         <td>{{ n.metrics_available or "—" }}</td>
         <td>{{ n.element_description or "—" }}</td>
         <td>
@@ -57,4 +76,24 @@
     <button class="btn danger" type="submit">Delete master</button>
   </form>
 </section>
+<script>
+  document.querySelectorAll(".tree-toggle").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var open = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+      setChildren(button.getAttribute("data-id"), open);
+    });
+  });
+
+  function setChildren(parentId, open) {
+    document.querySelectorAll('tr[data-parent="' + parentId + '"]').forEach(function (row) {
+      row.hidden = !open;
+      var toggle = row.querySelector(".tree-toggle");
+      if (!open && toggle) {
+        toggle.setAttribute("aria-expanded", "false");
+        setChildren(row.getAttribute("data-id"), false);
+      }
+    });
+  }
+</script>
 {% endblock %}

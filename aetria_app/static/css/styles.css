@@ -135,6 +135,19 @@ textarea { resize: vertical; }
 
 .flash { padding: 0.6rem 0.8rem; border-radius: 8px; margin-bottom: 0.75rem; background: var(--soft); }
 .flash.error { background: #fde8e6; color: var(--danger); }
+.filter-bar { display: grid; grid-template-columns: 1.2fr 0.9fr 1.3fr auto; gap: 0.6rem; align-items: end; margin-bottom: 0.6rem; }
+.filter-bar .btn { margin-bottom: 0.55rem; }
+.tree-toggle, .tree-spacer {
+  display: inline-grid; place-items: center;
+  width: 1.25rem; height: 1.25rem; margin-right: 0.15rem;
+}
+.tree-toggle {
+  border: 0; background: var(--soft); color: var(--teal-dark);
+  border-radius: 6px; padding: 0; cursor: pointer; font-weight: 700;
+}
+.tree-toggle[aria-expanded="true"] { transform: rotate(90deg); }
+.process-tree tr[hidden] { display: none; }
+.tree-id { white-space: nowrap; }
 .tree { max-height: 640px; overflow: auto; }
 .tree-row { display: grid; grid-template-columns: 28px 1fr; gap: 0.35rem; align-items: start; padding: 0.32rem 0; border-bottom: 1px solid #eef2f5; }
 .badge { display: inline-block; background: var(--soft); color: var(--teal-dark); border-radius: 999px; padding: 0.08rem 0.45rem; font-size: 0.75rem; font-weight: 700; }

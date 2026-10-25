@@ -278,16 +278,32 @@ def master_detail(master_id: str):
     areas = _areas(nodes)
     q = (request.args.get("q") or "").strip()
     area = request.args.get("area") or ""
-    shown = _filter_nodes(nodes, area=area, q=q, max_level=2 if not q and not area else None)
+    level = request.args.get("level") or ""
+    if level not in {"1", "2", "3", "4", "5"}:
+        level = ""
+    matched = _filter_nodes(nodes, area=area, q=q, max_level=int(level) if level else None)
+    if level:
+        matched = [node for node in matched if int(node["level"]) == int(level)]
+    if level or q:
+        shown = _with_ancestors(nodes, [node["id"] for node in matched])
+    elif area:
+        shown = matched
+    else:
+        shown = nodes
+    parents = {node.get("parent_id") for node in nodes if node.get("parent_id")}
+    for node in shown:
+        node["has_children"] = node["id"] in parents
     return render_template(
         "master_detail.html",
         master=master,
-        nodes=shown[:250],
-        truncated=len(shown) > 250,
+        nodes=shown,
         total=len(nodes),
+        shown_count=len(shown),
         areas=areas,
         q=q,
         area=area,
+        level=level,
+        collapse=not (q or level),
     )
 
 
@@ -1104,12 +1120,24 @@ def _filter_nodes(nodes, area="", q="", max_level=None):
     for node in nodes:
         if area and node.get("area") != area:
             continue
-        if ql and ql not in f"{node['code']} {node['name']}".lower():
+        haystack = f"{node['code']} {node.get('apqc_id') or ''} {node['name']}".lower()
+        if ql and ql not in haystack:
             continue
         if max_level is not None and int(node["level"]) > max_level:
             continue
         out.append(node)
     return out
+
+
+def _with_ancestors(nodes: list[dict], picked_ids: list[str]) -> list[dict]:
+    by_id = {node["id"]: node for node in nodes}
+    keep: set[str] = set()
+    for node_id in picked_ids:
+        current = by_id.get(node_id)
+        while current and current["id"] not in keep:
+            keep.add(current["id"])
+            current = by_id.get(current.get("parent_id"))
+    return [node for node in nodes if node["id"] in keep]
 
 
 def create_app():
