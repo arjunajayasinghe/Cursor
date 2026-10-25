@@ -17,7 +17,7 @@ import {
 } from "../src/lib/process-tree";
 import { exportCompanyByValueStream } from "../src/lib/export-stub";
 
-const PORT = Number(process.env.PORT || 3000);
+const PORT = Number(process.env.PORT || 3456);
 const COOKIE = "aetria_session";
 const secret = () =>
   new TextEncoder().encode(

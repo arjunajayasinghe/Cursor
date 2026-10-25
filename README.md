@@ -17,7 +17,8 @@ npm run seed
 npm run dev
 ```
 
-Open **http://localhost:3000/login.html**
+Open **http://localhost:3456/login.html**  
+(Use port **3456** so it does not clash with other apps on 3000.)
 
 ## Seeded logins
 
