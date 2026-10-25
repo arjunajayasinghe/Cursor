@@ -1,0 +1,6 @@
+code,name,description,parentCode,valueStream
+9.0,Manage Information Technology,IT management processes,,
+9.1,Manage the business of information technology,IT strategy and governance,9.0,
+9.1.1,Develop IT strategy and governance,Define IT principles,9.1,
+9.2,Develop and manage IT customer relationships,Business relationship management,9.0,OTC
+9.2.1,Understand IT customer needs,Capture demand,9.2,OTC
