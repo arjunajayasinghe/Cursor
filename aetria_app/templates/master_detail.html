@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}{{ master.name }} · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">{{ master.industry }} · {{ master.version }}</p>
+  <h1>{{ master.name }}</h1>
+  <p class="lede">{{ total }} processes. Upload keeps Metrics Available? and Element Description when the file has them. Use Remark for Admin notes. The list shows L1–L2 until you search or pick an area.</p>
+</header>
+<section class="panel">
+  <h2>Upload L1–L5</h2>
+  <p class="muted">CSV or Excel. The Consumer Products workbook uses sheet “All Areas Consolidated”, header on the Hierarchy ID row. Optional columns: Metrics Available?, Element Description, Description or Remark.</p>
+  <form method="post" enctype="multipart/form-data" class="row-form">
+    <label>File<input type="file" name="file" accept=".csv,.xlsx,.xls,.txt" required /></label>
+    <button class="btn" type="submit">Upload</button>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <form method="get" class="row-form">
+    <label>Area
+      <select name="area">
+        <option value="">All areas</option>
+        {% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Search<input name="q" value="{{ q }}" placeholder="Code or name" /></label>
+    <button class="btn" type="submit">Show</button>
+  </form>
+  {% if truncated %}<p class="muted">Showing the first 250 matches. Narrow the search.</p>{% endif %}
+  <table>
+    <thead>
+      <tr><th>Hierarchy ID</th><th>Level</th><th>APQC ID</th><th>Process</th><th>Metrics</th><th>Element description</th><th>Remark</th></tr>
+    </thead>
+    <tbody>
+      {% for n in nodes %}
+      <tr>
+        <td class="mono">{{ n.code }}</td>
+        <td>{{ n.level_label or n.level }}</td>
+        <td class="mono">{{ n.apqc_id }}</td>
+        <td style="padding-left: {{ 8 + n.depth * 12 }}px">{{ n.name }}</td>
+        <td>{{ n.metrics_available or "—" }}</td>
+        <td>{{ n.element_description or "—" }}</td>
+        <td>
+          <form method="post">
+            <input type="hidden" name="action" value="remark" />
+            <input type="hidden" name="node_id" value="{{ n.id }}" />
+            <input name="description" value="{{ n.description }}" placeholder="Admin note" />
+            <button class="btn tiny" type="submit">Save</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="muted">No rows. Upload the master file.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="{{ url_for('master_delete', master_id=master.id) }}" style="margin-top:1rem" onsubmit="return confirm('Remove this master?')">
+    <button class="btn danger" type="submit">Delete master</button>
+  </form>
+</section>
+{% endblock %}

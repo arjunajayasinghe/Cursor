@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Value streams · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Assignment seeds</p>
+  <h1>Value streams</h1>
+  <p class="lede">Suggested APQC codes come from this Consumer Products 8.0 master. Example: O2C starts at 3.5 (sales plans) and 9.2 (revenue accounting). In this file, 2.3 is product development, not order to cash.</p>
+</header>
+<section class="panel">
+  <h2>Add a value stream</h2>
+  <form method="post" class="grid-2">
+    <input type="hidden" name="action" value="stream" />
+    <label>Code<input name="code" required placeholder="O2C" /></label>
+    <label>Name<input name="name" required placeholder="Order to Cash" /></label>
+    <label>Description<input name="description" /></label>
+    <div><button class="btn" type="submit">Add</button></div>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <h2>Add a suggested process</h2>
+  <form method="post" class="grid-2">
+    <input type="hidden" name="action" value="suggestion" />
+    <label>Value stream
+      <select name="value_stream_id" required>
+        {% for s in streams %}<option value="{{ s.id }}">{{ s.code }} — {{ s.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Hierarchy ID<input name="process_code" required placeholder="3.5" /></label>
+    <label>Note<input name="note" placeholder="Why this code" /></label>
+    <div><button class="btn" type="submit">Add suggestion</button></div>
+  </form>
+  <form method="post" action="{{ url_for('value_stream_upload') }}" enctype="multipart/form-data" class="row-form" style="margin-top:0.8rem">
+    <label>Mapping file<input type="file" name="file" accept=".csv,.xlsx" required /></label>
+    <button class="btn secondary" type="submit">Upload mapping</button>
+  </form>
+  <p class="muted">CSV columns: valueStream, processCode, note</p>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <table>
+    <thead><tr><th>Code</th><th>Name</th><th>Suggested hierarchy IDs</th></tr></thead>
+    <tbody>
+      {% for s in streams %}
+      <tr>
+        <td class="mono">{{ s.code }}</td>
+        <td>{{ s.name }}<div class="muted">{{ s.description }}</div></td>
+        <td>
+          {% for g in suggestions if g.value_stream_id == s.id %}
+          <form method="post" action="{{ url_for('suggestion_delete', suggestion_id=g.id) }}" style="display:inline">
+            <span class="badge">{{ g.process_code }}</span>
+            <button class="btn tiny danger" type="submit">×</button>
+          </form>
+          {% endfor %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="3" class="muted">No value streams yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Aetria Admin{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="nav">
+        <div class="brand">
+          <div class="mark">A</div>
+          <div>
+            <strong>Aetria</strong>
+            <span>Admin workbench</span>
+          </div>
+        </div>
+        <nav>
+          {% for href, label, key in nav %}
+          <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+          {% endfor %}
+        </nav>
+        <div class="nav-foot">
+          <div class="who">{{ me.name }}</div>
+          <div class="muted">{{ me.email }}</div>
+          <div class="role">{{ role_labels.get(me.role, me.role) }}</div>
+          <form method="post" action="{{ url_for('logout') }}" style="margin-top:0.6rem">
+            <button class="btn btn-ghost btn-block" type="submit">Sign out</button>
+          </form>
+        </div>
+      </aside>
+      <main class="main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+        {% block body %}{% endblock %}
+      </main>
+    </div>
+  </body>
+</html>

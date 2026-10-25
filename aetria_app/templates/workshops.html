@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Workshops · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Discovery</p>
+  <h1>Workshops</h1>
+  <p class="lede">Record a workshop, then upload meeting minutes and diagrams.</p>
+</header>
+<section class="panel">
+  <h2>New workshop</h2>
+  <form method="post" class="grid-2">
+    <label>Company
+      <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Value stream
+      <select name="value_stream_id"><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}">{{ s.code }}</option>{% endfor %}</select>
+    </label>
+    <label>Title<input name="title" required /></label>
+    <label>Date<input name="held_on" type="date" required /></label>
+    <label>Summary<textarea name="summary" rows="3"></textarea></label>
+    <div><button class="btn" type="submit">Add workshop</button></div>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <table>
+    <thead><tr><th>Date</th><th>Title</th><th>Company</th><th>Stream</th><th>Files</th></tr></thead>
+    <tbody>
+      {% for w in workshops %}
+      <tr>
+        <td>{{ w.held_on }}</td>
+        <td><a href="{{ url_for('workshop_detail', workshop_id=w.id) }}">{{ w.title }}</a></td>
+        <td>{{ w.company_name }}</td>
+        <td>{{ w.vs_code or "—" }}</td>
+        <td>{{ w.files }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No workshops yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

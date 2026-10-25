@@ -1,17 +1,13 @@
-# Aetria Process Mapping (Python)
+# Aetria Process Mapping — Phase 1 Admin
 
-Multi-tenant APQC-style process mapping MVP.
+Admin workbench for APQC process mapping. Python 3, Flask, and SQLite on your machine. Set `DATABASE_URL` to a Postgres URL when you host it.
 
-**Stack:** Python 3 + Flask + SQLite (local) / Postgres (hosting) + plain HTML/CSS.
-
-## Run on your Mac
-
-You already have Conda/`python` — no npm needed.
+## Run
 
 ```bash
 cd ~/Desktop/Cursor
 git fetch origin
-git checkout cursor/aetria-python-mvp-6386
+git checkout cursor/aetria-phase1-admin-6386
 git pull
 
 python3 -m venv .venv
@@ -22,33 +18,60 @@ python seed.py
 python app.py
 ```
 
-Open: **http://localhost:8765/login**
+Open **http://localhost:8765/login**
 
-Login: `operator@aetria.com` / `password123`
+If the terminal says `Address already in use`, the old file server is still on that port:
 
-## Hosting (Postgres)
+```bash
+kill $(lsof -t -iTCP:8765 -sTCP:LISTEN)
+python app.py
+```
 
-Set `DATABASE_URL` to a `postgresql://…` (or `postgres://…`) connection string, then run `python seed.py` once and start `python app.py`. Without `DATABASE_URL`, the app uses SQLite at `data/aetria.db`.
+Leave that window open. Sign in as `admin@aetria.com` / `password123`.
 
-## Seeded users
+`operator@aetria.com` is the same Admin role. `area@aetria.com`, `admin@acme.com`, and `viewer@acme.com` can sign in, but area filtering is not on yet.
 
-Password for all: `password123`
+## What Phase 1 includes
 
-| Email | Role |
-|-------|------|
-| operator@aetria.com | Aetria operator |
-| admin@acme.com | Acme admin |
-| editor@acme.com | Area editor (branch 3.3) |
-| viewer@acme.com | Viewer |
-| admin@beta.com | Beta admin |
+- Dashboard with masters, companies, assignments, workshops, critical points, and automation
+- Several APQC masters (industry + version). Seed loads **Consumer Products 8.0** (`CP8.0`, about 2,039 elements, L1–L5)
+- Companies, including a short name used in file names
+- Value streams with suggested hierarchy IDs. On this master, O2C is **3.5** and **9.2** (2.3 is product development)
+- Assign L1–L5 to a company by value stream. APQC hierarchy and numbers stay
+- Excel **download** only
+- Workshops: meeting minutes, diagrams, critical points
+- Automation points
+- Users: Admin can add, edit, and view user IDs
 
-## Features
+Not in this build: Excel upload back into the company view, swimlanes, SAP, SOPs, and scoped area login.
 
-- AS master tree, search, bulk CSV/Excel upload  
-- Assign/push to companies  
-- Company workspace + area scopes  
-- Stub value-stream Excel export  
+## Master upload
 
-## Stubbed
+On a master, upload CSV or Excel. The Consumer Products file is sheet `All Areas Consolidated` (header row contains Hierarchy ID). These columns are stored on the master when the file has them:
 
-Excel layout is a placeholder until the client template is provided.
+- Metrics Available?
+- Element Description
+- Description or Remark (Admin can also type a remark on each visible process)
+
+They are not the first five columns of the company download.
+
+## Company Excel download
+
+Two sheets:
+
+- **Data** — exactly 30 columns. The first five are filled from the assignment: Area, Level, Hierarchy ID, APQC ID, Process / activity / task. Columns 6–30 are empty placeholders (`Placeholder 6` … `Placeholder 30`) until the real headers are agreed. L1 rows are the stronger green. Columns 6–30 are yellow.
+- **Reference** — field glossary (Process ID, Hierarchy ID, Level, Process Name, PCF Path, and the system fields). Status and Created/Updated rows are yellow.
+
+File name: `{CompanyShortName}_{ValueStreamCode}_{Version}.xlsx`  
+Example: `ACME_O2C_CP8.0.xlsx`
+
+The value-stream token is the stream code (O2C), and the version token is the master version (CP8.0).
+
+## Hosting
+
+Leave `DATABASE_URL` unset for SQLite (`data/aetria.db`). For Postgres:
+
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/aetria python seed.py
+DATABASE_URL=postgresql://user:pass@host:5432/aetria python app.py
+```

@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Automation · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Automation</p>
+  <h1>Automation points</h1>
+  <p class="lede">Capture candidates against a company, value stream, and process.</p>
+</header>
+<section class="panel">
+  <h2>{% if edit %}Edit{% else %}Add{% endif %}</h2>
+  <form method="post" class="grid-2">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}" />{% endif %}
+    <label>Company
+      <select name="company_id" required>{% for c in companies %}<option value="{{ c.id }}" {% if edit and edit.company_id == c.id %}selected{% endif %}>{{ c.short_name }} — {{ c.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Title<input name="title" required value="{{ edit.title if edit else '' }}" /></label>
+    <label>Value stream
+      <select name="value_stream_id"><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.code }}</option>{% endfor %}</select>
+    </label>
+    <label>Process
+      <select name="process_node_id"><option value="">None</option>{% for p in processes %}<option value="{{ p.id }}" {% if edit and edit.process_node_id == p.id %}selected{% endif %}>{{ p.short_name }} {{ p.code }} {{ p.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Manual vs system
+      <select name="manual_vs_system">
+        {% for s in ['manual','mixed','system'] %}<option value="{{ s }}" {% if edit and edit.manual_vs_system == s %}selected{% endif %}>{{ s }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Tool<input name="tool" value="{{ edit.tool if edit else '' }}" placeholder="SAP, Excel, …" /></label>
+    <label>Priority
+      <select name="priority">{% for s in ['high','medium','low'] %}<option value="{{ s }}" {% if edit and edit.priority == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    </label>
+    <label>Status
+      <select name="status">{% for s in ['candidate','in progress','live'] %}<option value="{{ s }}" {% if edit and edit.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select>
+    </label>
+    <label>Detail<textarea name="detail" rows="3">{{ edit.detail if edit else '' }}</textarea></label>
+    <div><button class="btn" type="submit">Save</button></div>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <table>
+    <thead><tr><th>Company</th><th>Title</th><th>Process</th><th>Priority</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for p in points %}
+      <tr>
+        <td>{{ p.short_name }}</td>
+        <td>{{ p.title }}<div class="muted">{{ p.manual_vs_system }}{% if p.tool %} · {{ p.tool }}{% endif %}</div></td>
+        <td class="mono">{{ p.process_code or "—" }}</td>
+        <td>{{ p.priority }}</td>
+        <td>{{ p.status }}</td>
+        <td>
+          <a href="{{ url_for('automation', edit=p.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('automation_delete', point_id=p.id) }}" style="display:inline">
+            <button class="btn tiny danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="muted">None yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

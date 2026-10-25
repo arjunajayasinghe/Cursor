@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Seed demo data for Aetria Process Mapping."""
+"""Seed the Phase 1 Admin workbench with Consumer Products 8.0."""
 from __future__ import annotations
 
 import sys
@@ -11,297 +11,231 @@ ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
 from aetria_app.db import get_db, reset_db
-from aetria_app.services import assign_branch, new_id
+from aetria_app.services import (
+    UPLOAD_ROOT,
+    expand_codes,
+    fetchall,
+    import_master_file,
+    new_id,
+    save_assignment,
+    utcnow,
+)
+
+MASTER_FILES = [
+    ROOT / "samples" / "CBL_APQC_Consumer_Products_8_One_Consolidated_Sheet.xlsx",
+    Path("/cursor/stores/self/docs/templates/CBL_APQC_Consumer_Products_8_One_Consolidated_Sheet.xlsx"),
+]
 
 
 def main() -> None:
     reset_db()
-    pw = generate_password_hash("password123")
+    password = generate_password_hash("password123")
+    now = utcnow()
+    master_path = next((path for path in MASTER_FILES if path.exists()), None)
+    if master_path is None:
+        raise SystemExit("Consumer Products workbook not found. Put it in samples/.")
 
     with get_db() as conn:
-        users = {
-            "op": ("operator@aetria.com", "Aetria Operator", 1),
-            "aa": ("admin@acme.com", "Acme Admin", 0),
-            "ae": ("editor@acme.com", "Acme Area Editor", 0),
-            "av": ("viewer@acme.com", "Acme Viewer", 0),
-            "ba": ("admin@beta.com", "Beta Admin", 0),
-        }
-        uids: dict[str, str] = {}
-        for key, (email, name, is_op) in users.items():
-            uid = new_id()
-            uids[key] = uid
+        users = [
+            ("admin@aetria.com", "Aetria Admin", "ADMIN"),
+            ("operator@aetria.com", "Aetria Operator", "ADMIN"),
+            ("area@aetria.com", "Area Lead", "AETRIA_AREA"),
+            ("admin@acme.com", "Acme Admin", "COMPANY_ADMIN"),
+            ("viewer@acme.com", "Acme Viewer", "VIEWER"),
+        ]
+        for email, name, role in users:
             conn.execute(
-                "INSERT INTO users (id, email, password_hash, name, is_aetria_operator) VALUES (?,?,?,?,?)",
-                (uid, email, pw, name, is_op),
+                """
+                INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
+                VALUES (?,?,?,?,?,1,?)
+                """,
+                (new_id(), email, password, name, role, now),
             )
-
         acme = new_id()
         beta = new_id()
         conn.execute(
-            "INSERT INTO companies (id, name, slug) VALUES (?,?,?)",
-            (acme, "Acme Corp", "acme"),
+            """
+            INSERT INTO companies
+            (id, name, short_name, industry, contact_name, contact_email, notes, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (acme, "Acme Corp", "ACME", "Consumer Products", "Acme Admin", "admin@acme.com", "Sample company", now),
         )
         conn.execute(
-            "INSERT INTO companies (id, name, slug) VALUES (?,?,?)",
-            (beta, "Beta Industries", "beta"),
+            """
+            INSERT INTO companies
+            (id, name, short_name, industry, contact_name, contact_email, notes, created_at)
+            VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (beta, "Beta Industries", "BETA", "Consumer Products", "Beta Admin", "admin@beta.com", "", now),
         )
-
-        def membership(user_key: str, company_id: str, role: str) -> str:
-            mid = new_id()
-            conn.execute(
-                "INSERT INTO memberships (id, user_id, company_id, role) VALUES (?,?,?,?)",
-                (mid, uids[user_key], company_id, role),
-            )
-            return mid
-
-        membership("aa", acme, "ADMIN")
-        editor_m = membership("ae", acme, "AREA_EDITOR")
-        membership("av", acme, "VIEWER")
-        membership("ba", beta, "ADMIN")
-
-        vs_order = [
-            ("OTC", "Order to Cash", 1),
-            ("PTP", "Procure to Pay", 2),
-            ("RTR", "Record to Report", 3),
-            ("HTR", "Hire to Retire", 4),
+        streams = [
+            ("O2C", "Order to Cash", "CP 8.0: sales plans (3.5) and revenue accounting (9.2).", ["3.5", "9.2"], 1),
+            ("P2P", "Procure to Pay", "CP 8.0: procure materials (4.2) and accounts payable (9.6).", ["4.2", "9.6"], 2),
+            ("R2R", "Record to Report", "CP 8.0: general accounting and reporting (9.3).", ["9.3"], 3),
+            ("H2R", "Hire to Retire", "CP 8.0: recruit (7.2) through redeploy and retire (7.6).", ["7.2", "7.6"], 4),
+            ("I2P", "Idea to Product", "CP 8.0: ideas (2.2) and develop products (2.3).", ["2.2", "2.3"], 5),
         ]
-        master_vs: dict[str, str] = {}
-        for code, name, so in vs_order:
-            vid = new_id()
-            master_vs[code] = vid
+        stream_ids = {}
+        for code, name, desc, codes, sort_order in streams:
+            sid = new_id()
+            stream_ids[code] = sid
             conn.execute(
-                "INSERT INTO value_streams (id, company_id, code, name, sort_order) VALUES (?,?,?,?,?)",
-                (vid, None, code, name, so),
+                "INSERT INTO value_streams (id, code, name, description, sort_order) VALUES (?,?,?,?,?)",
+                (sid, code, name, desc, sort_order),
             )
-            conn.execute(
-                "INSERT INTO value_streams (id, company_id, code, name, sort_order) VALUES (?,?,?,?,?)",
-                (new_id(), acme, code, name, so),
-            )
-        for code, name, so in vs_order[:2]:
-            conn.execute(
-                "INSERT INTO value_streams (id, company_id, code, name, sort_order) VALUES (?,?,?,?,?)",
-                (new_id(), beta, code, name, so),
-            )
-
-        # (code, name, desc, vs, children)
-        tree = [
-            (
-                "1.0",
-                "Develop Vision and Strategy",
-                "Strategic planning and governance",
-                None,
-                [
-                    (
-                        "1.1",
-                        "Define the business concept and long-term vision",
-                        "",
-                        None,
-                        [
-                            ("1.1.1", "Assess the external environment", "", None, []),
-                            (
-                                "1.1.2",
-                                "Survey the market and determine customer needs",
-                                "",
-                                None,
-                                [],
-                            ),
-                        ],
-                    ),
-                    (
-                        "1.2",
-                        "Develop business strategy",
-                        "",
-                        None,
-                        [
-                            ("1.2.1", "Develop overall mission statement", "", None, []),
-                            ("1.2.2", "Evaluate strategic options", "", None, []),
-                        ],
-                    ),
-                ],
-            ),
-            (
-                "2.0",
-                "Develop and Manage Products and Services",
-                "",
-                "OTC",
-                [
-                    (
-                        "2.1",
-                        "Govern and manage product/service development",
-                        "",
-                        "OTC",
-                        [
-                            ("2.1.1", "Evaluate performance of products", "", "OTC", []),
-                            ("2.1.2", "Generate new product ideas", "", "OTC", []),
-                        ],
-                    ),
-                    ("2.2", "Generate and define new product/service ideas", "", "OTC", []),
-                ],
-            ),
-            (
-                "3.0",
-                "Market and Sell Products and Services",
-                "",
-                "OTC",
-                [
-                    (
-                        "3.1",
-                        "Understand markets, customers, and capabilities",
-                        "",
-                        "OTC",
-                        [
-                            ("3.1.1", "Perform customer and market research", "", "OTC", []),
-                            ("3.1.2", "Evaluate customer experience", "", "OTC", []),
-                        ],
-                    ),
-                    ("3.2", "Develop marketing strategy", "", "OTC", []),
-                    (
-                        "3.3",
-                        "Develop sales strategy",
-                        "",
-                        "OTC",
-                        [
-                            ("3.3.1", "Develop sales forecasts", "", "OTC", []),
-                            (
-                                "3.3.2",
-                                "Establish sales partner/alliance relationships",
-                                "",
-                                "OTC",
-                                [],
-                            ),
-                        ],
-                    ),
-                ],
-            ),
-            (
-                "4.0",
-                "Deliver Products and Services",
-                "",
-                "PTP",
-                [
-                    (
-                        "4.1",
-                        "Plan for and acquire necessary resources",
-                        "",
-                        "PTP",
-                        [
-                            ("4.1.1", "Manage product inventory", "", "PTP", []),
-                            ("4.1.2", "Procure materials and services", "", "PTP", []),
-                        ],
-                    ),
-                    ("4.2", "Produce/manufacture/deliver product", "", "PTP", []),
-                ],
-            ),
-            (
-                "5.0",
-                "Manage Customer Service",
-                "",
-                "OTC",
-                [
-                    ("5.1", "Develop customer care/service strategy", "", "OTC", []),
-                    ("5.2", "Plan and manage customer service operations", "", "OTC", []),
-                ],
-            ),
-            (
-                "6.0",
-                "Develop and Manage Human Capital",
-                "",
-                "HTR",
-                [
-                    (
-                        "6.1",
-                        "Develop and manage HR planning and policies",
-                        "",
-                        "HTR",
-                        [
-                            ("6.1.1", "Develop HR strategy", "", "HTR", []),
-                            ("6.1.2", "Develop and implement HR programs", "", "HTR", []),
-                        ],
-                    ),
-                    ("6.2", "Recruit, source, and select employees", "", "HTR", []),
-                ],
-            ),
-            (
-                "8.0",
-                "Manage Financial Resources",
-                "",
-                "RTR",
-                [
-                    (
-                        "8.1",
-                        "Perform planning and management accounting",
-                        "",
-                        "RTR",
-                        [
-                            ("8.1.1", "Perform budgeting/forecasting", "", "RTR", []),
-                            ("8.1.2", "Perform cost accounting", "", "RTR", []),
-                        ],
-                    ),
-                    (
-                        "8.2",
-                        "Process accounts payable and expense reimbursements",
-                        "",
-                        "PTP",
-                        [],
-                    ),
-                    ("8.3", "Process payroll", "", "HTR", []),
-                    ("8.4", "Process accounts receivable", "", "OTC", []),
-                ],
-            ),
-        ]
-
-        code_to_id: dict[str, str] = {}
-
-        def insert(nodes, parent_id, level):
-            for i, item in enumerate(nodes):
-                code, name, desc, vs, kids = item
-                nid = new_id()
-                code_to_id[code] = nid
+            for process_code in codes:
                 conn.execute(
                     """
-                    INSERT INTO process_nodes
-                    (id, company_id, parent_id, code, name, description, level, sort_order, value_stream_id, is_hidden)
-                    VALUES (?,?,?,?,?,?,?,?,?,0)
+                    INSERT INTO value_stream_suggestions (id, value_stream_id, process_code, note)
+                    VALUES (?,?,?,?)
                     """,
-                    (
-                        nid,
-                        None,
-                        parent_id,
-                        code,
-                        name,
-                        desc,
-                        level,
-                        i,
-                        master_vs.get(vs) if vs else None,
-                    ),
+                    (new_id(), sid, process_code, desc),
                 )
-                if kids:
-                    insert(kids, nid, level + 1)
+        master_id = new_id()
+        conn.execute(
+            """
+            INSERT INTO apqc_masters (id, industry, version, name, notes, created_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (
+                master_id,
+                "Consumer Products",
+                "CP8.0",
+                "APQC Consumer Products 8.0",
+                "Imported from the consolidated L1–L5 sheet. 13 areas.",
+                now,
+            ),
+        )
 
-        insert(tree, None, 1)
-
-    for code in ["2.0", "3.0", "5.0", "8.4"]:
-        assign_branch(acme, code_to_id[code], uids["op"])
-    assign_branch(beta, code_to_id["4.0"], uids["op"])
-
+    result = import_master_file(master_id, master_path.name, master_path.read_bytes())
     with get_db() as conn:
-        sales = conn.execute(
-            "SELECT id FROM process_nodes WHERE company_id = ? AND code = '3.3'",
-            (acme,),
-        ).fetchone()
-        if sales:
-            conn.execute(
-                "INSERT INTO area_scopes (id, membership_id, process_node_id) VALUES (?,?,?)",
-                (new_id(), editor_m, sales["id"]),
-            )
+        conn.execute(
+            """
+            UPDATE process_nodes
+            SET description = ?
+            WHERE master_id = ? AND code = '9.2.1'
+            """,
+            ("Confirm the credit policy with finance before go-live.", master_id),
+        )
 
-    print("Seed complete.")
+    for company_id, code in ((acme, "O2C"), (acme, "P2P"), (beta, "R2R")):
+        codes = [row["process_code"] for row in fetchall(
+            "SELECT process_code FROM value_stream_suggestions WHERE value_stream_id = ?",
+            (stream_ids[code],),
+        )]
+        node_ids, missing = expand_codes(master_id, codes)
+        if missing:
+            raise SystemExit(f"Missing suggestion codes for {code}: {missing}")
+        save_assignment(company_id, master_id, stream_ids[code], node_ids)
+
+    o2c_node = None
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM process_nodes WHERE master_id = ? AND code = '9.2.1'",
+            (master_id,),
+        ).fetchone()
+        o2c_node = row["id"] if row else None
+        procure = conn.execute(
+            "SELECT id FROM process_nodes WHERE master_id = ? AND code = '4.2.3'",
+            (master_id,),
+        ).fetchone()
+        workshop_id = new_id()
+        conn.execute(
+            """
+            INSERT INTO workshops
+            (id, company_id, value_stream_id, title, held_on, summary, created_at)
+            VALUES (?,?,?,?,?,?,?)
+            """,
+            (
+                workshop_id,
+                acme,
+                stream_ids["O2C"],
+                "O2C discovery",
+                "2026-10-18",
+                "Walked sales plans and customer credit. Credit check stays a critical point.",
+                now,
+            ),
+        )
+        UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+        minutes_name = new_id() + ".txt"
+        (UPLOAD_ROOT / minutes_name).write_text(
+            "O2C discovery minutes\n\nAgreed to keep APQC 3.5 and 9.2.\nCredit check (9.2.1) must stay visible.\n",
+            encoding="utf-8",
+        )
+        diagram_name = new_id() + ".svg"
+        (UPLOAD_ROOT / diagram_name).write_text(
+            "<svg xmlns='http://www.w3.org/2000/svg' width='640' height='120'>"
+            "<rect x='10' y='30' width='180' height='60' fill='#e7f3f1' stroke='#0f6e6b'/>"
+            "<text x='24' y='66' font-family='sans-serif' font-size='14'>3.5 Sales plans</text>"
+            "<rect x='230' y='30' width='180' height='60' fill='#e7f3f1' stroke='#0f6e6b'/>"
+            "<text x='244' y='66' font-family='sans-serif' font-size='14'>9.2 Revenue</text>"
+            "</svg>",
+            encoding="utf-8",
+        )
+        conn.execute(
+            """
+            INSERT INTO workshop_files
+            (id, workshop_id, kind, original_name, stored_name, uploaded_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (new_id(), workshop_id, "minutes", "o2c-minutes.txt", minutes_name, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO workshop_files
+            (id, workshop_id, kind, original_name, stored_name, uploaded_at)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (new_id(), workshop_id, "diagram", "o2c-flow.svg", diagram_name, now),
+        )
+        conn.execute(
+            """
+            INSERT INTO critical_points
+            (id, company_id, workshop_id, value_stream_id, process_node_id, title, detail, owner, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                new_id(),
+                acme,
+                workshop_id,
+                stream_ids["O2C"],
+                o2c_node,
+                "Credit check before invoicing",
+                "9.2.1 must stay in the company map. Do not drop it when trimming O2C.",
+                "Finance lead",
+                "maintain",
+                now,
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO automation_points
+            (id, company_id, value_stream_id, process_node_id, title, detail, manual_vs_system, tool, priority, status, created_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                new_id(),
+                acme,
+                stream_ids["P2P"],
+                procure["id"] if procure else None,
+                "Supplier contract match",
+                "Match PO, receipt, and invoice before payment.",
+                "mixed",
+                "SAP",
+                "high",
+                "candidate",
+                now,
+            ),
+        )
+
+    print(f"Imported {result['created']} processes from {master_path.name}")
     print("Password for all: password123")
+    print("  admin@aetria.com  (Admin)")
     print("  operator@aetria.com")
+    print("  area@aetria.com")
     print("  admin@acme.com")
-    print("  editor@acme.com  (branch 3.3 only)")
     print("  viewer@acme.com")
-    print("  admin@beta.com")
 
 
 if __name__ == "__main__":

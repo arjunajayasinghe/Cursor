@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Masters · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">APQC</p>
+  <h1>Masters</h1>
+  <p class="lede">One master per industry and version. Upload L1–L5 here. Metrics Available?, Element Description, and Remark stay on the master.</p>
+</header>
+<section class="panel">
+  <h2>New master</h2>
+  <form method="post" class="grid-2">
+    <label>Industry<input name="industry" required placeholder="Consumer Products" /></label>
+    <label>Version<input name="version" required placeholder="CP8.0" /></label>
+    <label>Name<input name="name" required placeholder="APQC Consumer Products 8.0" /></label>
+    <label>Notes<input name="notes" placeholder="Optional" /></label>
+    <div><button class="btn" type="submit">Create master</button></div>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <table>
+    <thead><tr><th>Master</th><th>Industry</th><th>Version</th><th>Processes</th></tr></thead>
+    <tbody>
+      {% for m in masters %}
+      <tr>
+        <td><a href="{{ url_for('master_detail', master_id=m.id) }}">{{ m.name }}</a></td>
+        <td>{{ m.industry }}</td>
+        <td class="mono">{{ m.version }}</td>
+        <td>{{ m.processes }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No masters yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

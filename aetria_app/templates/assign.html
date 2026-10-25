@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}Assign · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">L1–L5</p>
+  <h1>Assign to a company</h1>
+  <p class="lede">Pick a company, the Consumer Products master, and a value stream. “Use suggested processes” copies that branch and keeps the APQC parents and numbers.</p>
+</header>
+<section class="panel">
+  <form method="get" class="grid-2">
+    <label>Company
+      <select name="company_id">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Master
+      <select name="master_id">{% for m in masters %}<option value="{{ m.id }}" {% if m.id == master_id %}selected{% endif %}>{{ m.industry }} {{ m.version }}</option>{% endfor %}</select>
+    </label>
+    <label>Value stream
+      <select name="value_stream_id">{% for s in streams %}<option value="{{ s.id }}" {% if s.id == stream_id %}selected{% endif %}>{{ s.code }} — {{ s.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Show
+      <select name="view">
+        <option value="outline" {% if view == 'outline' %}selected{% endif %}>L1–L2 outline</option>
+        <option value="suggested" {% if view == 'suggested' %}selected{% endif %}>Suggested branch</option>
+        <option value="assigned" {% if view == 'assigned' %}selected{% endif %}>Already assigned</option>
+      </select>
+    </label>
+    <label>Area
+      <select name="area"><option value="">Any area</option>{% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+    </label>
+    <label>Search<input name="q" value="{{ q }}" /></label>
+    <div><button class="btn" type="submit">Refresh list</button></div>
+  </form>
+  <p class="muted">Suggestions: {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}
+    {% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}
+    · {{ selected|length }} assigned
+  </p>
+  <form method="post">
+    <input type="hidden" name="company_id" value="{{ company_id }}" />
+    <input type="hidden" name="master_id" value="{{ master_id }}" />
+    <input type="hidden" name="value_stream_id" value="{{ stream_id }}" />
+    <input type="hidden" name="view" value="{{ view }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="q" value="{{ q }}" />
+    <input type="hidden" name="action" value="suggest" />
+    <button class="btn" type="submit">Use suggested processes</button>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  {% if truncated %}<p class="muted">Showing the first 400 rows. Search or pick an area.</p>{% endif %}
+  <form method="post">
+    <input type="hidden" name="company_id" value="{{ company_id }}" />
+    <input type="hidden" name="master_id" value="{{ master_id }}" />
+    <input type="hidden" name="value_stream_id" value="{{ stream_id }}" />
+    <input type="hidden" name="view" value="{{ view }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="q" value="{{ q }}" />
+    <div class="tree">
+      {% for n in nodes %}
+      <div class="tree-row" style="padding-left: {{ n.depth * 14 }}px">
+        <input type="checkbox" name="node_id" value="{{ n.id }}" {% if n.id in selected %}checked{% endif %} />
+        <input type="hidden" name="visible_id" value="{{ n.id }}" />
+        <div>
+          <span class="mono">{{ n.code }}</span> {{ n.name }}
+          <span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span>
+          {% if n.id in suggested_ids %}<span class="badge">suggested</span>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      <p class="muted">Nothing to show for this filter.</p>
+      {% endfor %}
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Save assignment</button>
+  </form>
+</section>
+{% endblock %}

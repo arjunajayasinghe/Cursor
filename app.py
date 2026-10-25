@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
-"""Aetria Process Mapping — Python + Flask + SQLite MVP."""
+"""Aetria Process Mapping — Phase 1 Admin workbench."""
 from __future__ import annotations
 
 import os
+import re
 from functools import wraps
+from io import BytesIO
 from pathlib import Path
 
 from flask import (
     Flask,
+    abort,
     flash,
-    jsonify,
+    g,
     redirect,
     render_template,
     request,
@@ -17,19 +20,48 @@ from flask import (
     session,
     url_for,
 )
-from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+from werkzeug.utils import secure_filename
 
 from aetria_app.db import get_db, init_db
 from aetria_app.services import (
-    assign_branch,
-    bulk_upsert_master,
-    descendant_ids,
-    export_stub_xlsx,
+    EXCEL_HEADERS,
+    ROLE_LABELS,
+    ROLES,
+    UPLOAD_ROOT,
+    assigned_ids,
+    build_workbook,
+    dashboard_stats,
+    distribution_rows,
+    expand_codes,
+    fetchall,
+    fetchone,
     load_nodes,
-    parse_upload,
+    new_id,
+    parse_suggestion_upload,
+    import_master_file,
+    save_assignment,
+    suggestion_codes,
+    utcnow,
 )
 
 ROOT = Path(__file__).resolve().parent
+MINUTES_EXT = {".pdf", ".doc", ".docx", ".txt", ".md", ".csv"}
+DIAGRAM_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf"}
+
+NAV = [
+    ("dashboard", "Dashboard"),
+    ("masters", "APQC masters"),
+    ("companies", "Companies"),
+    ("value_streams", "Value streams"),
+    ("assign", "Assign"),
+    ("distribute", "Excel download"),
+    ("workshops", "Workshops"),
+    ("critical_points", "Critical points"),
+    ("automation", "Automation"),
+    ("users", "Users"),
+    ("roadmap", "Later"),
+]
 
 app = Flask(
     __name__,
@@ -37,107 +69,70 @@ app = Flask(
     static_folder=str(ROOT / "aetria_app" / "static"),
 )
 app.secret_key = os.environ.get("AUTH_SECRET", "dev-secret-change-me-in-production-aetria-mvp")
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+
+
+def current_user():
+    uid = session.get("user_id")
+    if not uid:
+        return None
+    if getattr(g, "_user_loaded", False):
+        return g.user
+    g.user = fetchone("SELECT * FROM users WHERE id = ?", (uid,))
+    g._user_loaded = True
+    return g.user
 
 
 def login_required(view):
     @wraps(view)
     def wrapped(*args, **kwargs):
-        if not session.get("user_id"):
+        if not current_user():
             return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapped
 
 
-def current_access():
-    uid = session.get("user_id")
-    if not uid:
-        return None
-    with get_db() as conn:
-        user = conn.execute("SELECT * FROM users WHERE id = ?", (uid,)).fetchone()
-        if not user:
-            return None
-        company_id = session.get("active_company_id")
-        is_op = bool(user["is_aetria_operator"])
-        if company_id is None:
-            if not is_op:
-                return None
-            return {
-                "user": dict(user),
-                "company_id": None,
-                "is_master": True,
-                "is_op": True,
-                "role": None,
-                "can_edit": True,
-                "can_admin": True,
-                "area_scope": None,
-                "company_name": None,
-            }
-        company = conn.execute(
-            "SELECT * FROM companies WHERE id = ?", (company_id,)
-        ).fetchone()
-        if not company:
-            return None
-        if is_op:
-            return {
-                "user": dict(user),
-                "company_id": company_id,
-                "is_master": False,
-                "is_op": True,
-                "role": "ADMIN",
-                "can_edit": True,
-                "can_admin": True,
-                "area_scope": None,
-                "company_name": company["name"],
-            }
-        m = conn.execute(
-            "SELECT * FROM memberships WHERE user_id = ? AND company_id = ?",
-            (uid, company_id),
-        ).fetchone()
-        if not m:
-            return None
-        scopes = [
-            r["process_node_id"]
-            for r in conn.execute(
-                "SELECT process_node_id FROM area_scopes WHERE membership_id = ?",
-                (m["id"],),
-            ).fetchall()
-        ]
-        role = m["role"]
-        return {
-            "user": dict(user),
-            "company_id": company_id,
-            "is_master": False,
-            "is_op": False,
-            "role": role,
-            "can_edit": role in ("ADMIN", "AREA_EDITOR"),
-            "can_admin": role == "ADMIN",
-            "area_scope": scopes if role == "AREA_EDITOR" else None,
-            "company_name": company["name"],
-        }
+def admin_required(view):
+    @wraps(view)
+    def wrapped(*args, **kwargs):
+        me = current_user()
+        if not me:
+            return redirect(url_for("login"))
+        if me["role"] != "ADMIN" or not me["is_active"]:
+            return redirect(url_for("limited"))
+        return view(*args, **kwargs)
+
+    return wrapped
 
 
-def companies_for(user_id: str, is_op: bool):
-    with get_db() as conn:
-        if is_op:
-            return [dict(r) for r in conn.execute("SELECT * FROM companies ORDER BY name")]
-        rows = conn.execute(
-            """
-            SELECT c.* FROM companies c
-            JOIN memberships m ON m.company_id = c.id
-            WHERE m.user_id = ?
-            ORDER BY c.name
-            """,
-            (user_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
+NAV_ALIAS = {
+    "company_form": "companies",
+    "company_delete": "companies",
+    "master_detail": "masters",
+    "master_delete": "masters",
+    "workshop_detail": "workshops",
+    "user_new": "users",
+    "user_create": "users",
+    "user_view": "users",
+    "user_edit": "users",
+    "user_update": "users",
+    "distribute_download": "distribute",
+    "value_stream_upload": "value_streams",
+    "suggestion_delete": "value_streams",
+}
 
 
-@app.route("/")
-def home():
-    if session.get("user_id"):
-        return redirect(url_for("app_home"))
-    return redirect(url_for("login"))
+@app.context_processor
+def inject_nav():
+    me = current_user()
+    endpoint = NAV_ALIAS.get(request.endpoint, request.endpoint)
+    return {
+        "me": me,
+        "nav": [(url_for(name), label, name) for name, label in NAV],
+        "active": endpoint,
+        "role_labels": ROLE_LABELS,
+    }
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -145,23 +140,21 @@ def login():
     if request.method == "POST":
         email = (request.form.get("email") or "").strip().lower()
         password = request.form.get("password") or ""
-        with get_db() as conn:
-            user = conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
+        user = fetchone("SELECT * FROM users WHERE email = ?", (email,))
         if not user or not check_password_hash(user["password_hash"], password):
             flash("Invalid credentials", "error")
             return render_template("login.html", email=email)
+        if not user["is_active"]:
+            flash("This user is inactive. Ask an Admin to turn it back on.", "error")
+            return render_template("login.html", email=email)
         session.clear()
         session["user_id"] = user["id"]
-        session["active_company_id"] = None
-        if not user["is_aetria_operator"]:
-            with get_db() as conn:
-                m = conn.execute(
-                    "SELECT company_id FROM memberships WHERE user_id = ? ORDER BY id LIMIT 1",
-                    (user["id"],),
-                ).fetchone()
-                session["active_company_id"] = m["company_id"] if m else None
-        return redirect(url_for("app_home"))
-    return render_template("login.html", email="operator@aetria.com")
+        if user["role"] == "ADMIN":
+            return redirect(url_for("dashboard"))
+        return redirect(url_for("limited"))
+    if current_user():
+        return redirect(url_for("dashboard"))
+    return render_template("login.html", email="admin@aetria.com")
 
 
 @app.route("/logout", methods=["POST"])
@@ -170,196 +163,861 @@ def logout():
     return redirect(url_for("login"))
 
 
-@app.route("/workspace", methods=["POST"])
+@app.route("/limited")
 @login_required
-def switch_workspace():
-    access = current_access()
-    if not access:
-        return redirect(url_for("login"))
-    raw = request.form.get("company_id", "")
-    company_id = None if raw == "" else raw
-    if company_id is None:
-        if not access["is_op"]:
-            flash("Only Aetria operators can open master", "error")
-            return redirect(url_for("app_home"))
-    else:
-        allowed = {c["id"] for c in companies_for(access["user"]["id"], access["is_op"])}
-        if company_id not in allowed and not access["is_op"]:
-            flash("No access", "error")
-            return redirect(url_for("app_home"))
-    session["active_company_id"] = company_id
-    return redirect(url_for("app_home"))
+def limited():
+    return render_template("limited.html")
 
 
-@app.route("/app")
-@login_required
-def app_home():
-    access = current_access()
-    if not access:
-        session.clear()
-        return redirect(url_for("login"))
-
-    nodes = load_nodes(access["company_id"])
-    with get_db() as conn:
-        if access["company_id"] is None:
-            streams = [
-                dict(r)
-                for r in conn.execute(
-                    "SELECT * FROM value_streams WHERE company_id IS NULL ORDER BY sort_order"
-                )
-            ]
-            assignments = [
-                dict(r)
-                for r in conn.execute(
-                    """
-                    SELECT a.*, n.code AS master_code, n.name AS master_name, c.name AS company_name
-                    FROM process_assignments a
-                    JOIN process_nodes n ON n.id = a.master_node_id
-                    JOIN companies c ON c.id = a.company_id
-                    ORDER BY a.assigned_at DESC LIMIT 20
-                    """
-                )
-            ]
-        else:
-            streams = [
-                dict(r)
-                for r in conn.execute(
-                    "SELECT * FROM value_streams WHERE company_id = ? ORDER BY sort_order",
-                    (access["company_id"],),
-                )
-            ]
-            assignments = []
-
-    companies = companies_for(access["user"]["id"], access["is_op"])
-    editable = None
-    if access["area_scope"] is not None:
-        editable = descendant_ids(access["company_id"], access["area_scope"])
-
-    selected_id = request.args.get("node")
-    selected = next((n for n in nodes if n["id"] == selected_id), None)
-
+@app.route("/")
+@admin_required
+def dashboard():
+    stats = dashboard_stats()
+    companies = fetchall(
+        """
+        SELECT c.*,
+          (SELECT COUNT(*) FROM company_streams s WHERE s.company_id = c.id) AS streams,
+          (SELECT COUNT(*) FROM assignments a WHERE a.company_id = c.id) AS processes
+        FROM companies c
+        ORDER BY c.name
+        """
+    )
+    attention = fetchall(
+        """
+        SELECT 'Critical point' AS kind, title, status, id FROM critical_points
+        WHERE status != 'closed'
+        UNION ALL
+        SELECT 'Automation' AS kind, title, status, id FROM automation_points
+        WHERE status = 'candidate'
+        ORDER BY kind, title
+        LIMIT 8
+        """
+    )
     return render_template(
-        "app.html",
-        access=access,
-        nodes=nodes,
-        streams=streams,
+        "dashboard.html",
+        stats=stats,
         companies=companies,
-        assignments=assignments,
-        editable=editable,
-        selected=selected,
-        q=request.args.get("q", ""),
+        attention=attention,
     )
 
 
-@app.route("/api/process/<node_id>", methods=["POST"])
-@login_required
-def update_process(node_id: str):
-    access = current_access()
-    if not access or not access["can_edit"]:
-        return jsonify({"error": "Forbidden"}), 403
+@app.route("/masters", methods=["GET", "POST"])
+@admin_required
+def masters():
+    if request.method == "POST":
+        industry = (request.form.get("industry") or "").strip()
+        version = (request.form.get("version") or "").strip()
+        name = (request.form.get("name") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        if not industry or not version or not name:
+            flash("Industry, version, and name are required", "error")
+        else:
+            try:
+                with get_db() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO apqc_masters (id, industry, version, name, notes, created_at)
+                        VALUES (?,?,?,?,?,?)
+                        """,
+                        (new_id(), industry, version, name, notes, utcnow()),
+                    )
+                flash("Master created. Upload the L1–L5 file next.", "ok")
+            except Exception:
+                flash("That industry and version already exists", "error")
+        return redirect(url_for("masters"))
+    rows = fetchall(
+        """
+        SELECT m.*,
+          (SELECT COUNT(*) FROM process_nodes n WHERE n.master_id = m.id) AS processes
+        FROM apqc_masters m
+        ORDER BY m.industry, m.version
+        """
+    )
+    return render_template("masters.html", masters=rows)
+
+
+@app.route("/masters/<master_id>", methods=["GET", "POST"])
+@admin_required
+def master_detail(master_id: str):
+    master = fetchone("SELECT * FROM apqc_masters WHERE id = ?", (master_id,))
+    if not master:
+        abort(404)
+    if request.method == "POST" and request.form.get("action") == "remark":
+        node_id = request.form.get("node_id") or ""
+        remark = request.form.get("description") or ""
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE process_nodes SET description = ? WHERE id = ? AND master_id = ?",
+                (remark.strip(), node_id, master_id),
+            )
+        flash("Remark saved on the master", "ok")
+        return redirect(request.referrer or url_for("master_detail", master_id=master_id))
+    if request.method == "POST":
+        upload = request.files.get("file")
+        if not upload or not upload.filename:
+            flash("Choose a CSV or Excel file", "error")
+        else:
+            try:
+                result = import_master_file(master_id, upload.filename, upload.read())
+                flash(
+                    f"Master upload saved: {result['created']} created, {result['updated']} updated. Metrics Available?, Element Description, and Remark are kept when the file has them.",
+                    "ok",
+                )
+            except Exception as exc:
+                flash(str(exc), "error")
+        return redirect(url_for("master_detail", master_id=master_id))
+    nodes = load_nodes(master_id)
+    areas = _areas(nodes)
+    q = (request.args.get("q") or "").strip()
+    area = request.args.get("area") or ""
+    shown = _filter_nodes(nodes, area=area, q=q, max_level=2 if not q and not area else None)
+    return render_template(
+        "master_detail.html",
+        master=master,
+        nodes=shown[:250],
+        truncated=len(shown) > 250,
+        total=len(nodes),
+        areas=areas,
+        q=q,
+        area=area,
+    )
+
+
+@app.route("/masters/<master_id>/delete", methods=["POST"])
+@admin_required
+def master_delete(master_id: str):
     with get_db() as conn:
-        node = conn.execute("SELECT * FROM process_nodes WHERE id = ?", (node_id,)).fetchone()
-        if not node:
-            return jsonify({"error": "Not found"}), 404
-        # SQLite NULL comparison
-        if (node["company_id"] or None) != (access["company_id"] or None):
-            return jsonify({"error": "Wrong workspace"}), 403
-        if access["area_scope"] is not None:
-            allowed = descendant_ids(access["company_id"], access["area_scope"])
-            if node_id not in allowed:
-                return jsonify({"error": "Outside your area scope"}), 403
+        conn.execute("DELETE FROM apqc_masters WHERE id = ?", (master_id,))
+    flash("Master removed", "ok")
+    return redirect(url_for("masters"))
 
-        name = request.form.get("name")
-        description = request.form.get("description")
-        value_stream_id = request.form.get("value_stream_id")
-        is_hidden = request.form.get("is_hidden")
 
-        if name is not None:
-            conn.execute("UPDATE process_nodes SET name = ? WHERE id = ?", (name.strip(), node_id))
-        if description is not None:
+@app.route("/companies", methods=["GET"])
+@admin_required
+def companies():
+    rows = fetchall(
+        """
+        SELECT c.*,
+          (SELECT COUNT(*) FROM company_streams s WHERE s.company_id = c.id) AS streams,
+          (SELECT COUNT(*) FROM assignments a WHERE a.company_id = c.id) AS processes
+        FROM companies c
+        ORDER BY c.name
+        """
+    )
+    return render_template("companies.html", companies=rows)
+
+
+@app.route("/companies/new", methods=["GET", "POST"])
+@app.route("/companies/<company_id>", methods=["GET", "POST"])
+@admin_required
+def company_form(company_id: str | None = None):
+    company = None
+    if company_id:
+        company = fetchone("SELECT * FROM companies WHERE id = ?", (company_id,))
+        if not company:
+            abort(404)
+    if request.method == "POST":
+        name = (request.form.get("name") or "").strip()
+        short_name = re.sub(r"[^A-Za-z0-9]", "", (request.form.get("short_name") or "")).upper()
+        industry = (request.form.get("industry") or "").strip()
+        contact_name = (request.form.get("contact_name") or "").strip()
+        contact_email = (request.form.get("contact_email") or "").strip()
+        notes = (request.form.get("notes") or "").strip()
+        if not name or len(short_name) < 2:
+            flash("Company name and a short name (letters/numbers, used in the Excel file name) are required", "error")
+            return render_template("company_form.html", company=company, form=request.form)
+        try:
+            with get_db() as conn:
+                if company:
+                    conn.execute(
+                        """
+                        UPDATE companies
+                        SET name=?, short_name=?, industry=?, contact_name=?, contact_email=?, notes=?
+                        WHERE id=?
+                        """,
+                        (name, short_name, industry, contact_name, contact_email, notes, company["id"]),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO companies
+                        (id, name, short_name, industry, contact_name, contact_email, notes, created_at)
+                        VALUES (?,?,?,?,?,?,?,?)
+                        """,
+                        (new_id(), name, short_name, industry, contact_name, contact_email, notes, utcnow()),
+                    )
+            flash("Company saved", "ok")
+            return redirect(url_for("companies"))
+        except Exception:
+            flash("That short name is already used", "error")
+    return render_template("company_form.html", company=company, form=company or {})
+
+
+@app.route("/companies/<company_id>/delete", methods=["POST"])
+@admin_required
+def company_delete(company_id: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM companies WHERE id = ?", (company_id,))
+    flash("Company removed", "ok")
+    return redirect(url_for("companies"))
+
+
+@app.route("/value-streams", methods=["GET", "POST"])
+@admin_required
+def value_streams():
+    if request.method == "POST":
+        action = request.form.get("action")
+        if action == "stream":
+            code = re.sub(r"[^A-Za-z0-9]", "", (request.form.get("code") or "")).upper()
+            name = (request.form.get("name") or "").strip()
+            description = (request.form.get("description") or "").strip()
+            if len(code) < 2 or not name:
+                flash("Code and name are required", "error")
+            else:
+                try:
+                    with get_db() as conn:
+                        count = conn.execute("SELECT COUNT(*) AS c FROM value_streams").fetchone()["c"]
+                        conn.execute(
+                            """
+                            INSERT INTO value_streams (id, code, name, description, sort_order)
+                            VALUES (?,?,?,?,?)
+                            """,
+                            (new_id(), code, name, description, int(count) + 1),
+                        )
+                    flash("Value stream added", "ok")
+                except Exception:
+                    flash("That value stream code already exists", "error")
+        elif action == "suggestion":
+            stream_id = request.form.get("value_stream_id") or ""
+            process_code = (request.form.get("process_code") or "").strip()
+            note = (request.form.get("note") or "").strip()
+            if not stream_id or not process_code:
+                flash("Pick a value stream and a process code", "error")
+            else:
+                try:
+                    with get_db() as conn:
+                        conn.execute(
+                            """
+                            INSERT INTO value_stream_suggestions
+                            (id, value_stream_id, process_code, note)
+                            VALUES (?,?,?,?)
+                            """,
+                            (new_id(), stream_id, process_code, note),
+                        )
+                    flash("Suggestion added", "ok")
+                except Exception:
+                    flash("That suggestion is already on the value stream", "error")
+        return redirect(url_for("value_streams"))
+    streams = fetchall("SELECT * FROM value_streams ORDER BY sort_order, code")
+    suggestions = fetchall(
+        """
+        SELECT s.*, v.code AS stream_code
+        FROM value_stream_suggestions s
+        JOIN value_streams v ON v.id = s.value_stream_id
+        ORDER BY v.sort_order, s.process_code
+        """
+    )
+    return render_template("streams.html", streams=streams, suggestions=suggestions)
+
+
+@app.route("/value-streams/upload", methods=["POST"])
+@admin_required
+def value_stream_upload():
+    upload = request.files.get("file")
+    if not upload or not upload.filename:
+        flash("Choose a mapping file", "error")
+        return redirect(url_for("value_streams"))
+    try:
+        rows = parse_suggestion_upload(upload.filename, upload.read())
+    except Exception as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("value_streams"))
+    added = 0
+    missing = []
+    with get_db() as conn:
+        for row in rows:
+            stream = conn.execute(
+                "SELECT id FROM value_streams WHERE code = ?",
+                (row["stream"].upper(),),
+            ).fetchone()
+            if not stream:
+                missing.append(row["stream"])
+                continue
+            exists = conn.execute(
+                """
+                SELECT id FROM value_stream_suggestions
+                WHERE value_stream_id = ? AND process_code = ?
+                """,
+                (stream["id"], row["process_code"]),
+            ).fetchone()
+            if exists:
+                continue
             conn.execute(
-                "UPDATE process_nodes SET description = ? WHERE id = ?",
-                (description, node_id),
+                """
+                INSERT INTO value_stream_suggestions (id, value_stream_id, process_code, note)
+                VALUES (?,?,?,?)
+                """,
+                (new_id(), stream["id"], row["process_code"], row["note"]),
             )
-        if value_stream_id is not None and access["can_admin"]:
-            vs = value_stream_id or None
-            conn.execute(
-                "UPDATE process_nodes SET value_stream_id = ? WHERE id = ?", (vs, node_id)
-            )
-        if is_hidden is not None and access["can_admin"]:
-            conn.execute(
-                "UPDATE process_nodes SET is_hidden = ? WHERE id = ?",
-                (1 if is_hidden in ("1", "true", "on") else 0, node_id),
-            )
-    flash("Saved", "ok")
-    return redirect(url_for("app_home", node=node_id, q=request.args.get("q", "")))
+            added += 1
+    if missing:
+        flash(f"Added {added}. Unknown value streams: {', '.join(sorted(set(missing)))}", "error")
+    else:
+        flash(f"Mapping upload added {added} suggestions", "ok")
+    return redirect(url_for("value_streams"))
 
 
-@app.route("/api/assign", methods=["POST"])
-@login_required
+@app.route("/value-streams/suggestions/<suggestion_id>/delete", methods=["POST"])
+@admin_required
+def suggestion_delete(suggestion_id: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM value_stream_suggestions WHERE id = ?", (suggestion_id,))
+    flash("Suggestion removed", "ok")
+    return redirect(url_for("value_streams"))
+
+
+@app.route("/assign", methods=["GET", "POST"])
+@admin_required
 def assign():
-    access = current_access()
-    if not access or not access["is_op"] or not access["is_master"]:
-        flash("Only Aetria operators can assign from master", "error")
-        return redirect(url_for("app_home"))
-    company_id = request.form.get("company_id")
-    master_node_id = request.form.get("master_node_id")
+    companies = fetchall("SELECT * FROM companies ORDER BY name")
+    masters = fetchall("SELECT * FROM apqc_masters ORDER BY industry, version")
+    streams = fetchall("SELECT * FROM value_streams ORDER BY sort_order, code")
+    company_id = request.values.get("company_id") or (companies[0]["id"] if companies else "")
+    master_id = request.values.get("master_id") or (masters[0]["id"] if masters else "")
+    stream_id = request.values.get("value_stream_id") or (streams[0]["id"] if streams else "")
+
+    if request.method == "POST":
+        if not company_id or not master_id or not stream_id:
+            flash("Choose a company, master, and value stream", "error")
+            return redirect(url_for("assign"))
+        action = request.form.get("action")
+        if action == "suggest":
+            codes = suggestion_codes(stream_id)
+            node_ids, missing = expand_codes(master_id, codes)
+            if not codes:
+                flash("This value stream has no suggested process codes yet", "error")
+            elif not node_ids:
+                flash("None of the suggested codes are in this master: " + ", ".join(missing), "error")
+            else:
+                count = save_assignment(company_id, master_id, stream_id, node_ids)
+                extra = f" Missing from this master: {', '.join(missing)}." if missing else ""
+                flash(f"Applied suggestion — {count} processes, with APQC parents kept.{extra}", "ok")
+        else:
+            count = save_assignment(
+                company_id,
+                master_id,
+                stream_id,
+                request.form.getlist("node_id"),
+                request.form.getlist("visible_id"),
+            )
+            flash(f"Saved assignment — {count} processes. Parents stay in the hierarchy.", "ok")
+        return redirect(
+            url_for(
+                "assign",
+                company_id=company_id,
+                master_id=master_id,
+                value_stream_id=stream_id,
+                view=request.form.get("view") or "assigned",
+                area=request.form.get("area") or "",
+                q=request.form.get("q") or "",
+            )
+        )
+
+    nodes = load_nodes(master_id) if master_id else []
+    codes = suggestion_codes(stream_id) if stream_id else []
+    selected = assigned_ids(company_id, stream_id) if company_id and stream_id else set()
+    suggested_ids: set[str] = set()
+    missing: list[str] = []
+    if master_id and codes:
+        suggested_ids_list, missing = expand_codes(master_id, codes)
+        suggested_ids = set(suggested_ids_list)
+    view = request.args.get("view") or "outline"
+    area = request.args.get("area") or ""
+    q = (request.args.get("q") or "").strip()
+    areas = _areas(nodes)
+    if view == "assigned":
+        shown = [n for n in nodes if n["id"] in selected]
+    elif view == "suggested":
+        shown = [n for n in nodes if n["id"] in suggested_ids]
+    else:
+        shown = _filter_nodes(nodes, area=area, q=q, max_level=2 if not q and not area else None)
+    return render_template(
+        "assign.html",
+        companies=companies,
+        masters=masters,
+        streams=streams,
+        company_id=company_id,
+        master_id=master_id,
+        stream_id=stream_id,
+        nodes=shown[:400],
+        truncated=len(shown) > 400,
+        selected=selected,
+        suggested_ids=suggested_ids,
+        missing=missing,
+        codes=codes,
+        areas=areas,
+        view=view,
+        area=area,
+        q=q,
+    )
+
+
+@app.route("/distribute")
+@admin_required
+def distribute():
+    return render_template(
+        "distribute.html",
+        rows=distribution_rows(),
+        headers=EXCEL_HEADERS,
+    )
+
+
+@app.route("/distribute/download")
+@admin_required
+def distribute_download():
+    company_id = request.args.get("company_id") or ""
+    stream_id = request.args.get("value_stream_id") or ""
     try:
-        result = assign_branch(company_id, master_node_id, access["user"]["id"])
-        flash(f"Assigned — copied {result['copied']} nodes", "ok")
-    except Exception as e:
-        flash(str(e), "error")
-    return redirect(url_for("app_home", node=master_node_id))
-
-
-@app.route("/api/upload", methods=["POST"])
-@login_required
-def upload():
-    access = current_access()
-    if not access or not access["is_master"]:
-        flash("Upload only on AS master", "error")
-        return redirect(url_for("app_home"))
-    f = request.files.get("file")
-    if not f or not f.filename:
-        flash("File required", "error")
-        return redirect(url_for("app_home"))
-    try:
-        rows = parse_upload(f.filename, f.read())
-        result = bulk_upsert_master(rows)
-        flash(f"Upload: {result['created']} created, {result['updated']} updated", "ok")
-    except Exception as e:
-        flash(str(e), "error")
-    return redirect(url_for("app_home"))
-
-
-@app.route("/api/export")
-@login_required
-def export():
-    access = current_access()
-    if not access:
-        return redirect(url_for("login"))
-    company_id = request.args.get("company_id") or access["company_id"]
-    if not company_id:
-        flash("Export needs a company workspace", "error")
-        return redirect(url_for("app_home"))
-    if not access["is_op"] and company_id != access["company_id"]:
-        flash("Forbidden", "error")
-        return redirect(url_for("app_home"))
-    with get_db() as conn:
-        company = conn.execute(
-            "SELECT * FROM companies WHERE id = ?", (company_id,)
-        ).fetchone()
-    data = export_stub_xlsx(company_id)
-    from io import BytesIO
-
-    buf = BytesIO(data)
-    buf.seek(0)
+        data, filename = build_workbook(company_id, stream_id)
+    except Exception as exc:
+        flash(str(exc), "error")
+        return redirect(url_for("distribute"))
     return send_file(
-        buf,
+        BytesIO(data),
         as_attachment=True,
-        download_name=f"{company['slug']}-processes-by-value-stream-STUB.xlsx",
+        download_name=filename,
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@app.route("/workshops", methods=["GET", "POST"])
+@admin_required
+def workshops():
+    if request.method == "POST":
+        company_id = request.form.get("company_id") or ""
+        title = (request.form.get("title") or "").strip()
+        held_on = (request.form.get("held_on") or "").strip()
+        summary = (request.form.get("summary") or "").strip()
+        value_stream_id = request.form.get("value_stream_id") or None
+        if not company_id or not title or not held_on:
+            flash("Company, title, and date are required", "error")
+        else:
+            with get_db() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO workshops
+                    (id, company_id, value_stream_id, title, held_on, summary, created_at)
+                    VALUES (?,?,?,?,?,?,?)
+                    """,
+                    (new_id(), company_id, value_stream_id or None, title, held_on, summary, utcnow()),
+                )
+            flash("Workshop added. Open it to upload minutes and diagrams.", "ok")
+        return redirect(url_for("workshops"))
+    rows = fetchall(
+        """
+        SELECT w.*, c.name AS company_name, c.short_name, v.code AS vs_code,
+          (SELECT COUNT(*) FROM workshop_files f WHERE f.workshop_id = w.id) AS files
+        FROM workshops w
+        JOIN companies c ON c.id = w.company_id
+        LEFT JOIN value_streams v ON v.id = w.value_stream_id
+        ORDER BY w.held_on DESC, w.title
+        """
+    )
+    return render_template(
+        "workshops.html",
+        workshops=rows,
+        companies=fetchall("SELECT * FROM companies ORDER BY name"),
+        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+    )
+
+
+@app.route("/workshops/<workshop_id>", methods=["GET", "POST"])
+@admin_required
+def workshop_detail(workshop_id: str):
+    workshop = fetchone(
+        """
+        SELECT w.*, c.name AS company_name, v.code AS vs_code, v.name AS vs_name
+        FROM workshops w
+        JOIN companies c ON c.id = w.company_id
+        LEFT JOIN value_streams v ON v.id = w.value_stream_id
+        WHERE w.id = ?
+        """,
+        (workshop_id,),
+    )
+    if not workshop:
+        abort(404)
+    if request.method == "POST":
+        kind = request.form.get("kind") or ""
+        upload = request.files.get("file")
+        if kind not in {"minutes", "diagram"} or not upload or not upload.filename:
+            flash("Choose minutes or a diagram, and a file", "error")
+        else:
+            ext = Path(upload.filename).suffix.lower()
+            allowed = MINUTES_EXT if kind == "minutes" else DIAGRAM_EXT
+            if ext not in allowed:
+                flash("That file type is not allowed for this upload", "error")
+            else:
+                stored = new_id() + ext
+                UPLOAD_ROOT.mkdir(parents=True, exist_ok=True)
+                upload.save(UPLOAD_ROOT / stored)
+                with get_db() as conn:
+                    conn.execute(
+                        """
+                        INSERT INTO workshop_files
+                        (id, workshop_id, kind, original_name, stored_name, uploaded_at)
+                        VALUES (?,?,?,?,?,?)
+                        """,
+                        (
+                            new_id(),
+                            workshop_id,
+                            kind,
+                            secure_filename(upload.filename) or upload.filename,
+                            stored,
+                            utcnow(),
+                        ),
+                    )
+                flash("File uploaded", "ok")
+        return redirect(url_for("workshop_detail", workshop_id=workshop_id))
+    files = fetchall(
+        "SELECT * FROM workshop_files WHERE workshop_id = ? ORDER BY uploaded_at DESC",
+        (workshop_id,),
+    )
+    points = fetchall(
+        "SELECT * FROM critical_points WHERE workshop_id = ? ORDER BY created_at DESC",
+        (workshop_id,),
+    )
+    return render_template(
+        "workshop_detail.html",
+        workshop=workshop,
+        files=files,
+        points=points,
+    )
+
+
+@app.route("/uploads/<file_id>")
+@admin_required
+def download_upload(file_id: str):
+    row = fetchone("SELECT * FROM workshop_files WHERE id = ?", (file_id,))
+    if not row:
+        abort(404)
+    path = UPLOAD_ROOT / row["stored_name"]
+    if not path.exists():
+        abort(404)
+    return send_file(path, as_attachment=True, download_name=row["original_name"])
+
+
+@app.route("/critical-points", methods=["GET", "POST"])
+@admin_required
+def critical_points():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        company_id = request.form.get("company_id") or ""
+        if not title or not company_id:
+            flash("Company and title are required", "error")
+        else:
+            point_id = request.form.get("id") or ""
+            fields = (
+                company_id,
+                request.form.get("workshop_id") or None,
+                request.form.get("value_stream_id") or None,
+                request.form.get("process_node_id") or None,
+                title,
+                (request.form.get("detail") or "").strip(),
+                (request.form.get("owner") or "").strip(),
+                request.form.get("status") or "maintain",
+            )
+            with get_db() as conn:
+                if point_id:
+                    conn.execute(
+                        """
+                        UPDATE critical_points
+                        SET company_id=?, workshop_id=?, value_stream_id=?, process_node_id=?,
+                            title=?, detail=?, owner=?, status=?
+                        WHERE id=?
+                        """,
+                        (*fields, point_id),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO critical_points
+                        (company_id, workshop_id, value_stream_id, process_node_id,
+                         title, detail, owner, status, id, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (*fields, new_id(), utcnow()),
+                    )
+            flash("Critical point saved", "ok")
+        return redirect(url_for("critical_points"))
+    edit = None
+    edit_id = request.args.get("edit")
+    if edit_id:
+        edit = fetchone("SELECT * FROM critical_points WHERE id = ?", (edit_id,))
+    rows = fetchall(
+        """
+        SELECT p.*, c.short_name, v.code AS vs_code, n.code AS process_code, w.title AS workshop_title
+        FROM critical_points p
+        JOIN companies c ON c.id = p.company_id
+        LEFT JOIN value_streams v ON v.id = p.value_stream_id
+        LEFT JOIN process_nodes n ON n.id = p.process_node_id
+        LEFT JOIN workshops w ON w.id = p.workshop_id
+        ORDER BY p.created_at DESC
+        """
+    )
+    return render_template(
+        "critical.html",
+        points=rows,
+        edit=edit,
+        companies=fetchall("SELECT * FROM companies ORDER BY name"),
+        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+        workshops=fetchall(
+            """
+            SELECT w.id, w.title, c.short_name
+            FROM workshops w JOIN companies c ON c.id = w.company_id
+            ORDER BY w.held_on DESC
+            """
+        ),
+        processes=_process_options(),
+        preset_workshop=request.args.get("workshop_id") or "",
+        preset_company=request.args.get("company_id") or "",
+    )
+
+
+@app.route("/critical-points/<point_id>/delete", methods=["POST"])
+@admin_required
+def critical_delete(point_id: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM critical_points WHERE id = ?", (point_id,))
+    flash("Critical point removed", "ok")
+    return redirect(url_for("critical_points"))
+
+
+@app.route("/automation", methods=["GET", "POST"])
+@admin_required
+def automation():
+    if request.method == "POST":
+        title = (request.form.get("title") or "").strip()
+        company_id = request.form.get("company_id") or ""
+        if not title or not company_id:
+            flash("Company and title are required", "error")
+        else:
+            point_id = request.form.get("id") or ""
+            fields = (
+                company_id,
+                request.form.get("value_stream_id") or None,
+                request.form.get("process_node_id") or None,
+                title,
+                (request.form.get("detail") or "").strip(),
+                request.form.get("manual_vs_system") or "manual",
+                (request.form.get("tool") or "").strip(),
+                request.form.get("priority") or "medium",
+                request.form.get("status") or "candidate",
+            )
+            with get_db() as conn:
+                if point_id:
+                    conn.execute(
+                        """
+                        UPDATE automation_points
+                        SET company_id=?, value_stream_id=?, process_node_id=?, title=?, detail=?,
+                            manual_vs_system=?, tool=?, priority=?, status=?
+                        WHERE id=?
+                        """,
+                        (*fields, point_id),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO automation_points
+                        (company_id, value_stream_id, process_node_id, title, detail,
+                         manual_vs_system, tool, priority, status, id, created_at)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                        """,
+                        (*fields, new_id(), utcnow()),
+                    )
+            flash("Automation point saved", "ok")
+        return redirect(url_for("automation"))
+    edit = None
+    if request.args.get("edit"):
+        edit = fetchone("SELECT * FROM automation_points WHERE id = ?", (request.args.get("edit"),))
+    rows = fetchall(
+        """
+        SELECT a.*, c.short_name, v.code AS vs_code, n.code AS process_code
+        FROM automation_points a
+        JOIN companies c ON c.id = a.company_id
+        LEFT JOIN value_streams v ON v.id = a.value_stream_id
+        LEFT JOIN process_nodes n ON n.id = a.process_node_id
+        ORDER BY a.created_at DESC
+        """
+    )
+    return render_template(
+        "automation.html",
+        points=rows,
+        edit=edit,
+        companies=fetchall("SELECT * FROM companies ORDER BY name"),
+        streams=fetchall("SELECT * FROM value_streams ORDER BY sort_order, code"),
+        processes=_process_options(),
+    )
+
+
+@app.route("/automation/<point_id>/delete", methods=["POST"])
+@admin_required
+def automation_delete(point_id: str):
+    with get_db() as conn:
+        conn.execute("DELETE FROM automation_points WHERE id = ?", (point_id,))
+    flash("Automation point removed", "ok")
+    return redirect(url_for("automation"))
+
+
+def _process_options() -> list[dict]:
+    return fetchall(
+        """
+        SELECT DISTINCT n.id, n.code, n.name, c.short_name
+        FROM assignments a
+        JOIN process_nodes n ON n.id = a.process_node_id
+        JOIN companies c ON c.id = a.company_id
+        ORDER BY c.short_name, n.code
+        """
+    )
+
+
+@app.route("/users")
+@admin_required
+def users():
+    rows = fetchall("SELECT * FROM users ORDER BY name")
+    return render_template("users.html", users=rows)
+
+
+@app.route("/users/new", methods=["GET"])
+@admin_required
+def user_new():
+    return render_template("user_form.html", user=None)
+
+
+@app.route("/users", methods=["POST"])
+@admin_required
+def user_create():
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    role = request.form.get("role") or "VIEWER"
+    if role not in ROLES:
+        role = "VIEWER"
+    if not name or not email or len(password) < 6:
+        flash("Name, email, and a password of at least 6 characters are required", "error")
+        return redirect(url_for("user_new"))
+    try:
+        with get_db() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (id, email, password_hash, name, role, is_active, created_at)
+                VALUES (?,?,?,?,?,1,?)
+                """,
+                (new_id(), email, generate_password_hash(password), name, role, utcnow()),
+            )
+        flash(f"User ID created for {email}", "ok")
+        return redirect(url_for("users"))
+    except Exception:
+        flash("That email is already a user", "error")
+        return redirect(url_for("user_new"))
+
+
+@app.route("/users/<user_id>")
+@admin_required
+def user_view(user_id: str):
+    user = fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
+    if not user:
+        abort(404)
+    return render_template("user_view.html", user=user)
+
+
+@app.route("/users/<user_id>/edit", methods=["GET"])
+@admin_required
+def user_edit(user_id: str):
+    user = fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
+    if not user:
+        abort(404)
+    return render_template("user_form.html", user=user)
+
+
+@app.route("/users/<user_id>", methods=["POST"])
+@admin_required
+def user_update(user_id: str):
+    user = fetchone("SELECT * FROM users WHERE id = ?", (user_id,))
+    if not user:
+        abort(404)
+    name = (request.form.get("name") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    role = request.form.get("role") or user["role"]
+    if role not in ROLES:
+        role = user["role"]
+    is_active = 1 if request.form.get("is_active") == "1" else 0
+    password = request.form.get("password") or ""
+    if not name or not email:
+        flash("Name and email are required", "error")
+        return redirect(url_for("user_edit", user_id=user_id))
+    if (role != "ADMIN" or not is_active) and user["role"] == "ADMIN" and user["is_active"]:
+        others = fetchone(
+            "SELECT COUNT(*) AS c FROM users WHERE role = 'ADMIN' AND is_active = 1 AND id != ?",
+            (user_id,),
+        )
+        if not others or others["c"] == 0:
+            flash("Keep at least one active Admin", "error")
+            return redirect(url_for("user_edit", user_id=user_id))
+    try:
+        with get_db() as conn:
+            conn.execute(
+                "UPDATE users SET name=?, email=?, role=?, is_active=? WHERE id=?",
+                (name, email, role, is_active, user_id),
+            )
+            if password:
+                if len(password) < 6:
+                    raise ValueError("short")
+                conn.execute(
+                    "UPDATE users SET password_hash=? WHERE id=?",
+                    (generate_password_hash(password), user_id),
+                )
+        flash("User updated", "ok")
+        return redirect(url_for("user_view", user_id=user_id))
+    except ValueError:
+        flash("New password must be at least 6 characters", "error")
+        return redirect(url_for("user_edit", user_id=user_id))
+    except Exception:
+        flash("That email is already a user", "error")
+        return redirect(url_for("user_edit", user_id=user_id))
+
+
+@app.route("/roadmap")
+@admin_required
+def roadmap():
+    return render_template("roadmap.html")
+
+
+def _areas(nodes: list[dict]) -> list[str]:
+    seen: list[str] = []
+    for node in nodes:
+        area = node.get("area") or ""
+        if area and area not in seen:
+            seen.append(area)
+
+    def key(area: str) -> int:
+        match = re.match(r"(\d+)", area)
+        return int(match.group(1)) if match else 999
+
+    return sorted(seen, key=key)
+
+
+def _filter_nodes(nodes, area="", q="", max_level=None):
+    ql = (q or "").lower()
+    out = []
+    for node in nodes:
+        if area and node.get("area") != area:
+            continue
+        if ql and ql not in f"{node['code']} {node['name']}".lower():
+            continue
+        if max_level is not None and int(node["level"]) > max_level:
+            continue
+        out.append(node)
+    return out
 
 
 def create_app():
@@ -370,5 +1028,5 @@ def create_app():
 if __name__ == "__main__":
     init_db()
     port = int(os.environ.get("PORT", "8765"))
-    print(f"Aetria Process Mapping (Python/Flask) → http://localhost:{port}/login")
+    print(f"Aetria Admin workbench → http://localhost:{port}/login")
     app.run(host="0.0.0.0", port=port, debug=True)

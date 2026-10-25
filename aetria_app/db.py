@@ -87,74 +87,157 @@ def get_db() -> Iterator[Any]:
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
   name TEXT NOT NULL,
-  is_aetria_operator INTEGER NOT NULL DEFAULT 0
+  role TEXT NOT NULL CHECK(role IN ('ADMIN','AETRIA_AREA','COMPANY_ADMIN','AREA_EDITOR','VIEWER')),
+  is_active INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS apqc_masters (
+  id TEXT PRIMARY KEY,
+  industry TEXT NOT NULL,
+  version TEXT NOT NULL,
+  name TEXT NOT NULL,
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  UNIQUE(industry, version)
+);
+
+CREATE TABLE IF NOT EXISTS process_nodes (
+  id TEXT PRIMARY KEY,
+  master_id TEXT NOT NULL REFERENCES apqc_masters(id) ON DELETE CASCADE,
+  parent_id TEXT REFERENCES process_nodes(id) ON DELETE CASCADE,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  level INTEGER NOT NULL,
+  level_label TEXT NOT NULL DEFAULT '',
+  area TEXT NOT NULL DEFAULT '',
+  apqc_id TEXT NOT NULL DEFAULT '',
+  applies_to TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  metrics_available TEXT NOT NULL DEFAULT '',
+  element_description TEXT NOT NULL DEFAULT '',
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE(master_id, code)
 );
 
 CREATE TABLE IF NOT EXISTS companies (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS memberships (
-  id TEXT PRIMARY KEY,
-  user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  role TEXT NOT NULL CHECK(role IN ('ADMIN','AREA_EDITOR','VIEWER')),
-  UNIQUE(user_id, company_id)
+  short_name TEXT NOT NULL UNIQUE,
+  industry TEXT NOT NULL DEFAULT '',
+  contact_name TEXT NOT NULL DEFAULT '',
+  contact_email TEXT NOT NULL DEFAULT '',
+  notes TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS value_streams (
   id TEXT PRIMARY KEY,
-  company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
-  code TEXT NOT NULL,
+  code TEXT NOT NULL UNIQUE,
   name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE IF NOT EXISTS process_nodes (
+CREATE TABLE IF NOT EXISTS value_stream_suggestions (
   id TEXT PRIMARY KEY,
-  company_id TEXT REFERENCES companies(id) ON DELETE CASCADE,
-  parent_id TEXT REFERENCES process_nodes(id) ON DELETE CASCADE,
-  code TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT NOT NULL DEFAULT '',
-  level INTEGER NOT NULL DEFAULT 1,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  master_node_id TEXT REFERENCES process_nodes(id) ON DELETE SET NULL,
-  value_stream_id TEXT REFERENCES value_streams(id) ON DELETE SET NULL,
-  is_hidden INTEGER NOT NULL DEFAULT 0
+  value_stream_id TEXT NOT NULL REFERENCES value_streams(id) ON DELETE CASCADE,
+  process_code TEXT NOT NULL,
+  note TEXT NOT NULL DEFAULT '',
+  UNIQUE(value_stream_id, process_code)
 );
 
-CREATE TABLE IF NOT EXISTS process_assignments (
+CREATE TABLE IF NOT EXISTS company_streams (
   id TEXT PRIMARY KEY,
   company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
-  master_node_id TEXT NOT NULL REFERENCES process_nodes(id) ON DELETE CASCADE,
-  assigned_by_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  assigned_at TEXT NOT NULL,
-  UNIQUE(company_id, master_node_id)
+  value_stream_id TEXT NOT NULL REFERENCES value_streams(id) ON DELETE CASCADE,
+  master_id TEXT REFERENCES apqc_masters(id) ON DELETE SET NULL,
+  status TEXT NOT NULL DEFAULT 'suggested',
+  UNIQUE(company_id, value_stream_id)
 );
 
-CREATE TABLE IF NOT EXISTS area_scopes (
+CREATE TABLE IF NOT EXISTS assignments (
   id TEXT PRIMARY KEY,
-  membership_id TEXT NOT NULL REFERENCES memberships(id) ON DELETE CASCADE,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  master_id TEXT NOT NULL REFERENCES apqc_masters(id) ON DELETE CASCADE,
+  value_stream_id TEXT NOT NULL REFERENCES value_streams(id) ON DELETE CASCADE,
   process_node_id TEXT NOT NULL REFERENCES process_nodes(id) ON DELETE CASCADE,
-  UNIQUE(membership_id, process_node_id)
+  created_at TEXT NOT NULL,
+  UNIQUE(company_id, value_stream_id, process_node_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_nodes_company ON process_nodes(company_id, parent_id);
-CREATE INDEX IF NOT EXISTS idx_nodes_code ON process_nodes(company_id, code);
+CREATE TABLE IF NOT EXISTS workshops (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  value_stream_id TEXT REFERENCES value_streams(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  held_on TEXT NOT NULL,
+  summary TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS workshop_files (
+  id TEXT PRIMARY KEY,
+  workshop_id TEXT NOT NULL REFERENCES workshops(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL CHECK(kind IN ('minutes','diagram')),
+  original_name TEXT NOT NULL,
+  stored_name TEXT NOT NULL,
+  uploaded_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS critical_points (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  workshop_id TEXT REFERENCES workshops(id) ON DELETE SET NULL,
+  value_stream_id TEXT REFERENCES value_streams(id) ON DELETE SET NULL,
+  process_node_id TEXT REFERENCES process_nodes(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  owner TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'maintain',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automation_points (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  value_stream_id TEXT REFERENCES value_streams(id) ON DELETE SET NULL,
+  process_node_id TEXT REFERENCES process_nodes(id) ON DELETE SET NULL,
+  title TEXT NOT NULL,
+  detail TEXT NOT NULL DEFAULT '',
+  manual_vs_system TEXT NOT NULL DEFAULT 'manual',
+  tool TEXT NOT NULL DEFAULT '',
+  priority TEXT NOT NULL DEFAULT 'medium',
+  status TEXT NOT NULL DEFAULT 'candidate',
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_nodes_master ON process_nodes(master_id, parent_id);
+CREATE INDEX IF NOT EXISTS idx_assign_company ON assignments(company_id, value_stream_id);
 """
 
 
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript(SCHEMA)
+        conn.execute(
+            """
+            INSERT INTO schema_meta (key, value) VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            ("version", "2"),
+        )
 
 
 def reset_db() -> None:
@@ -163,13 +246,22 @@ def reset_db() -> None:
         with get_db() as conn:
             conn.executescript(
                 """
+                DROP TABLE IF EXISTS automation_points CASCADE;
+                DROP TABLE IF EXISTS critical_points CASCADE;
+                DROP TABLE IF EXISTS workshop_files CASCADE;
+                DROP TABLE IF EXISTS workshops CASCADE;
+                DROP TABLE IF EXISTS assignments CASCADE;
+                DROP TABLE IF EXISTS company_streams CASCADE;
+                DROP TABLE IF EXISTS value_stream_suggestions CASCADE;
                 DROP TABLE IF EXISTS area_scopes CASCADE;
                 DROP TABLE IF EXISTS process_assignments CASCADE;
                 DROP TABLE IF EXISTS process_nodes CASCADE;
                 DROP TABLE IF EXISTS value_streams CASCADE;
                 DROP TABLE IF EXISTS memberships CASCADE;
+                DROP TABLE IF EXISTS apqc_masters CASCADE;
                 DROP TABLE IF EXISTS companies CASCADE;
                 DROP TABLE IF EXISTS users CASCADE;
+                DROP TABLE IF EXISTS schema_meta CASCADE;
                 """
             )
     else:
