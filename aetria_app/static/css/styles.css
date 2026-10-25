@@ -154,6 +154,14 @@ textarea { resize: vertical; }
 .assign-tree [hidden] { display: none; }
 .tree-row { display: grid; grid-template-columns: 28px 1fr; gap: 0.35rem; align-items: start; padding: 0.32rem 0; border-bottom: 1px solid #eef2f5; }
 .badge { display: inline-block; background: var(--soft); color: var(--teal-dark); border-radius: 999px; padding: 0.08rem 0.45rem; font-size: 0.75rem; font-weight: 700; }
+.level-jumps { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0 0.7rem; }
+.level-jumps a {
+  display: inline-flex; gap: 0.35rem; align-items: center;
+  background: var(--soft); color: var(--teal-dark); text-decoration: none;
+  border-radius: 999px; padding: 0.28rem 0.7rem; font-weight: 650;
+}
+.level-jumps a.on { background: var(--teal); color: white; }
+.level-jumps a b { font-weight: 700; }
 
 .company-switch { display: flex; gap: 0.55rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .company-switch a {

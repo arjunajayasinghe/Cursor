@@ -37,7 +37,12 @@
     </label>
     <button class="btn" type="submit">Show</button>
   </form>
-  <p class="muted">{{ shown_count }} rows in this view.</p>
+  <p class="level-jumps">
+    {% for number, count in level_counts %}
+    <a class="{% if level == number|string %}on{% endif %}" href="{{ url_for('master_detail', master_id=master.id, level=number, area=area, q=q) }}">L{{ number }} <b>{{ count }}</b></a>
+    {% endfor %}
+  </p>
+  <p class="muted">{{ shown_count }} rows in this view. L1 and L2 stay open. Use the arrow, or click L3, L4, or L5 above.</p>
   <table class="process-tree">
     <thead>
       <tr><th>Hierarchy ID</th><th>Level</th><th>APQC ID</th><th>Process</th><th>Metrics</th><th>Element description</th><th>Remark</th></tr>

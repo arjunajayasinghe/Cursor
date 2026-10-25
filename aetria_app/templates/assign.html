@@ -20,7 +20,7 @@
     <label>Level
       <select name="view">
         <option value="outline" {% if view == 'outline' %}selected{% endif %}>Tree through L5</option>
-        {% for n in [1, 2, 3, 4, 5] if n in allowed_levels %}
+        {% for n in [1, 2, 3, 4, 5] %}
         <option value="{{ n }}" {% if view == n|string %}selected{% endif %}>L{{ n }} only</option>
         {% endfor %}
         <option value="suggested" {% if view == 'suggested' %}selected{% endif %}>Suggested branch</option>
@@ -33,6 +33,11 @@
     <label>Search<input name="q" value="{{ q }}" /></label>
     <div><button class="btn" type="submit">Refresh list</button></div>
   </form>
+  <p class="level-jumps">
+    {% for number, count in level_counts %}
+    <a class="{% if view == number|string %}on{% endif %}" href="{{ url_for('assign', company_id=company_id, master_id=master_id, value_stream_id=stream_id, view=number, area=area, q=q) }}">L{{ number }} <b>{{ count }}</b></a>
+    {% endfor %}
+  </p>
   <p class="muted">Suggestions: {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}
     {% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}
     · {{ selected|length }} assigned
@@ -74,7 +79,7 @@
         </div>
       </div>
       {% else %}
-      <p class="muted">Nothing to show for this level.</p>
+      <p class="muted">Nothing to show for this level. The master has {% for number, count in level_counts %}L{{ number }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
       {% endfor %}
     </div>
     <button class="btn" type="submit" style="margin-top:0.8rem">Save assignment</button>

@@ -77,6 +77,8 @@ app = Flask(
 )
 app.secret_key = os.environ.get("AUTH_SECRET", "dev-secret-change-me-in-production-aetria-mvp")
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+app.config["TEMPLATES_AUTO_RELOAD"] = True
+BUILD_LABEL = "L1–L5"
 
 
 def current_user():
@@ -140,6 +142,7 @@ def inject_nav():
         "nav": [(url_for(name), label, name) for name, label in NAV],
         "active": endpoint,
         "role_labels": ROLE_LABELS,
+        "build_label": BUILD_LABEL,
     }
 
 
@@ -293,6 +296,7 @@ def master_detail(master_id: str):
     parents = {node.get("parent_id") for node in nodes if node.get("parent_id")}
     for node in shown:
         node["has_children"] = node["id"] in parents
+    level_counts = _level_counts(nodes)
     return render_template(
         "master_detail.html",
         master=master,
@@ -303,6 +307,7 @@ def master_detail(master_id: str):
         q=q,
         area=area,
         level=level,
+        level_counts=level_counts,
         collapse=not (q or level),
     )
 
@@ -647,14 +652,13 @@ def assign():
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
-        shown = [n for n in nodes if n["id"] in suggested_ids and int(n["level"]) in allowed_levels]
+        shown = [n for n in nodes if n["id"] in suggested_ids]
     elif view in {"1", "2", "3", "4", "5"}:
         wanted = int(view)
-        shown = _filter_nodes(nodes, area=area, q=q, max_level=wanted)
-        shown = [n for n in shown if int(n["level"]) == wanted and wanted in allowed_levels]
+        shown = _filter_nodes(nodes, area=area, q=q)
+        shown = [n for n in shown if int(n["level"]) == wanted]
     else:
         shown = _filter_nodes(nodes, area=area, q=q)
-        shown = [n for n in shown if int(n["level"]) in allowed_levels]
     for node in shown:
         parent = by_id.get(node.get("parent_id"))
         node["parent_code"] = parent["code"] if parent else ""
@@ -669,6 +673,7 @@ def assign():
         master_id=master_id,
         stream_id=stream_id,
         allowed_levels=sorted(allowed_levels),
+        level_counts=_level_counts(nodes),
         nodes=shown,
         truncated=False,
         collapse=collapse,
@@ -1127,6 +1132,10 @@ def _areas(nodes: list[dict]) -> list[str]:
     return sorted(seen, key=key)
 
 
+def _level_counts(nodes) -> list[tuple[int, int]]:
+    return [(number, sum(1 for node in nodes if int(node["level"]) == number)) for number in range(1, 6)]
+
+
 def _filter_nodes(nodes, area="", q="", max_level=None):
     ql = (q or "").lower()
     out = []
@@ -1205,29 +1214,80 @@ def _serve(port: int, debug: bool) -> None:
     app.run(host="0.0.0.0", port=port, debug=debug, use_reloader=debug)
 
 
-def _stop_server(port: int) -> None:
-    pid = _read_pid()
-    if _pid_alive(pid):
+def _listener_pids(port: int) -> list[int]:
+    commands = (
+        ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+        ["fuser", "-n", "tcp", str(port)],
+    )
+    for cmd in commands:
         try:
-            os.killpg(pid, signal.SIGTERM)
-        except OSError:
+            out = subprocess.check_output(cmd, text=True, stderr=subprocess.DEVNULL)
+        except (OSError, subprocess.CalledProcessError):
+            continue
+        pids: list[int] = []
+        for token in out.replace("\n", " ").split():
+            digits = "".join(ch for ch in token if ch.isdigit())
+            if digits:
+                pids.append(int(digits))
+        if pids:
+            return pids
+    return []
+
+
+def _stop_listeners(port: int) -> bool:
+    """Stop whatever is serving this port. True when the port is free."""
+    pids: list[int] = []
+    recorded = _read_pid()
+    if recorded:
+        pids.append(recorded)
+    for pid in _listener_pids(port):
+        if pid not in pids:
+            pids.append(pid)
+    me = os.getpid()
+    for pid in pids:
+        if pid == me or not _pid_alive(pid):
+            continue
+        try:
             os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.time() + 3
+    while time.time() < deadline and _port_open(port):
+        time.sleep(0.1)
+    if _port_open(port):
+        for pid in _listener_pids(port):
+            if pid == me:
+                continue
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except OSError:
+                pass
+        deadline = time.time() + 2
+        while time.time() < deadline and _port_open(port):
+            time.sleep(0.1)
+    _pid_file().unlink(missing_ok=True)
+    return not _port_open(port)
+
+
+def _stop_server(port: int) -> None:
+    if not _port_open(port) and not _pid_alive(_read_pid()):
         _pid_file().unlink(missing_ok=True)
+        print("Aetria is not running.")
+        return
+    if _stop_listeners(port):
         print("Aetria stopped.")
         return
-    _pid_file().unlink(missing_ok=True)
-    if _port_open(port):
-        print("Aetria is still running in a Terminal window. Press Ctrl+C there, then run python app.py again.")
-        return
-    print("Aetria is not running.")
+    print(f"Aetria is still using port {port}. Paste this, then run python app.py again:")
+    print(f"  kill -9 $(lsof -t -iTCP:{port} -sTCP:LISTEN)")
 
 
 def _start_in_background(port: int) -> None:
     if _port_open(port):
-        print(f"Aetria is already running at http://localhost:{port}/login")
-        print("You can close this window. The site stays up.")
-        _open_login(port)
-        return
+        print("Stopping the copy already running so this update can load.")
+        if not _stop_listeners(port):
+            print(f"The old Aetria is still on port {port}. Paste this, then run python app.py again:")
+            print(f"  kill -9 $(lsof -t -iTCP:{port} -sTCP:LISTEN)")
+            sys.exit(1)
     log_path = _runtime_dir() / "aetria.log"
     log_handle = open(log_path, "a", buffering=1)
     env = os.environ.copy()
