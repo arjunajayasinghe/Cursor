@@ -508,13 +508,16 @@ def save_assignment(
     nodes = load_nodes(master_id)
     by_id = {n["id"]: n for n in nodes}
     selected = set(selected_ids)
-    if visible_ids is None:
+    visible = set(visible_ids) if visible_ids is not None else None
+    if visible is None:
         base = set(selected)
+        turned_off: set[str] = set()
     else:
-        visible = set(visible_ids)
+        turned_off = visible - selected
         base = (assigned_ids(company_id, value_stream_id) - visible) | selected
-    cleared = set(clear_tree_ids or [])
+    cleared = set(clear_tree_ids or []) | turned_off
     cleared |= _descendant_ids(nodes, cleared)
+    cleared -= selected
     for node_id in cleared:
         base.discard(node_id)
     for node_id in set(cascade_ids or []):

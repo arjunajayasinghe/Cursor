@@ -4,7 +4,7 @@
 <header class="page-head">
   <p class="eyebrow">L1–L5</p>
   <h1>Assign to a company</h1>
-  <p class="lede">Tick a row and everything under it is ticked. An L1 tick covers L2 through L5. An L2 tick covers L3, L4, and L5. Suggested branch uses the hierarchy IDs on the value stream.</p>
+  <p class="lede">Tick a row and everything under it is ticked. Untick one L2, L3, L4, or L5 row and only that row clears. The parent stays ticked while any other row under it remains.</p>
 </header>
 <section class="panel">
   <form method="get" class="grid-2">
@@ -115,15 +115,6 @@
         forget("cascade_id", id);
         remember("clear_tree_id", id);
         tickDescendants(id, false);
-        var parentId = row.getAttribute("data-parent");
-        while (parentId) {
-          var parentRow = document.querySelector('.assign-tree [data-id="' + parentId + '"]');
-          if (!parentRow) break;
-          var parentBox = parentRow.querySelector('input[name="node_id"]');
-          if (parentBox) parentBox.checked = false;
-          forget("cascade_id", parentId);
-          parentId = parentRow.getAttribute("data-parent");
-        }
       }
     });
   });
