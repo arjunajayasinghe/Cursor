@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aetria Process Mapping — Sign in</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <main class="login-wrap">
+      <div class="card">
+        <p style="margin:0 0 1rem;padding:0.55rem 0.75rem;border-radius:8px;background:#e6f3f2;color:#0c6e6b;font-size:0.85rem;font-weight:600">
+          Python + Flask + SQLite — open <code>http://localhost:8765/login</code>
+        </p>
+        <div class="eyebrow">Aetria</div>
+        <h1>Process Mapping</h1>
+        <p class="muted">Sign in to the master library or a company workspace.</p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in messages %}
+            <div class="error">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+
+        <form method="post" action="{{ url_for('login') }}">
+          <label>
+            Email
+            <input name="email" type="email" required value="{{ email }}" />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" required value="password123" />
+          </label>
+          <button class="btn btn-block" type="submit">Sign in</button>
+        </form>
+
+        <div class="seed">
+          <div class="muted" style="font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase">
+            Seeded users (password: password123)
+          </div>
+          <p class="muted" style="font-size:0.85rem;margin:0.5rem 0 0">
+            operator@aetria.com · admin@acme.com · editor@acme.com · viewer@acme.com · admin@beta.com
+          </p>
+        </div>
+      </div>
+    </main>
+  </body>
+</html>
