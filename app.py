@@ -637,17 +637,29 @@ def assign():
         suggested_ids_list, missing = expand_codes(master_id, codes)
         suggested_ids = set(suggested_ids_list)
     view = request.args.get("view") or "outline"
+    if view not in {"outline", "suggested", "assigned", "1", "2", "3", "4", "5"}:
+        view = "outline"
     area = request.args.get("area") or ""
     q = (request.args.get("q") or "").strip()
     areas = _areas(nodes)
+    by_id = {node["id"]: node for node in nodes}
+    parents = {node.get("parent_id") for node in nodes if node.get("parent_id")}
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
         shown = [n for n in nodes if n["id"] in suggested_ids and int(n["level"]) in allowed_levels]
+    elif view in {"1", "2", "3", "4", "5"}:
+        wanted = int(view)
+        shown = _filter_nodes(nodes, area=area, q=q, max_level=wanted)
+        shown = [n for n in shown if int(n["level"]) == wanted and wanted in allowed_levels]
     else:
-        cap = None if (q or area or max(allowed_levels) > 2) else 2
-        shown = _filter_nodes(nodes, area=area, q=q, max_level=cap)
+        shown = _filter_nodes(nodes, area=area, q=q)
         shown = [n for n in shown if int(n["level"]) in allowed_levels]
+    for node in shown:
+        parent = by_id.get(node.get("parent_id"))
+        node["parent_code"] = parent["code"] if parent else ""
+        node["has_children"] = node["id"] in parents
+    collapse = view == "outline" and not (q or area)
     return render_template(
         "assign.html",
         companies=companies,
@@ -657,8 +669,9 @@ def assign():
         master_id=master_id,
         stream_id=stream_id,
         allowed_levels=sorted(allowed_levels),
-        nodes=shown[:400],
-        truncated=len(shown) > 400,
+        nodes=shown,
+        truncated=False,
+        collapse=collapse,
         selected=selected,
         suggested_ids=suggested_ids,
         missing=missing,

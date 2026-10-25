@@ -149,6 +149,9 @@ textarea { resize: vertical; }
 .process-tree tr[hidden] { display: none; }
 .tree-id { white-space: nowrap; }
 .tree { max-height: 640px; overflow: auto; }
+.assign-tree .tree-row { grid-template-columns: 1.4rem 1.4rem 1fr; align-items: center; }
+.assign-tree input[type="checkbox"] { width: auto; margin: 0; }
+.assign-tree [hidden] { display: none; }
 .tree-row { display: grid; grid-template-columns: 28px 1fr; gap: 0.35rem; align-items: start; padding: 0.32rem 0; border-bottom: 1px solid #eef2f5; }
 .badge { display: inline-block; background: var(--soft); color: var(--teal-dark); border-radius: 999px; padding: 0.08rem 0.45rem; font-size: 0.75rem; font-weight: 700; }
 
