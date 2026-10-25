@@ -59,8 +59,8 @@ They are not the first five columns of the company download.
 
 Two sheets:
 
-- **Data** — exactly 30 columns. The first five are filled from the assignment: Area, Level, Hierarchy ID, APQC ID, Process / activity / task. Columns 6–30 are empty placeholders (`Placeholder 6` … `Placeholder 30`) until the real headers are agreed. L1 rows are the stronger green. Columns 6–30 are yellow.
-- **Reference** — field glossary (Process ID, Hierarchy ID, Level, Process Name, PCF Path, and the system fields). Status and Created/Updated rows are yellow.
+- **Data** — the same column names as the reference workbook. Filled from the assignment: Level, Hierarchy ID, APQC ID, Process / activity / task, Parent ID. Left empty for the team: Step ID #, Task, Activity Description, Remarks, Actor / Role, Department, Location, Document Name, Document Type, System Used, Transaction Code, Mode, Communication Mode, Cycle Time, Waiting Time, Target Time, Volume, Batch or Real-Time, Decision Point, Decision Criteria, Risk / Issue, Rework, Control Point, KPI Impact, Improvement Opportunity, Automation Potential. Headers through Decision Point are green. Decision Criteria through Automation Potential are yellow.
+- **Reference** — the same column names, with a short description and example. The yellow columns are highlighted.
 
 File name: `{CompanyShortName}_{ValueStreamCode}_{Version}.xlsx`  
 Example: `ACME_O2C_CP8.0.xlsx`

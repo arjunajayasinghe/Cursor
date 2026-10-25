@@ -17,62 +17,82 @@ from aetria_app.db import get_db
 
 UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "data" / "uploads"
 
-# Company download Data sheet: exactly 30 columns.
-# 1–5 are filled from the assigned APQC master. 6–30 stay empty.
+# Company download Data sheet. Names match the reference workbook.
+# The first five are filled from the assigned APQC master. The rest stay empty.
+# Headers through Decision Point are green. Decision Criteria onward are yellow.
 EXCEL_HEADERS = [
-    "Area",
     "Level",
     "Hierarchy ID",
     "APQC ID",
     "Process / activity / task",
-    "Placeholder 6",
-    "Placeholder 7",
-    "Placeholder 8",
-    "Placeholder 9",
-    "Placeholder 10",
-    "Placeholder 11",
-    "Placeholder 12",
-    "Placeholder 13",
-    "Placeholder 14",
-    "Placeholder 15",
-    "Placeholder 16",
-    "Placeholder 17",
-    "Placeholder 18",
-    "Placeholder 19",
-    "Placeholder 20",
-    "Placeholder 21",
-    "Placeholder 22",
-    "Placeholder 23",
-    "Placeholder 24",
-    "Placeholder 25",
-    "Placeholder 26",
-    "Placeholder 27",
-    "Placeholder 28",
-    "Placeholder 29",
-    "Placeholder 30",
+    "Parent ID",
+    "Step ID #",
+    "Task",
+    "Activity Description",
+    "Remarks",
+    "Actor / Role",
+    "Department",
+    "Location",
+    "Document Name",
+    "Document Type",
+    "System Used",
+    "Transaction Code",
+    "Mode",
+    "Communication Mode",
+    "Cycle Time",
+    "Waiting Time",
+    "Target Time",
+    "Volume",
+    "Batch or Real-Time",
+    "Decision Point",
+    "Decision Criteria",
+    "Risk / Issue",
+    "Rework",
+    "Control Point",
+    "KPI Impact",
+    "Improvement Opportunity",
+    "Automation Potential",
 ]
-assert len(EXCEL_HEADERS) == 30
+FILLED_COLUMN_COUNT = 5
+GREEN_HEADER_COUNT = 24
 
-# Reference sheet: field glossary. Not written into Data columns 6–30.
-# Last flag marks system rows (yellow), matching the field-guideline image.
+# Reference sheet: same column names, with the workshop-field guide.
+# Last flag marks the yellow columns on the Data sheet.
 GUIDELINE_ROWS = [
-    ("Process ID", "PCF ID", "Unique identifier for the process element from the PCF framework.", False),
-    ("Hierarchy ID", "PCF Element", "Hierarchical position code (for example 1.0, 1.1, 1.1.1).", False),
-    ("Level", "Level", "Depth in the process hierarchy, from L1 Category through L5 Task.", False),
-    ("Process Name", "Element Name", "Name of the process element.", False),
-    ("PCF Path", "PCF Path (Full)", "Full path from the root category down to this element.", False),
-    ("Process Description", "Description", "Narrative description. On the master this is the Admin remark.", False),
-    ("KPI", "KPI (if Any)", "Key performance indicator for this element, if one exists.", False),
-    ("Risk (High/Medium/Low)", "Risk", "Risk rating for this element.", False),
-    ("Control", "Control", "Control description or reference for this element.", False),
-    ("Status", "Status", "System-managed record status.", True),
-    ("Created By", "Created By", "System-managed user who created the record.", True),
-    ("Created At", "Created At", "System-managed timestamp when the record was created.", True),
-    ("Updated By", "Updated By", "System-managed user who last updated the record.", True),
-    ("Updated At", "Updated At", "System-managed timestamp of the last update.", True),
-    ("Metrics Available?", "Metrics Available?", "Stored on the master upload when the source file includes it. Not one of the five company-download columns.", False),
-    ("Element Description", "Element Description", "Stored on the master upload when the source file includes it. Not one of the five company-download columns.", False),
+    ("Level", "APQC level label, from L1 Category through L5 Task.", "L1 Category", False),
+    ("Hierarchy ID", "Hierarchy code from the APQC master.", "4.1.1", False),
+    ("APQC ID", "Published APQC element id.", "10221", False),
+    ("Process / activity / task", "Element name from the APQC master.", "Develop production and materials strategies", False),
+    ("Parent ID", "Hierarchy code of the parent element. Blank on a top-level category.", "4.1", False),
+    ("Step ID #", "Workshop step number. Left blank for the team to fill.", "", False),
+    ("Task", "Task name used in the workshop when it is finer than the APQC element.", "", False),
+    ("Activity Description", "What exactly happens.", "Check specs, quantity, delivery dates", False),
+    ("Remarks", "Working notes for this row.", "", False),
+    ("Actor / Role", "Who performs the step.", "Sales Coordinator", False),
+    ("Department", "Function that owns the step.", "Sales", False),
+    ("Location", "Site or region, if needed.", "Colombo", False),
+    ("Document Name", "Supporting document.", "RFQ Email / RFQ Form", False),
+    ("Document Type", "Form, email, or system generated.", "Email", False),
+    ("System Used", "ERP, CRM, Excel, or other system.", "SAP / Outlook", False),
+    ("Transaction Code", "Transaction code when the step runs in an ERP.", "VA21", False),
+    ("Mode", "How the step is executed.", "Manual / Semi / Automated", False),
+    ("Communication Mode", "Email, phone, or system.", "Email", False),
+    ("Cycle Time", "Time to complete the step.", "30 mins", False),
+    ("Waiting Time", "Delay before the step.", "2 hrs", False),
+    ("Target Time", "Expected time or SLA.", "1 day", False),
+    ("Volume", "Transactions handled.", "20 RFQs/day", False),
+    ("Batch or Real-Time", "Whether the step runs in batch or in real time.", "Batch", False),
+    ("Decision Point", "Whether this is a decision step.", "Y", False),
+    ("Decision Criteria", "Basis for the decision.", "Pricing, approval limit", True),
+    ("Risk / Issue", "Known problem.", "Missing RFQ details", True),
+    ("Rework", "Whether rework occurs.", "Y", True),
+    ("Control Point", "Validation or check.", "Pricing approval", True),
+    ("KPI Impact", "What the step affects.", "Lead time", True),
+    ("Improvement Opportunity", "Observed gap.", "Manual entry duplication", True),
+    ("Automation Potential", "Where the step could be automated.", "", True),
 ]
+assert [row[0] for row in GUIDELINE_ROWS] == EXCEL_HEADERS
+assert GREEN_HEADER_COUNT < len(EXCEL_HEADERS)
 
 ROLES = ("ADMIN", "AETRIA_AREA", "COMPANY_ADMIN", "AREA_EDITOR", "VIEWER")
 
@@ -543,69 +563,71 @@ def build_workbook(company_id: str, value_stream_id: str) -> tuple[bytes, str]:
     master_id = next(iter(master_ids))
     version = assigned[0]["version"]
     allowed = {row["id"] for row in assigned}
-    ordered = [node for node in load_nodes(master_id) if node["id"] in allowed]
+    all_nodes = load_nodes(master_id)
+    by_id = {node["id"]: node for node in all_nodes}
+    ordered = [node for node in all_nodes if node["id"] in allowed]
+    column_count = len(EXCEL_HEADERS)
 
     wb = Workbook()
     data = wb.active
     data.title = "Data"
     reference = wb.create_sheet("Reference")
 
-    header_font = Font(name="Calibri", bold=True, color="FFFFFF", size=11)
-    green_header = PatternFill("solid", fgColor="1F4D3A")
-    yellow_header = PatternFill("solid", fgColor="D4A017")
-    yellow_header_font = Font(name="Calibri", bold=True, color="3F2E00", size=11)
-    l1_fill = PatternFill("solid", fgColor="1F7A4D")
-    l1_font = Font(name="Calibri", bold=True, color="FFFFFF", size=12)
-    body_fill = PatternFill("solid", fgColor="E5F2EA")
-    body_font = Font(name="Calibri", size=11, color="1A2E24")
-    empty_fill = PatternFill("solid", fgColor="FFF4CC")
+    header_font = Font(name="Calibri", bold=True, color="000000", size=11)
+    green_header = PatternFill("solid", fgColor="70AD47")
+    yellow_header = PatternFill("solid", fgColor="FFFF00")
+    group_fill = PatternFill("solid", fgColor="E2EFDA")
+    process_fill = PatternFill("solid", fgColor="DDEBF7")
+    l1_font = Font(name="Calibri", bold=True, size=11, color="000000")
+    body_font = Font(name="Calibri", size=11, color="000000")
     thin = Border(
-        left=Side(style="thin", color="D9E2DC"),
-        right=Side(style="thin", color="D9E2DC"),
-        top=Side(style="thin", color="D9E2DC"),
-        bottom=Side(style="thin", color="D9E2DC"),
+        left=Side(style="thin", color="D9D9D9"),
+        right=Side(style="thin", color="D9D9D9"),
+        top=Side(style="thin", color="D9D9D9"),
+        bottom=Side(style="thin", color="D9D9D9"),
     )
     wrap = Alignment(wrap_text=True, vertical="center")
 
     for col, header in enumerate(EXCEL_HEADERS, start=1):
         cell = data.cell(1, col, header)
-        cell.fill = green_header if col <= 5 else yellow_header
-        cell.font = header_font if col <= 5 else yellow_header_font
+        cell.fill = green_header if col <= GREEN_HEADER_COUNT else yellow_header
+        cell.font = header_font
         cell.alignment = wrap
         cell.border = thin
 
     for index, node in enumerate(ordered, start=1):
         level = int(node["level"])
+        parent = by_id.get(node.get("parent_id") or "")
         values = [
-            node.get("area") or "",
             node.get("level_label") or f"L{level}",
             node["code"],
             node.get("apqc_id") or "",
             node["name"],
+            parent["code"] if parent else "",
         ]
         excel_row = index + 1
-        for col in range(1, 31):
-            cell = data.cell(excel_row, col, values[col - 1] if col <= 5 else None)
+        for col in range(1, column_count + 1):
+            cell = data.cell(excel_row, col, values[col - 1] if col <= FILLED_COLUMN_COUNT else None)
             cell.border = thin
-            indent = max(0, level - 1) if col == 5 else 0
+            indent = max(0, level - 1) if col == 4 else 0
             cell.alignment = Alignment(wrap_text=True, vertical="center", indent=indent)
-            if col <= 5 and level == 1:
-                cell.fill = l1_fill
-                cell.font = l1_font
-            elif col <= 5:
-                cell.fill = body_fill
-                cell.font = body_font
-            else:
-                cell.fill = empty_fill
-                cell.font = body_font
+            cell.font = l1_font if col <= FILLED_COLUMN_COUNT and level == 1 else body_font
+            if col <= FILLED_COLUMN_COUNT and level <= 2:
+                cell.fill = group_fill
+            elif col <= FILLED_COLUMN_COUNT and level >= 3:
+                cell.fill = process_fill
         data.row_dimensions[excel_row].height = 22 if level > 1 else 26
 
-    widths = [42, 22, 16, 14, 62] + [16] * 25
+    widths = [
+        18, 16, 14, 55, 14, 12, 28, 36, 24, 18, 16, 16, 22, 16, 18, 18,
+        16, 22, 14, 14, 14, 14, 20, 16, 20, 16, 12, 16, 14, 26, 22,
+    ]
     for col, width in enumerate(widths, start=1):
         data.column_dimensions[get_column_letter(col)].width = width
-    data.row_dimensions[1].height = 32
+    data.row_dimensions[1].height = 36
     data.freeze_panes = "A2"
-    data.auto_filter.ref = f"A1:AD{max(data.max_row, 1)}"
+    last_col = get_column_letter(column_count)
+    data.auto_filter.ref = f"A1:{last_col}{max(data.max_row, 1)}"
     data.sheet_view.showGridLines = False
     data.oddHeader.left.text = f"{company['short_name']} · {stream['code']} · {version}"
 
@@ -614,24 +636,24 @@ def build_workbook(company_id: str, value_stream_id: str) -> tuple[bytes, str]:
     yellow = PatternFill("solid", fgColor="FFFF00")
     plain = Font(name="Calibri", size=11, color="1A1A1A")
     bold = Font(name="Calibri", bold=True, size=11, color="1A1A1A")
-    for col, title in enumerate(("Field", "PCF Field", "Description"), start=1):
+    for col, title in enumerate(("Column Name", "Description", "Example"), start=1):
         cell = reference.cell(1, col, title)
         cell.fill = blue
         cell.font = blue_font
         cell.alignment = wrap
         cell.border = thin
-    for index, (field, source, meaning, system) in enumerate(GUIDELINE_ROWS, start=2):
-        for col, value in enumerate((field, source, meaning), start=1):
+    for index, (field, meaning, example, highlight) in enumerate(GUIDELINE_ROWS, start=2):
+        for col, value in enumerate((field, meaning, example), start=1):
             cell = reference.cell(index, col, value)
             cell.font = bold if col == 1 else plain
             cell.alignment = wrap
             cell.border = thin
-            if system:
+            if highlight:
                 cell.fill = yellow
         reference.row_dimensions[index].height = 32
     reference.column_dimensions["A"].width = 28
-    reference.column_dimensions["B"].width = 24
-    reference.column_dimensions["C"].width = 88
+    reference.column_dimensions["B"].width = 72
+    reference.column_dimensions["C"].width = 48
     reference.row_dimensions[1].height = 22
     reference.freeze_panes = "A2"
     reference.auto_filter.ref = f"A1:C{len(GUIDELINE_ROWS) + 1}"
