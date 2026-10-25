@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aetria Process Mapping — Sign in</title>
+    <link rel="stylesheet" href="/css/styles.css" />
+  </head>
+  <body>
+    <main class="login-wrap">
+      <div class="card">
+        <div class="eyebrow">Aetria</div>
+        <h1>Process Mapping</h1>
+        <p class="muted">Sign in to the master library or a company workspace.</p>
+
+        <form id="login-form">
+          <label>
+            Email
+            <input id="email" type="email" required value="operator@aetria.com" />
+          </label>
+          <label>
+            Password
+            <input id="password" type="password" required value="password123" />
+          </label>
+          <div id="error" class="error" hidden></div>
+          <button class="btn btn-block" type="submit">Sign in</button>
+        </form>
+
+        <div class="seed">
+          <div class="muted" style="font-size: 0.75rem; letter-spacing: 0.06em; text-transform: uppercase">
+            Seeded users (password: password123)
+          </div>
+          <button type="button" class="link" data-email="operator@aetria.com">
+            Aetria operator — operator@aetria.com
+          </button>
+          <button type="button" class="link" data-email="admin@acme.com">
+            Acme admin — admin@acme.com
+          </button>
+          <button type="button" class="link" data-email="editor@acme.com">
+            Acme area editor — editor@acme.com
+          </button>
+          <button type="button" class="link" data-email="viewer@acme.com">
+            Acme viewer — viewer@acme.com
+          </button>
+          <button type="button" class="link" data-email="admin@beta.com">
+            Beta admin — admin@beta.com
+          </button>
+        </div>
+      </div>
+    </main>
+    <script>
+      const form = document.getElementById("login-form");
+      const errorEl = document.getElementById("error");
+      document.querySelectorAll(".seed .link").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          document.getElementById("email").value = btn.dataset.email;
+          document.getElementById("password").value = "password123";
+        });
+      });
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        errorEl.hidden = true;
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: document.getElementById("email").value,
+            password: document.getElementById("password").value,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errorEl.textContent = data.error || "Login failed";
+          errorEl.hidden = false;
+          return;
+        }
+        location.href = "/app.html";
+      });
+      fetch("/api/me")
+        .then((r) => (r.ok ? location.replace("/app.html") : null))
+        .catch(() => {});
+    </script>
+  </body>
+</html>
