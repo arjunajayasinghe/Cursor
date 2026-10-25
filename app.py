@@ -648,21 +648,26 @@ def assign():
     q = (request.args.get("q") or "").strip()
     areas = _areas(nodes)
     by_id = {node["id"]: node for node in nodes}
-    parents = {node.get("parent_id") for node in nodes if node.get("parent_id")}
+    depth = 5
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
         shown = [n for n in nodes if n["id"] in suggested_ids]
     elif view in {"1", "2", "3", "4", "5"}:
-        wanted = int(view)
-        shown = _filter_nodes(nodes, area=area, q=q)
-        shown = [n for n in shown if int(n["level"]) == wanted]
+        depth = int(view)
+        matched = _filter_nodes(nodes, area=area, q=q, max_level=depth)
+        if area or q:
+            shown = [n for n in _with_ancestors(nodes, [n["id"] for n in matched]) if int(n["level"]) <= depth]
+        else:
+            shown = matched
     else:
         shown = _filter_nodes(nodes, area=area, q=q)
+    shown_ids = {node["id"] for node in shown}
+    visible_parents = {node.get("parent_id") for node in shown if node.get("parent_id") in shown_ids}
     for node in shown:
         parent = by_id.get(node.get("parent_id"))
         node["parent_code"] = parent["code"] if parent else ""
-        node["has_children"] = node["id"] in parents
+        node["has_children"] = node["id"] in visible_parents
     collapse = view == "outline" and not (q or area)
     return render_template(
         "assign.html",
@@ -674,6 +679,7 @@ def assign():
         stream_id=stream_id,
         allowed_levels=sorted(allowed_levels),
         level_counts=_level_counts(nodes),
+        depth=depth,
         nodes=shown,
         truncated=False,
         collapse=collapse,

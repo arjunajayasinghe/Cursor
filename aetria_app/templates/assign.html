@@ -4,7 +4,7 @@
 <header class="page-head">
   <p class="eyebrow">L1–L5</p>
   <h1>Assign to a company</h1>
-  <p class="lede">The list goes through L5. Pick one level at a time — L1, L2, L3, L4, or L5 — or leave the tree open and use the arrow to go deeper.</p>
+  <p class="lede">Pick the level you want to reach. L1 shows the categories. L3 opens each one from L1 to L2 to L3, so you can tick the row in place.</p>
 </header>
 <section class="panel">
   <form method="get" class="grid-2">
@@ -19,9 +19,9 @@
     </label>
     <label>Level
       <select name="view">
-        <option value="outline" {% if view == 'outline' %}selected{% endif %}>Tree through L5</option>
+        <option value="outline" {% if view == 'outline' %}selected{% endif %}>Tree, open with the arrow</option>
         {% for n in [1, 2, 3, 4, 5] %}
-        <option value="{{ n }}" {% if view == n|string %}selected{% endif %}>L{{ n }} only</option>
+        <option value="{{ n }}" {% if view == n|string %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
         {% endfor %}
         <option value="suggested" {% if view == 'suggested' %}selected{% endif %}>Suggested branch</option>
         <option value="assigned" {% if view == 'assigned' %}selected{% endif %}>Already assigned</option>
@@ -61,10 +61,13 @@
     <input type="hidden" name="view" value="{{ view }}" />
     <input type="hidden" name="area" value="{{ area }}" />
     <input type="hidden" name="q" value="{{ q }}" />
+    {% if view in ['1','2','3','4','5'] %}
+    <p class="muted">Showing {% if depth == 1 %}L1{% else %}L1 to L{{ depth }}{% endif %}.</p>
+    {% endif %}
     <div class="tree assign-tree">
       {% for n in nodes %}
       <div class="tree-row" data-id="{{ n.id }}" data-parent="{{ n.parent_id or '' }}" data-level="{{ n.level }}" style="padding-left: {{ n.depth * 16 }}px" {% if collapse and n.level > 2 %}hidden{% endif %}>
-        {% if n.has_children and view == 'outline' %}
+        {% if n.has_children %}
         <button type="button" class="tree-toggle" data-id="{{ n.id }}" aria-expanded="{{ 'false' if collapse and n.level >= 2 else 'true' }}" aria-label="Open or close children">▸</button>
         {% else %}
         <span class="tree-spacer"></span>
@@ -74,7 +77,6 @@
         <div>
           <span class="mono">{{ n.code }}</span> {{ n.name }}
           <span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span>
-          {% if n.parent_code and view in ['1','2','3','4','5'] %}<span class="muted">under {{ n.parent_code }}</span>{% endif %}
           {% if n.id in suggested_ids %}<span class="badge">suggested</span>{% endif %}
         </div>
       </div>
