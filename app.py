@@ -624,8 +624,10 @@ def assign():
                 stream_id,
                 request.form.getlist("node_id"),
                 request.form.getlist("visible_id"),
+                request.form.getlist("cascade_id"),
+                request.form.getlist("clear_tree_id"),
             )
-            flash(f"Saved assignment — {count} processes. Parents stay in the hierarchy.", "ok")
+            flash(f"Saved assignment — {count} processes. A ticked row keeps every level under it.", "ok")
         return redirect(
             url_for(
                 "assign",
@@ -659,12 +661,13 @@ def assign():
     if view == "assigned":
         shown = [n for n in nodes if n["id"] in selected]
     elif view == "suggested":
-        shown = [n for n in nodes if n["id"] in suggested_ids and int(n["level"]) <= stream_depth]
+        depth = stream_depth
+        shown = [n for n in nodes if n["id"] in suggested_ids]
     elif view in {"1", "2", "3", "4", "5"}:
         depth = int(view)
-        matched = _filter_nodes(nodes, area=area, q=q, max_level=depth)
+        matched = _filter_nodes(nodes, area=area, q=q, max_level=stream_depth)
         if area or q:
-            shown = [n for n in _with_ancestors(nodes, [n["id"] for n in matched]) if int(n["level"]) <= depth]
+            shown = [n for n in _with_ancestors(nodes, [n["id"] for n in matched]) if int(n["level"]) <= stream_depth]
         else:
             shown = matched
     else:

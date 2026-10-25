@@ -480,20 +480,50 @@ def expand_codes(master_id: str, codes: list[str]) -> tuple[list[str], list[str]
     return list(keep), missing
 
 
+def _descendant_ids(nodes: list[dict], node_ids: set[str]) -> set[str]:
+    children: dict[str | None, list[str]] = defaultdict(list)
+    for node in nodes:
+        children[node.get("parent_id")].append(node["id"])
+    found: set[str] = set()
+    stack = list(node_ids)
+    while stack:
+        current = stack.pop()
+        for child_id in children.get(current, []):
+            if child_id in found:
+                continue
+            found.add(child_id)
+            stack.append(child_id)
+    return found
+
+
 def save_assignment(
     company_id: str,
     master_id: str,
     value_stream_id: str,
     selected_ids: list[str],
     visible_ids: list[str] | None = None,
+    cascade_ids: list[str] | None = None,
+    clear_tree_ids: list[str] | None = None,
 ) -> int:
     nodes = load_nodes(master_id)
     by_id = {n["id"]: n for n in nodes}
+    selected = set(selected_ids)
     if visible_ids is None:
-        base = set(selected_ids)
+        base = set(selected)
     else:
         visible = set(visible_ids)
-        base = (assigned_ids(company_id, value_stream_id) - visible) | set(selected_ids)
+        base = (assigned_ids(company_id, value_stream_id) - visible) | selected
+    cleared = set(clear_tree_ids or [])
+    cleared |= _descendant_ids(nodes, cleared)
+    for node_id in cleared:
+        base.discard(node_id)
+    for node_id in set(cascade_ids or []):
+        if node_id in cleared or node_id not in by_id:
+            continue
+        base.add(node_id)
+        for child_id in _descendant_ids(nodes, {node_id}):
+            if child_id not in cleared:
+                base.add(child_id)
     keep: set[str] = set()
     for node_id in base:
         current = by_id.get(node_id)
