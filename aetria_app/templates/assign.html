@@ -7,7 +7,7 @@
   <p class="lede">Tick a row and everything under it is ticked. Untick one L2, L3, L4, or L5 row and only that row clears. The parent stays ticked while any other row under it remains.</p>
 </header>
 <section class="panel">
-  <form method="get" class="grid-2">
+  <form method="get" class="sheet-tool">
     <label>Company
       <select name="company_id" onchange="this.form.submit()">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
     </label>
@@ -65,9 +65,10 @@
     <p class="muted">Showing {% if depth == 1 %}L1{% else %}L1 to L{{ depth }}{% endif %}.</p>
     {% endif %}
     <div class="tree assign-tree">
+      <div class="sheet-head"><span></span><span></span><span>Hierarchy</span><span>Level</span><span>Process</span></div>
       {% for n in nodes %}
       {% set tucked = (collapse and n.level > 2) or (view in ['1','2','3','4','5'] and n.level > depth) %}
-      <div class="tree-row" data-id="{{ n.id }}" data-parent="{{ n.parent_id or '' }}" data-level="{{ n.level }}" style="padding-left: {{ n.depth * 16 }}px" {% if tucked %}hidden{% endif %}>
+      <div class="tree-row" data-id="{{ n.id }}" data-parent="{{ n.parent_id or '' }}" data-level="{{ n.level }}" {% if tucked %}hidden{% endif %}>
         {% if n.has_children %}
         <button type="button" class="tree-toggle" data-id="{{ n.id }}" aria-expanded="{{ 'false' if (view in ['1','2','3','4','5'] and n.level >= depth) or (collapse and n.level >= 2) else 'true' }}" aria-label="Open or close children">▸</button>
         {% else %}
@@ -75,9 +76,10 @@
         {% endif %}
         <input type="checkbox" name="node_id" value="{{ n.id }}" {% if n.id in selected or (view == 'suggested' and n.id in suggested_ids) %}checked{% endif %} {% if tucked %}disabled{% endif %} />
         <input type="hidden" name="visible_id" value="{{ n.id }}" {% if tucked %}disabled{% endif %} />
+        <span class="mono" style="padding-left: {{ n.depth * 14 }}px">{{ n.code }}</span>
+        <span><span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span></span>
         <div>
-          <span class="mono">{{ n.code }}</span> {{ n.name }}
-          <span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span>
+          {{ n.name }}
           {% if n.id in suggested_ids %}<span class="badge">suggested</span>{% endif %}
         </div>
       </div>
