@@ -57,12 +57,14 @@ ROOT = Path(__file__).resolve().parent
 MINUTES_EXT = {".pdf", ".doc", ".docx", ".txt", ".md", ".csv"}
 DIAGRAM_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".pdf"}
 
-NAV = [
+PRIMARY_NAV = [
     ("dashboard", "Dashboard"),
-    ("masters", "APQC masters"),
-    ("companies", "Companies"),
-    ("value_streams", "Value streams"),
     ("assign", "Assign"),
+    ("value_streams", "Streams"),
+    ("masters", "Masters"),
+    ("companies", "Companies"),
+]
+MORE_NAV = [
     ("distribute", "Excel download"),
     ("workshops", "Workshops"),
     ("critical_points", "Critical points"),
@@ -70,6 +72,7 @@ NAV = [
     ("users", "Users"),
     ("roadmap", "Later"),
 ]
+NAV = PRIMARY_NAV + MORE_NAV
 
 app = Flask(
     __name__,
@@ -141,6 +144,9 @@ def inject_nav():
     return {
         "me": me,
         "nav": [(url_for(name), label, name) for name, label in NAV],
+        "primary_nav": [(url_for(name), label, name) for name, label in PRIMARY_NAV],
+        "more_nav": [(url_for(name), label, name) for name, label in MORE_NAV],
+        "more_label": next((label for name, label in MORE_NAV if name == endpoint), "More"),
         "active": endpoint,
         "role_labels": ROLE_LABELS,
         "build_label": BUILD_LABEL,

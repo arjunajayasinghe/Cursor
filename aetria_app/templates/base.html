@@ -8,28 +8,30 @@
   </head>
   <body>
     <div class="shell">
-      <aside class="nav">
-        <div class="brand">
-          <div class="mark">A</div>
-          <div>
-            <strong>Aetria</strong>
-            <span>Admin workbench · {{ build_label }}</span>
-          </div>
-        </div>
+      <header class="nav">
+        <a class="brand" href="{{ url_for('dashboard') }}">
+          <strong>Aetria</strong>
+        </a>
         <nav>
-          {% for href, label, key in nav %}
+          {% for href, label, key in primary_nav %}
           <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
           {% endfor %}
+          <details class="more">
+            <summary class="{% if more_label != 'More' %}active{% endif %}">{{ more_label }}</summary>
+            <div class="more-panel">
+              {% for href, label, key in more_nav %}
+              <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+              {% endfor %}
+              <div class="more-foot">
+                <span>{{ me.name }}</span>
+                <form method="post" action="{{ url_for('logout') }}">
+                  <button type="submit">Sign out</button>
+                </form>
+              </div>
+            </div>
+          </details>
         </nav>
-        <div class="nav-foot">
-          <div class="who">{{ me.name }}</div>
-          <div class="muted">{{ me.email }}</div>
-          <div class="role">{{ role_labels.get(me.role, me.role) }}</div>
-          <form method="post" action="{{ url_for('logout') }}" style="margin-top:0.6rem">
-            <button class="btn btn-ghost btn-block" type="submit">Sign out</button>
-          </form>
-        </div>
-      </aside>
+      </header>
       <main class="main">
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% for cat, msg in messages %}
@@ -58,6 +60,10 @@
         }
         company.addEventListener("change", apply);
         apply();
+      });
+      document.addEventListener("click", function (event) {
+        var more = document.querySelector(".more");
+        if (more && !more.contains(event.target)) more.removeAttribute("open");
       });
     </script>
   </body>
