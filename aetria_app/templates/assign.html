@@ -31,13 +31,14 @@
       <select name="area"><option value="">Any area</option>{% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
     </label>
     <label>Search<input name="q" value="{{ q }}" /></label>
-    <div><button class="btn" type="submit">Refresh list</button></div>
+    <div class="sheet-actions"><button class="btn" type="submit">Refresh list</button></div>
   </form>
   <p class="level-jumps">
     {% for number, count in level_counts if number <= stream_depth %}
     <a class="{% if view == number|string %}on{% endif %}" href="{{ url_for('assign', company_id=company_id, master_id=master_id, value_stream_id=stream_id, view=number, area=area, q=q) }}">L{{ number }} <b>{{ count }}</b></a>
     {% endfor %}
   </p>
+  <div class="assign-suggest">
   <p class="muted">Suggestions: {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}
     {% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}
     · {{ selected|length }} assigned
@@ -50,8 +51,9 @@
     <input type="hidden" name="area" value="{{ area }}" />
     <input type="hidden" name="q" value="{{ q }}" />
     <input type="hidden" name="action" value="suggest" />
-    <button class="btn" type="submit">Use suggested processes</button>
+    <button class="btn secondary" type="submit">Use suggested processes</button>
   </form>
+  </div>
 </section>
 <section class="panel" style="margin-top:0.75rem">
   <form method="post">
