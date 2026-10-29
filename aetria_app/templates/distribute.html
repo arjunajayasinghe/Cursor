@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Excel download · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Distribution</p>
+  <h1>Excel download</h1>
+  <p class="lede">Each file has two sheets: <strong>Data</strong> and <strong>Reference</strong>. Data uses the reference column names. Filled from the assigned master: Level, Hierarchy ID, APQC ID, Process / activity / task, and Parent ID. Step ID # through Automation Potential are left empty. Decision Criteria, Risk / Issue, Rework, Control Point, KPI Impact, Improvement Opportunity, and Automation Potential are the yellow columns. File name: {ShortName}_{ValueStream}_{Version}.xlsx</p>
+</header>
+<section class="panel">
+  <table>
+    <thead><tr><th>Company</th><th>Value stream</th><th>Version</th><th>Processes</th><th></th></tr></thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.company_name }} <span class="mono">{{ r.short_name }}</span></td>
+        <td>{{ r.vs_code }} — {{ r.vs_name }}</td>
+        <td class="mono">{{ r.version }}</td>
+        <td>{{ r.process_count }}</td>
+        <td><a class="btn tiny" href="{{ url_for('distribute_download', company_id=r.company_id, value_stream_id=r.value_stream_id) }}">Download</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">Assign a value stream before downloading.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:0.8rem">Data headers: {{ headers|join(' · ') }}</p>
+</section>
+{% endblock %}

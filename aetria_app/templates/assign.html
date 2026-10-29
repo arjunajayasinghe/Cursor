@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% block title %}Assign · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">L1–L5</p>
+  <h1>Assign to a company</h1>
+  <p class="lede">Tick a row and everything under it is ticked. Untick one L2, L3, L4, or L5 row and only that row clears. The parent stays ticked while any other row under it remains.</p>
+</header>
+<section class="panel">
+  <form method="get" class="sheet-tool">
+    <label>Company
+      <select name="company_id" onchange="this.form.submit()">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Master
+      <select name="master_id">{% for m in masters %}<option value="{{ m.id }}" {% if m.id == master_id %}selected{% endif %}>{{ m.industry }} {{ m.version }}</option>{% endfor %}</select>
+    </label>
+    <label>Value stream
+      <select name="value_stream_id" onchange="this.form.submit()">{% for s in streams %}<option value="{{ s.id }}" {% if s.id == stream_id %}selected{% endif %}>{{ s.code }} — {{ s.name }} · {% if s.depth == 1 %}L1{% else %}L1 to L{{ s.depth }}{% endif %}</option>{% endfor %}</select>
+    </label>
+    <label>Level
+      <select name="view" onchange="this.form.submit()">
+        <option value="outline" {% if view == 'outline' %}selected{% endif %}>Tree, open with the arrow</option>
+        {% for n in [1, 2, 3, 4, 5] if n <= stream_depth %}
+        <option value="{{ n }}" {% if view == n|string %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
+        {% endfor %}
+        <option value="suggested" {% if view == 'suggested' %}selected{% endif %}>Suggested branch</option>
+        <option value="assigned" {% if view == 'assigned' %}selected{% endif %}>Already assigned</option>
+      </select>
+    </label>
+    <label>Area
+      <select name="area"><option value="">Any area</option>{% for a in areas %}<option value="{{ a }}" {% if area == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select>
+    </label>
+    <label>Search<input name="q" value="{{ q }}" /></label>
+    <div class="sheet-actions"><button class="btn" type="submit">Refresh list</button></div>
+  </form>
+  <p class="level-jumps">
+    {% for number, count in level_counts if number <= stream_depth %}
+    <a class="{% if view == number|string %}on{% endif %}" href="{{ url_for('assign', company_id=company_id, master_id=master_id, value_stream_id=stream_id, view=number, area=area, q=q) }}">L{{ number }} <b>{{ count }}</b></a>
+    {% endfor %}
+  </p>
+  <div class="assign-suggest">
+  <p class="muted">Suggestions: {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}
+    {% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}
+    · {{ selected|length }} assigned
+  </p>
+  <form method="post">
+    <input type="hidden" name="company_id" value="{{ company_id }}" />
+    <input type="hidden" name="master_id" value="{{ master_id }}" />
+    <input type="hidden" name="value_stream_id" value="{{ stream_id }}" />
+    <input type="hidden" name="view" value="{{ view }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="q" value="{{ q }}" />
+    <input type="hidden" name="action" value="suggest" />
+    <button class="btn secondary" type="submit">Use suggested processes</button>
+  </form>
+  </div>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <form method="post">
+    <input type="hidden" name="company_id" value="{{ company_id }}" />
+    <input type="hidden" name="master_id" value="{{ master_id }}" />
+    <input type="hidden" name="value_stream_id" value="{{ stream_id }}" />
+    <input type="hidden" name="view" value="{{ view }}" />
+    <input type="hidden" name="area" value="{{ area }}" />
+    <input type="hidden" name="q" value="{{ q }}" />
+    {% if view in ['1','2','3','4','5'] %}
+    <p class="muted">Showing {% if depth == 1 %}L1{% else %}L1 to L{{ depth }}{% endif %}.</p>
+    {% endif %}
+    <div class="tree assign-tree">
+      <div class="sheet-head"><span></span><span></span><span>Hierarchy</span><span>Level</span><span>Process</span></div>
+      {% for n in nodes %}
+      {% set tucked = (collapse and n.level > 2) or (view in ['1','2','3','4','5'] and n.level > depth) %}
+      <div class="tree-row" data-id="{{ n.id }}" data-parent="{{ n.parent_id or '' }}" data-level="{{ n.level }}" {% if tucked %}hidden{% endif %}>
+        {% if n.has_children %}
+        <button type="button" class="tree-toggle" data-id="{{ n.id }}" aria-expanded="{{ 'false' if (view in ['1','2','3','4','5'] and n.level >= depth) or (collapse and n.level >= 2) else 'true' }}" aria-label="Open or close children">▸</button>
+        {% else %}
+        <span class="tree-spacer"></span>
+        {% endif %}
+        <input type="checkbox" name="node_id" value="{{ n.id }}" {% if n.id in selected or (view == 'suggested' and n.id in suggested_ids) %}checked{% endif %} {% if tucked %}disabled{% endif %} />
+        <input type="hidden" name="visible_id" value="{{ n.id }}" {% if tucked %}disabled{% endif %} />
+        <span class="mono" style="padding-left: {{ n.depth * 14 }}px">{{ n.code }}</span>
+        <span><span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span></span>
+        <div>
+          {{ n.name }}
+          {% if n.id in suggested_ids %}<span class="badge">suggested</span>{% endif %}
+        </div>
+      </div>
+      {% else %}
+      {% if view == 'suggested' %}
+      <p class="muted">No suggested branch yet. On Value streams, add a hierarchy ID such as 3.5, then choose Suggested branch again.</p>
+      {% else %}
+      <p class="muted">Nothing to show for this level. The master has {% for number, count in level_counts %}L{{ number }} {{ count }}{% if not loop.last %}, {% endif %}{% endfor %}.</p>
+      {% endif %}
+      {% endfor %}
+    </div>
+    <button class="btn" type="submit" style="margin-top:0.8rem">Save assignment</button>
+  </form>
+</section>
+<script>
+  var assignForm = document.querySelector(".assign-tree").closest("form");
+
+  document.querySelectorAll(".assign-tree .tree-toggle").forEach(function (button) {
+    button.addEventListener("click", function () {
+      var open = button.getAttribute("aria-expanded") !== "true";
+      button.setAttribute("aria-expanded", open ? "true" : "false");
+      setAssignChildren(button.getAttribute("data-id"), open);
+    });
+  });
+
+  document.querySelectorAll('.assign-tree input[name="node_id"]').forEach(function (box) {
+    box.addEventListener("change", function () {
+      var row = box.closest(".tree-row");
+      var id = row.getAttribute("data-id");
+      if (box.checked) {
+        forget("clear_tree_id", id);
+        remember("cascade_id", id);
+        tickDescendants(id, true);
+      } else {
+        forget("cascade_id", id);
+        remember("clear_tree_id", id);
+        tickDescendants(id, false);
+      }
+    });
+  });
+
+  function tickDescendants(parentId, checked) {
+    document.querySelectorAll('.assign-tree [data-parent="' + parentId + '"]').forEach(function (row) {
+      var childId = row.getAttribute("data-id");
+      row.hidden = false;
+      row.querySelectorAll("input").forEach(function (input) { input.disabled = false; });
+      var childBox = row.querySelector('input[name="node_id"]');
+      if (childBox) childBox.checked = checked;
+      var toggle = row.querySelector(".tree-toggle");
+      if (toggle) toggle.setAttribute("aria-expanded", "true");
+      if (checked) forget("clear_tree_id", childId);
+      else forget("cascade_id", childId);
+      tickDescendants(childId, checked);
+    });
+  }
+
+  function remember(name, value) {
+    var existing = assignForm.querySelector('input[data-remember="' + name + '"][value="' + value + '"]');
+    if (existing) return;
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    input.setAttribute("data-remember", name);
+    assignForm.appendChild(input);
+  }
+
+  function forget(name, value) {
+    assignForm.querySelectorAll('input[data-remember="' + name + '"][value="' + value + '"]').forEach(function (input) {
+      input.remove();
+    });
+  }
+
+  function setAssignChildren(parentId, open) {
+    document.querySelectorAll('.assign-tree [data-parent="' + parentId + '"]').forEach(function (row) {
+      row.hidden = !open;
+      row.querySelectorAll("input").forEach(function (input) { input.disabled = !open; });
+      if (!open) {
+        var toggle = row.querySelector(".tree-toggle");
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+        setAssignChildren(row.getAttribute("data-id"), false);
+      }
+    });
+  }
+</script>
+{% endblock %}

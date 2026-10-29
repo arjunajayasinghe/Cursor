@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Phase 1</p>
+  <h1>Admin dashboard</h1>
+  <p class="lede">Consumer Products master, companies, value-stream assignment, and Excel distribution. Every Phase 1 function is in the left menu.</p>
+</header>
+<div class="actions">
+  <a class="btn" href="{{ url_for('masters') }}">APQC masters</a>
+  <a class="btn secondary" href="{{ url_for('company_form') }}">New company</a>
+  <a class="btn secondary" href="{{ url_for('assign') }}">Assign</a>
+  <a class="btn secondary" href="{{ url_for('distribute') }}">Excel download</a>
+  <a class="btn secondary" href="{{ url_for('user_new') }}">Add user</a>
+</div>
+<div class="stats">
+  <a class="stat" href="{{ url_for('masters') }}"><b>{{ stats.processes }}</b><span>APQC elements</span></a>
+  <a class="stat" href="{{ url_for('masters') }}"><b>{{ stats.masters }}</b><span>Masters</span></a>
+  <a class="stat" href="{{ url_for('companies') }}"><b>{{ stats.companies }}</b><span>Companies</span></a>
+  <a class="stat" href="{{ url_for('value_streams') }}"><b>{{ stats.streams }}</b><span>Value streams</span></a>
+  <a class="stat" href="{{ url_for('assign') }}"><b>{{ stats.assignments }}</b><span>Assigned processes</span></a>
+  <a class="stat" href="{{ url_for('workshops') }}"><b>{{ stats.workshops }}</b><span>Workshops</span></a>
+  <a class="stat" href="{{ url_for('critical_points') }}"><b>{{ stats.critical }}</b><span>Critical points</span></a>
+  <a class="stat" href="{{ url_for('automation') }}"><b>{{ stats.automation }}</b><span>Automation points</span></a>
+</div>
+<div class="split">
+  <section class="panel">
+    <h2>Companies</h2>
+    <table>
+      <thead><tr><th>Company</th><th>Short name</th><th>Streams</th><th>Processes</th></tr></thead>
+      <tbody>
+        {% for c in companies %}
+        <tr>
+          <td><a href="{{ url_for('company_form', company_id=c.id) }}">{{ c.name }}</a></td>
+          <td class="mono">{{ c.short_name }}</td>
+          <td>{{ c.streams }}</td>
+          <td>{{ c.processes }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="muted">No companies yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  <section class="panel">
+    <h2>Open items</h2>
+    {% for item in attention %}
+    <div style="padding:0.45rem 0;border-bottom:1px solid var(--line)">
+      <span class="badge">{{ item.kind }}</span> {{ item.title }}
+      <div class="muted">{{ item.status }}</div>
+    </div>
+    {% else %}
+    <p class="muted">Nothing waiting.</p>
+    {% endfor %}
+  </section>
+</div>
+<section class="panel" style="margin-top:0.75rem">
+  <h2>Roadmap</h2>
+  <div class="chips" style="margin-top:0.6rem">
+    <span class="chip now">Foundation — now</span>
+    <span class="chip now">Workshops — now</span>
+    <span class="chip now">Excel download — now</span>
+    <span class="chip now">Automation — now</span>
+    <span class="chip later">Swimlanes — later</span>
+    <span class="chip later">SAP — later</span>
+    <span class="chip later">SOPs — later</span>
+  </div>
+</section>
+{% endblock %}

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}Aetria Admin{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="nav">
+        <a class="brand" href="{{ url_for('dashboard') }}">
+          <strong>Aetria</strong>
+        </a>
+        <nav>
+          {% for href, label, key in primary_nav %}
+          <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+          {% endfor %}
+          <details class="more">
+            <summary class="{% if more_label != 'More' %}active{% endif %}">{{ more_label }}</summary>
+            <div class="more-panel">
+              {% for href, label, key in more_nav %}
+              <a href="{{ href }}" class="{% if active == key %}active{% endif %}">{{ label }}</a>
+              {% endfor %}
+              <div class="more-foot">
+                <span>{{ me.name }}</span>
+                <form method="post" action="{{ url_for('logout') }}">
+                  <button type="submit">Sign out</button>
+                </form>
+              </div>
+            </div>
+          </details>
+        </nav>
+      </header>
+      <main class="main">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% for cat, msg in messages %}
+          <div class="flash {{ cat }}">{{ msg }}</div>
+          {% endfor %}
+        {% endwith %}
+        {% block body %}{% endblock %}
+      </main>
+    </div>
+    <script>
+      document.querySelectorAll("form").forEach(function (form) {
+        var company = form.querySelector("[name=company_id]");
+        var stream = form.querySelector("[name=value_stream_id][data-filter]");
+        if (!company || !stream) return;
+        var options = Array.prototype.slice.call(stream.options);
+        function apply() {
+          options.forEach(function (opt) {
+            if (!opt.value) { opt.hidden = false; return; }
+            opt.hidden = opt.getAttribute("data-company") !== company.value;
+          });
+          var selected = stream.selectedOptions[0];
+          if (selected && selected.hidden) {
+            var next = options.find(function (opt) { return opt.value && !opt.hidden; });
+            stream.value = next ? next.value : "";
+          }
+        }
+        company.addEventListener("change", apply);
+        apply();
+      });
+      document.addEventListener("click", function (event) {
+        var more = document.querySelector(".more");
+        if (more && !more.contains(event.target)) more.removeAttribute("open");
+      });
+    </script>
+  </body>
+</html>

@@ -1,79 +1,77 @@
-# Aetria Process Mapping
+# Aetria Process Mapping — Phase 1 Admin
 
-Multi-tenant SaaS MVP for an APQC-style process repository.
+Admin workbench for APQC process mapping. Python 3, Flask, and SQLite on your machine. Set `DATABASE_URL` to a Postgres URL when you host it.
 
-- **Aetria Solution (AS)** owns the **master** process library (bulk upload, assign/push).
-- **Companies** see only **assigned** processes; area editors edit scoped branches.
-- **Aetria operators** can switch into any company workspace after push.
-- **Export** produces value-stream-grouped Excel files (**stub format** — real client template TBD).
-
-## Stack
-
-- Next.js 15 (App Router) + TypeScript + Tailwind CSS
-- SQLite via Prisma (swap `provider` / `DATABASE_URL` for Postgres later)
-- Email/password auth with seeded users (signed cookie session; no OAuth)
-
-## Quick start
+## Run
 
 ```bash
-npm install
-npx prisma migrate dev   # creates SQLite DB + applies schema
-npm run seed             # sample master tree, companies, assignments
-npm run dev              # http://localhost:3000
+cd /Users/arjuna/Cursor
+git fetch origin
+git checkout cursor/aetria-phase1-admin-6386
+git pull
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+python seed.py
+python app.py
 ```
 
-Environment (`.env`):
+`python app.py` starts the site in the background and opens **http://localhost:8765/login**. You can close the Terminal window. The site stays up.
 
+Stop it with:
+
+```bash
+cd /Users/arjuna/Cursor
+python app.py --stop
 ```
-DATABASE_URL="file:./dev.db"
-AUTH_SECRET="dev-secret-change-me-in-production-aetria-mvp"
+
+Sign in as `admin@aetria.com` / `password123`.
+
+`operator@aetria.com` is the same Admin role. `area@aetria.com`, `admin@acme.com`, and `viewer@acme.com` can sign in, but area filtering is not on yet.
+
+## What Phase 1 includes
+
+- Dashboard with masters, companies, assignments, workshops, critical points, and automation
+- Several APQC masters (industry + version). Seed loads **Consumer Products 8.0** (`CP8.0`, about 2,039 elements, L1–L5)
+- Companies, including a short name used in file names
+- Value streams belong to a company. Each stream chooses its own APQC levels (L1–L5). Hierarchy IDs are added by hand or by upload, not generated
+- Assign L1–L5 to a company by value stream. APQC hierarchy and numbers stay
+- Excel **download** only
+- Workshops: meeting minutes, diagrams, critical points
+- Automation points
+- Users: Admin can add, edit, and view user IDs
+
+Not in this build: Excel upload back into the company view, swimlanes, SAP, SOPs, and scoped area login.
+
+## Master upload
+
+On a master, upload CSV or Excel. The Consumer Products file is sheet `All Areas Consolidated` (header row contains Hierarchy ID). These columns are stored on the master when the file has them:
+
+- Metrics Available?
+- Element Description
+- Description or Remark (Admin can also type a remark on each visible process)
+
+They are not the first five columns of the company download.
+
+## Company Excel download
+
+Two sheets:
+
+- **Data** — the same column names as the reference workbook. Filled from the assignment: Level, Hierarchy ID, APQC ID, Process / activity / task, Parent ID. Left empty for the team: Step ID #, Task, Activity Description, Remarks, Actor / Role, Department, Location, Document Name, Document Type, System Used, Transaction Code, Mode, Communication Mode, Cycle Time, Waiting Time, Target Time, Volume, Batch or Real-Time, Decision Point, Decision Criteria, Risk / Issue, Rework, Control Point, KPI Impact, Improvement Opportunity, Automation Potential. Headers through Decision Point are green. Decision Criteria through Automation Potential are yellow.
+- **Reference** — the same column names, with a short description and example. The yellow columns are highlighted.
+
+File name: `{CompanyShortName}_{ValueStreamCode}_{Version}.xlsx`  
+Example: `ACME_O2C_CP8.0.xlsx`
+
+The value-stream token is the stream code (O2C), and the version token is the master version (CP8.0).
+
+## Hosting
+
+Leave `DATABASE_URL` unset for SQLite (`data/aetria.db`). For Postgres:
+
+```bash
+DATABASE_URL=postgresql://user:pass@host:5432/aetria python seed.py
+DATABASE_URL=postgresql://user:pass@host:5432/aetria python app.py
 ```
-
-## Seeded logins
-
-Password for all: `password123`
-
-| Email | Role |
-|-------|------|
-| `operator@aetria.com` | Aetria operator — master library + switch into companies |
-| `admin@acme.com` | Acme company admin |
-| `editor@acme.com` | Acme area editor — edit only branch `3.3` (sales strategy) |
-| `viewer@acme.com` | Acme viewer (read-only) |
-| `admin@beta.com` | Beta company admin |
-
-Seed data includes a sample master APQC-style tree, value streams (OTC, PTP, RTR, HTR), Acme assignments (2.0 / 3.0 / 5.0 / 8.4), and Beta assignment (4.0).
-
-## Features in this MVP
-
-1. **AS master view** — browse/search process tree, edit details, bulk CSV/Excel upload
-2. **Assign / push** — copy a master node + subtree into a company workspace
-3. **Company view** — assigned tree only; hide/rename/describe under role rules
-4. **Area scopes** — area editors only edit nodes under their assigned branches
-5. **Workspace switcher** — Aetria operators move between master and company workspaces
-6. **Export** — download Excel grouped by value stream (**stub columns**)
-
-### Bulk upload columns
-
-CSV or `.xlsx` first sheet. Headers (case-insensitive):
-
-- `code` (required), `name` (required)
-- `description`, `parentCode`, `valueStream` (optional; value stream matched by code, e.g. `OTC`)
-
-A sample file is at `samples/master-processes-sample.csv`.
-
-## Stubbed / out of scope
-
-- **Excel export layout** — placeholder columns + `_STUB_README` sheet.  
-  **TODO:** replace with the client’s fixed template when provided. Do not treat stub columns as final.
-- Integrations (SharePoint, Confluence, ServiceNow, etc.)
-- OAuth / SSO
-- Deep company restructure rules (open product question)
-
-## Scripts
-
-| Script | Purpose |
-|--------|---------|
-| `npm run dev` | Next.js dev server |
-| `npm run build` / `npm start` | Production build |
-| `npm run seed` | Reset + seed demo data |
-| `npx prisma studio` | Browse SQLite data |
