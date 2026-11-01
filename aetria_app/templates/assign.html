@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Assign · Aetria{% endblock %}
+{% block body_class %}page-assign{% endblock %}
 {% block body %}
 {% set company = (companies | selectattr('id', 'equalto', company_id) | list | first) %}
 {% set stream = (streams | selectattr('id', 'equalto', stream_id) | list | first) %}

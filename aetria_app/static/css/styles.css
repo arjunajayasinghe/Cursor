@@ -139,6 +139,7 @@ h2 { font-size: 1.05rem; }
   cursor: pointer;
 }
 .main { width: min(1080px, calc(100% - 3rem)); margin: 0 auto; padding: 2.2rem 0 3rem; max-width: none; }
+.page-assign .main { width: min(1240px, calc(100% - 2rem)); }
 .page-head { margin-bottom: 0.4rem; }
 .kicker { margin: 0 0 0.45rem; color: var(--navy); font-size: 0.95rem; font-weight: 500; }
 .row-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; }
@@ -193,7 +194,7 @@ input, select, textarea {
   border-radius: 0;
   background: #fbfcfd;
 }
-input:focus, select:focus, textarea:focus { outline: 2px solid #f3ddc8; border-color: var(--teal); background: white; }
+input:focus, select:focus, textarea:focus { outline: 2px solid #f3ddc8; border-color: var(--teal); background-color: white; }
 textarea { resize: vertical; }
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 0.8rem; }
 .row-form { display: flex; gap: 0.5rem; align-items: end; flex-wrap: wrap; }
@@ -246,8 +247,8 @@ textarea { resize: vertical; }
 .tree { max-height: 640px; overflow: auto; }
 .sheet-tool {
   display: grid;
-  grid-template-columns: minmax(8.5rem, 0.85fr) minmax(12.5rem, 1.2fr) minmax(16rem, 1.7fr) minmax(10.5rem, 1fr) minmax(8rem, 0.75fr) minmax(10rem, 1fr) auto;
-  gap: 0.7rem 0.75rem;
+  grid-template-columns: minmax(10rem, 0.9fr) minmax(14.6rem, 1.2fr) minmax(17.4rem, 1.55fr) minmax(14.2rem, 1.15fr) minmax(7rem, 0.6fr) minmax(7.5rem, 0.65fr) auto;
+  gap: 0.7rem 0.85rem;
   align-items: end;
 }
 .sheet-tool label {
@@ -266,11 +267,20 @@ textarea { resize: vertical; }
   padding: 0;
   color: var(--ink);
   font-weight: 500;
-  background: transparent;
+  background-color: transparent;
   border: 0;
   border-bottom: 1px solid #d5dbe3;
   border-radius: 0;
 }
+.sheet-tool select {
+  padding-right: 1.15rem;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.2 L6 6.2 L11 1.2' fill='none' stroke='%236e6e73' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right center;
+  background-size: 0.7rem 0.45rem;
+}
+.sheet-tool select:focus { background-color: transparent; }
 .sheet-actions { display: flex; align-items: end; }
 .sheet-tool .btn { height: 36px; margin: 0; padding: 0; background: transparent; color: var(--navy); }
 .sheet-tool .btn:hover { background: transparent; color: var(--teal-dark); }
@@ -367,7 +377,7 @@ textarea { resize: vertical; }
 .seed { margin-top: 1rem; font-size: 0.86rem; }
 .seed div { margin: 0.15rem 0; }
 
-@media (max-width: 1180px) {
+@media (max-width: 1100px) {
   .sheet-tool { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .assign-suggest { align-items: flex-start; flex-direction: column; }
 }
