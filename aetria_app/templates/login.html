@@ -9,7 +9,7 @@
   <body>
     <main class="login-wrap">
       <div class="card">
-        <p class="eyebrow">Aetria</p>
+        <p class="brand login-brand"><img src="{{ url_for('static', filename='img/aethria-mark.png') }}" alt="" /><strong>AETHRIA</strong></p>
         <h1>Process mapping</h1>
         <p class="lede">Sign in to the workbench.</p>
         {% with messages = get_flashed_messages(with_categories=true) %}

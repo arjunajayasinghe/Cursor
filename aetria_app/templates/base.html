@@ -10,7 +10,8 @@
     <div class="shell">
       <header class="nav">
         <a class="brand" href="{{ url_for('dashboard') }}">
-          <strong>Aetria</strong>
+          <img src="{{ url_for('static', filename='img/aethria-mark.png') }}" alt="" />
+          <strong>AETHRIA</strong>
         </a>
         <nav>
           {% for href, label, key in primary_nav %}
