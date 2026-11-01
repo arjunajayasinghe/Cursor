@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% block title %}Assign · Aetria{% endblock %}
 {% block body %}
+{% set company = (companies | selectattr('id', 'equalto', company_id) | list | first) %}
+{% set stream = (streams | selectattr('id', 'equalto', stream_id) | list | first) %}
 <header class="page-head">
-  <p class="eyebrow">L1–L5</p>
-  <h1>Assign to a company</h1>
-  <p class="lede">Tick a row and everything under it is ticked. Untick one L2, L3, L4, or L5 row and only that row clears. The parent stays ticked while any other row under it remains.</p>
+  <h1>Assign</h1>
+  <p class="lede">{% if company and stream %}{{ company.name }} · {{ stream.name }}. {% endif %}Tick a row and everything under it stays ticked.</p>
 </header>
-<section class="panel">
+<section class="plain">
   <form method="get" class="sheet-tool">
     <label>Company
       <select name="company_id" onchange="this.form.submit()">{% for c in companies %}<option value="{{ c.id }}" {% if c.id == company_id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}</select>
@@ -39,10 +40,6 @@
     {% endfor %}
   </p>
   <div class="assign-suggest">
-  <p class="muted">Suggestions: {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}
-    {% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}
-    · {{ selected|length }} assigned
-  </p>
   <form method="post">
     <input type="hidden" name="company_id" value="{{ company_id }}" />
     <input type="hidden" name="master_id" value="{{ master_id }}" />
@@ -55,7 +52,7 @@
   </form>
   </div>
 </section>
-<section class="panel" style="margin-top:0.75rem">
+<section class="plain" style="margin-top:0.4rem">
   <form method="post">
     <input type="hidden" name="company_id" value="{{ company_id }}" />
     <input type="hidden" name="master_id" value="{{ master_id }}" />
@@ -79,7 +76,7 @@
         <input type="checkbox" name="node_id" value="{{ n.id }}" {% if n.id in selected or (view == 'suggested' and n.id in suggested_ids) %}checked{% endif %} {% if tucked %}disabled{% endif %} />
         <input type="hidden" name="visible_id" value="{{ n.id }}" {% if tucked %}disabled{% endif %} />
         <span class="mono" style="padding-left: {{ n.depth * 14 }}px">{{ n.code }}</span>
-        <span><span class="badge">{{ n.level_label or ('L' ~ n.level) }}</span></span>
+        <span class="level-cell"><span class="badge level">{{ n.level_label or ('L' ~ n.level) }}</span></span>
         <div>
           {{ n.name }}
           {% if n.id in suggested_ids %}<span class="badge">suggested</span>{% endif %}
@@ -93,7 +90,10 @@
       {% endif %}
       {% endfor %}
     </div>
-    <button class="btn" type="submit" style="margin-top:0.8rem">Save assignment</button>
+    <div class="save-row">
+      <button class="btn" type="submit">Save assignment</button>
+      <p class="muted">{{ selected|length }} assigned · Suggestions {% if codes %}{{ codes|join(', ') }}{% else %}none{% endif %}{% if missing %} · Missing in this master: {{ missing|join(', ') }}{% endif %}</p>
+    </div>
   </form>
 </section>
 <script>
