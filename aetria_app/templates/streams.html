@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}Value streams · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Per company</p>
+  <h1>Value streams</h1>
+  <p class="lede">Each company keeps its own streams. Choose how far that stream opens. L1 is the categories. L1 to L3 opens the categories, the process groups, and the processes.</p>
+</header>
+
+<nav class="company-switch">
+  {% for c in companies %}
+  <a class="{% if c.id == company_id %}on{% endif %}" href="{{ url_for('value_streams', company_id=c.id) }}">
+    <b>{{ c.short_name }}</b>
+    <span>{{ c.name }}</span>
+  </a>
+  {% else %}
+  <span class="muted">Add a company first.</span>
+  {% endfor %}
+</nav>
+
+<div class="workbench">
+  <section class="stream-grid">
+    {% for s in streams %}
+    <article class="stream-card">
+      <div class="stream-top">
+        <div>
+          <div class="mono stream-code">{{ s.code }}</div>
+          <h2>{{ s.name }}</h2>
+          {% if s.description %}<p class="muted">{{ s.description }}</p>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('value_stream_delete', stream_id=s.id) }}" onsubmit="return confirm('Remove this value stream?')">
+          <button class="btn tiny danger" type="submit">Delete</button>
+        </form>
+      </div>
+      <form method="post">
+        <input type="hidden" name="action" value="levels" />
+        <input type="hidden" name="company_id" value="{{ company_id }}" />
+        <input type="hidden" name="value_stream_id" value="{{ s.id }}" />
+        <label>Opens through
+          <select name="depth" onchange="this.form.submit()">
+            {% for n in level_numbers %}
+            <option value="{{ n }}" {% if s.depth == n %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
+            {% endfor %}
+          </select>
+        </label>
+      </form>
+      <div class="chip-row">
+        {% for g in suggestions if g.value_stream_id == s.id %}
+        <form method="post" action="{{ url_for('suggestion_delete', suggestion_id=g.id) }}">
+          <input type="hidden" name="company_id" value="{{ company_id }}" />
+          <span class="badge">{{ g.process_code }}</span>
+          <button class="btn tiny danger" type="submit">×</button>
+        </form>
+        {% else %}
+        <span class="muted">No hierarchy IDs yet.</span>
+        {% endfor %}
+      </div>
+      <form method="post" class="inline-add">
+        <input type="hidden" name="action" value="suggestion" />
+        <input type="hidden" name="company_id" value="{{ company_id }}" />
+        <input type="hidden" name="value_stream_id" value="{{ s.id }}" />
+        <input name="process_code" placeholder="Hierarchy ID" required />
+        <button class="btn tiny secondary" type="submit">Add</button>
+      </form>
+    </article>
+    {% else %}
+    <p class="muted">This company has no value streams yet.</p>
+    {% endfor %}
+  </section>
+
+  <aside class="panel composer">
+    <h2>Add a stream</h2>
+    <form method="post">
+      <input type="hidden" name="action" value="stream" />
+      <input type="hidden" name="company_id" value="{{ company_id }}" />
+      <label>Code<input name="code" required placeholder="O2C" /></label>
+      <label>Name<input name="name" required placeholder="Order to Cash" /></label>
+      <label>Description<input name="description" /></label>
+      <label>Opens through
+        <select name="depth">
+          {% for n in level_numbers %}
+          <option value="{{ n }}" {% if n == 5 %}selected{% endif %}>{% if n == 1 %}L1{% else %}L1 to L{{ n }}{% endif %}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <button class="btn" type="submit">Add stream</button>
+    </form>
+    <form method="post" action="{{ url_for('value_stream_upload') }}" enctype="multipart/form-data" class="stack-form">
+      <input type="hidden" name="company_id" value="{{ company_id }}" />
+      <label>Mapping file<input type="file" name="file" accept=".csv,.xlsx" required /></label>
+      <button class="btn secondary" type="submit">Upload mapping</button>
+      <p class="muted">Columns: valueStream, processCode, note</p>
+    </form>
+  </aside>
+</div>
+{% endblock %}
