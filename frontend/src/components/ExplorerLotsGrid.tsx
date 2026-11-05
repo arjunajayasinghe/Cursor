@@ -1,9 +1,10 @@
 import {
-  Autocomplete,
   Chip,
   IconButton,
   Paper,
   Stack,
+  Tab,
+  Tabs,
   Table,
   TableBody,
   TableCell,
@@ -35,8 +36,6 @@ type SortKey =
   | "buyerCode";
 
 type BrokerFilter = "ALL" | (typeof brokers)[number]["code"];
-
-type BrokerOption = { value: BrokerFilter; label: string; disabled?: boolean };
 
 type SearchState = {
   lotNumber: string;
@@ -103,30 +102,14 @@ export function ExplorerLotsGrid({
     return lots;
   }, [lots, mode]);
 
-  const brokerOptions = useMemo<BrokerOption[]>(() => {
+  const brokerCounts = useMemo(() => {
     const counts = new Map<string, number>();
     for (const lot of baseLots) {
       const code = String(lot.broker);
       counts.set(code, (counts.get(code) ?? 0) + 1);
     }
-    return [
-      {
-        value: "ALL",
-        label: `All brokers (${baseLots.length.toLocaleString("en-GB")})`,
-      },
-      ...brokers.map((broker) => {
-        const count = counts.get(broker.code) ?? 0;
-        return {
-          value: broker.code as BrokerFilter,
-          label: `${broker.code} · ${broker.name} (${count.toLocaleString("en-GB")})`,
-          disabled: count === 0,
-        };
-      }),
-    ];
+    return counts;
   }, [baseLots]);
-
-  const selectedBroker =
-    brokerOptions.find((option) => option.value === brokerFilter) ?? brokerOptions[0];
 
   const filtered = useMemo(() => {
     return baseLots.filter((lot) => {
@@ -195,30 +178,34 @@ export function ExplorerLotsGrid({
 
   return (
     <Stack spacing={2}>
+      <Paper sx={{ px: 1 }}>
+        <Tabs
+          value={brokerFilter}
+          onChange={(_, value: BrokerFilter) => {
+            setBrokerFilter(value);
+            setPage(0);
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+          aria-label="Broker filter"
+        >
+          <Tab value="ALL" label={`All (${baseLots.length.toLocaleString("en-GB")})`} />
+          {brokers.map((broker) => {
+            const count = brokerCounts.get(broker.code) ?? 0;
+            return (
+              <Tab
+                key={broker.code}
+                value={broker.code}
+                disabled={count === 0}
+                label={`${broker.code} (${count.toLocaleString("en-GB")})`}
+              />
+            );
+          })}
+        </Tabs>
+      </Paper>
+
       <Paper sx={{ p: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ flexWrap: "wrap", gap: 1.5 }}>
-          <Autocomplete
-            size="small"
-            sx={{ minWidth: 280, flex: 1 }}
-            options={brokerOptions}
-            value={selectedBroker}
-            disableClearable
-            getOptionDisabled={(option) => Boolean(option.disabled)}
-            getOptionLabel={(option) => option.label}
-            isOptionEqualToValue={(option, value) => option.value === value.value}
-            onChange={(_, option) => {
-              setBrokerFilter(option.value);
-              setPage(0);
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Broker"
-                placeholder="All brokers or one…"
-                helperText="All first, then each broker with lot count in brackets"
-              />
-            )}
-          />
           <TextField
             size="small"
             label="Lot number"
