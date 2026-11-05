@@ -485,7 +485,7 @@ export function SalesUploadPage() {
                   </Button>
                 ))}
               {saleId ? (
-                <Button component={RouterLink} to={`/sales/${saleId}`}>
+                <Button component={RouterLink} to={`/auctions/${saleId}`}>
                   Sale with sold prices
                 </Button>
               ) : null}

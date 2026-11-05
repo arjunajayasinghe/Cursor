@@ -487,8 +487,8 @@ export function UploadPage() {
                   </Button>
                 ))}
               {saleId ? (
-                <Button component={RouterLink} to={`/sales/${saleId}`}>
-                  Full sale catalogue
+                <Button component={RouterLink} to={`/auctions/${saleId}`}>
+                  Open auction board
                 </Button>
               ) : null}
               <Button component={RouterLink} to="/uploads">

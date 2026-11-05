@@ -106,8 +106,8 @@ export function UploadsPage() {
             <>
               {" "}
               or the{" "}
-              <Link component={RouterLink} to={`/sales/${ready[0].saleId}`} underline="hover" sx={{ fontWeight: 600 }}>
-                full sale catalogue
+              <Link component={RouterLink} to={`/auctions/${ready[0].saleId}`} underline="hover" sx={{ fontWeight: 600 }}>
+                auction board
               </Link>
             </>
           ) : null}
@@ -218,7 +218,7 @@ export function UploadsPage() {
                       {upload.saleId ? (
                         <Button
                           component={RouterLink}
-                          to={`/sales/${upload.saleId}`}
+                          to={`/auctions/${upload.saleId}`}
                           sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}
                         >
                           {upload.saleNumber}/{upload.year}

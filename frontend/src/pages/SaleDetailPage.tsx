@@ -44,8 +44,8 @@ export function SaleDetailPage() {
   if (sale.isError) {
     return (
       <Stack spacing={2}>
-        <Button onClick={() => navigate("/")} sx={{ alignSelf: "flex-start" }}>
-          All catalogues
+        <Button onClick={() => navigate("/auctions")} sx={{ alignSelf: "flex-start" }}>
+          All auctions
         </Button>
         <Alert severity="error">{sale.error.message}</Alert>
       </Stack>
@@ -65,8 +65,8 @@ export function SaleDetailPage() {
 
   return (
     <Stack spacing={3}>
-      <Button onClick={() => navigate("/")} sx={{ alignSelf: "flex-start" }}>
-        All catalogues
+      <Button onClick={() => navigate("/auctions")} sx={{ alignSelf: "flex-start" }}>
+        All auctions
       </Button>
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>

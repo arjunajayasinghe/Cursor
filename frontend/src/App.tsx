@@ -17,13 +17,16 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<SalesPage />} />
+        <Route index element={<Navigate to="/auctions" replace />} />
+        <Route path="auctions" element={<SalesPage />} />
+        <Route path="auctions/:saleId" element={<SaleDetailPage />} />
+        {/* Keep old sale URLs working */}
         <Route path="sales/:saleId" element={<SaleDetailPage />} />
         <Route path="uploads" element={<UploadsPage />} />
         <Route path="uploads/:uploadId" element={<UploadDetailPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="upload-sales" element={<SalesUploadPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/auctions" replace />} />
       </Route>
     </Routes>
   );
@@ -40,7 +43,7 @@ function KeyGate() {
           Broker desk
         </Typography>
         <Typography variant="h5" sx={{ mb: 1 }}>
-          Tea auction catalogue
+          Tea auction
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Enter the API key the desk gave you. It stays in this browser tab.

@@ -70,8 +70,8 @@ export function UploadDetailPage() {
         <Stack spacing={1} sx={{ alignItems: { md: "flex-end" } }}>
           <StatusChip status={String(detail.status)} />
           {detail.saleId ? (
-            <Button component={RouterLink} to={`/sales/${detail.saleId}`} variant={failed ? "contained" : "text"}>
-              Full sale catalogue
+            <Button component={RouterLink} to={`/auctions/${detail.saleId}`} variant={failed ? "contained" : "text"}>
+              Auction board
             </Button>
           ) : null}
         </Stack>
@@ -86,7 +86,7 @@ export function UploadDetailPage() {
                 Back to uploads
               </Button>
               {detail.saleId ? (
-                <Button color="inherit" size="small" component={RouterLink} to={`/sales/${detail.saleId}`}>
+                <Button color="inherit" size="small" component={RouterLink} to={`/auctions/${detail.saleId}`}>
                   Open sale lots
                 </Button>
               ) : null}
@@ -94,7 +94,7 @@ export function UploadDetailPage() {
           }
         >
           This upload failed, so it has no lot lines. {detail.error ? detail.error : null} Use a completed upload for
-          this broker, or open the full sale catalogue if other brokers already loaded.
+          this broker, or open the auction board if other brokers already loaded.
         </Alert>
       ) : null}
       {detail.status === "Pending" || detail.status === "Processing" ? (
