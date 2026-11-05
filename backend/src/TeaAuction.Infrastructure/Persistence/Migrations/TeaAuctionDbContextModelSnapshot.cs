@@ -39,6 +39,18 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("broker");
 
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("category");
+
+                    b.Property<string>("FactoryCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("factory_code");
+
                     b.Property<string>("GardenMark")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -61,14 +73,37 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("lot_number");
 
+                    b.Property<decimal?>("NetPerBagKg")
+                        .HasPrecision(12, 3)
+                        .HasColumnType("numeric(12,3)")
+                        .HasColumnName("net_per_bag_kg");
+
                     b.Property<decimal>("NetWeightKg")
                         .HasPrecision(12, 3)
                         .HasColumnType("numeric(12,3)")
                         .HasColumnName("net_weight_kg");
 
+                    b.Property<string>("PackageType")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)")
+                        .HasColumnName("package_type");
+
                     b.Property<Guid>("SaleId")
                         .HasColumnType("uuid")
                         .HasColumnName("sale_id");
+
+                    b.Property<string>("SellingMark")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("selling_mark");
+
+                    b.Property<string>("SourceLine")
+                        .IsRequired()
+                        .HasMaxLength(400)
+                        .HasColumnType("character varying(400)")
+                        .HasColumnName("source_line");
 
                     b.Property<Guid?>("UploadBatchId")
                         .HasColumnType("uuid")
@@ -78,6 +113,12 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
                         .HasColumnName("valuation_per_kg");
+
+                    b.Property<string>("WarehouseOrBasis")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("warehouse_or_basis");
 
                     b.HasKey("Id");
 

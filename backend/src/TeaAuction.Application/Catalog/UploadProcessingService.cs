@@ -113,12 +113,19 @@ public sealed class UploadProcessingService(
                 UploadBatchId = batch.Id,
                 Broker = batch.Broker,
                 LotNumber = row.LotNumber,
+                FactoryCode = row.FactoryCode.Trim(),
                 GardenMark = row.GardenMark.Trim(),
                 InvoiceNumber = row.InvoiceNumber.Trim(),
                 Grade = row.Grade.Trim(),
                 Bags = row.Bags,
+                PackageType = row.PackageType.Trim(),
+                NetPerBagKg = row.NetPerBagKg,
                 NetWeightKg = row.NetWeightKg,
-                ValuationPerKg = row.ValuationPerKg
+                SellingMark = row.SellingMark.Trim(),
+                WarehouseOrBasis = row.WarehouseOrBasis.Trim(),
+                Category = row.Category.Trim(),
+                ValuationPerKg = row.ValuationPerKg,
+                SourceLine = Truncate(row.SourceLine.Trim(), 400)
             });
         }
 
@@ -171,5 +178,6 @@ public sealed class UploadProcessingService(
         }
     }
 
-    private static string Truncate(string error) => error.Length <= 2000 ? error : error[..2000];
+    private static string Truncate(string value, int max = 2000) =>
+        value.Length <= max ? value : value[..max];
 }

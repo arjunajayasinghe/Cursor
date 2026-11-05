@@ -24,12 +24,19 @@ public static class SaleMapper
         lot.Id,
         lot.Broker,
         lot.LotNumber,
+        lot.FactoryCode,
         lot.GardenMark,
         lot.InvoiceNumber,
         lot.Grade,
         lot.Bags,
+        lot.PackageType,
+        lot.NetPerBagKg,
         lot.NetWeightKg,
-        lot.ValuationPerKg);
+        lot.SellingMark,
+        lot.WarehouseOrBasis,
+        lot.Category,
+        lot.ValuationPerKg,
+        lot.SourceLine);
 
     public static UploadBatchDto ToUpload(UploadBatch batch) => new(
         batch.Id,

@@ -108,15 +108,23 @@ export interface components {
             broker: components["schemas"]["BrokerCode"];
             /** Format: int32 */
             lotNumber: number | string;
+            factoryCode: string;
             gardenMark: string;
             invoiceNumber: string;
             grade: string;
             /** Format: int32 */
             bags: number | string;
+            packageType: string;
+            /** Format: double */
+            netPerBagKg: null | number | string;
             /** Format: double */
             netWeightKg: number | string;
+            sellingMark: string;
+            warehouseOrBasis: string;
+            category: string;
             /** Format: double */
             valuationPerKg: null | number | string;
+            sourceLine: string;
         };
         SaleDetailDto: {
             /** Format: uuid */

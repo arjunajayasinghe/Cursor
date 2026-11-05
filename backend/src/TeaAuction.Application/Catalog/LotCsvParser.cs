@@ -133,14 +133,33 @@ public sealed class LotCsvParser : ILotCsvParser
         row = new LotCsvRow(
             record.LineNumber,
             lotNumber,
+            Optional(record, indexes, "factorycode"),
             Field(record, indexes, "gardenmark"),
             Field(record, indexes, "invoicenumber"),
             Field(record, indexes, "grade"),
             bags,
+            string.IsNullOrWhiteSpace(Optional(record, indexes, "packagetype"))
+                ? "B"
+                : Optional(record, indexes, "packagetype"),
+            OptionalDecimal(record, indexes, "netperbagkg"),
             netWeightKg,
-            valuation);
+            Optional(record, indexes, "sellingmark"),
+            Optional(record, indexes, "warehouseorbasis"),
+            Optional(record, indexes, "category"),
+            valuation,
+            string.Join(",", record.Fields));
         error = null;
         return true;
+    }
+
+    private static string Optional(CsvRecord record, IReadOnlyDictionary<string, int> indexes, string name) =>
+        indexes.TryGetValue(name, out var index) && index < record.Fields.Count ? record.Fields[index] : "";
+
+    private static decimal? OptionalDecimal(CsvRecord record, IReadOnlyDictionary<string, int> indexes, string name)
+    {
+        var raw = Optional(record, indexes, name);
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        return decimal.TryParse(raw, NumberStyles.Number, CultureInfo.InvariantCulture, out var parsed) ? parsed : null;
     }
 
     private static string Field(CsvRecord record, IReadOnlyDictionary<string, int> indexes, string name) =>

@@ -50,11 +50,18 @@ public sealed class SampleDataSeeder(TeaAuctionDbContext db, ILogger<SampleDataS
         SaleId = saleId,
         Broker = broker,
         LotNumber = lotNumber,
+        FactoryCode = "",
         GardenMark = garden,
         InvoiceNumber = invoice,
         Grade = grade,
         Bags = bags,
+        PackageType = "B",
+        NetPerBagKg = bags > 0 ? Math.Round(netWeightKg / bags, 3) : null,
         NetWeightKg = netWeightKg,
-        ValuationPerKg = valuation
+        SellingMark = "",
+        WarehouseOrBasis = "",
+        Category = "",
+        ValuationPerKg = valuation,
+        SourceLine = ""
     };
 }

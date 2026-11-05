@@ -16,12 +16,19 @@ public sealed record LotDto(
     Guid Id,
     BrokerCode Broker,
     int LotNumber,
+    string FactoryCode,
     string GardenMark,
     string InvoiceNumber,
     string Grade,
     int Bags,
+    string PackageType,
+    decimal? NetPerBagKg,
     decimal NetWeightKg,
-    decimal? ValuationPerKg);
+    string SellingMark,
+    string WarehouseOrBasis,
+    string Category,
+    decimal? ValuationPerKg,
+    string SourceLine);
 
 public sealed record UploadBatchDto(
     Guid Id,

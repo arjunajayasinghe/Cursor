@@ -16,6 +16,8 @@ public sealed class Lot
 
     public int LotNumber { get; set; }
 
+    public string FactoryCode { get; set; } = "";
+
     public string GardenMark { get; set; } = "";
 
     public string InvoiceNumber { get; set; } = "";
@@ -24,7 +26,19 @@ public sealed class Lot
 
     public int Bags { get; set; }
 
+    public string PackageType { get; set; } = "";
+
+    public decimal? NetPerBagKg { get; set; }
+
     public decimal NetWeightKg { get; set; }
 
+    public string SellingMark { get; set; } = "";
+
+    public string WarehouseOrBasis { get; set; } = "";
+
+    public string Category { get; set; } = "";
+
     public decimal? ValuationPerKg { get; set; }
+
+    public string SourceLine { get; set; } = "";
 }

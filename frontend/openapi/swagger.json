@@ -236,12 +236,19 @@
           "id",
           "broker",
           "lotNumber",
+          "factoryCode",
           "gardenMark",
           "invoiceNumber",
           "grade",
           "bags",
+          "packageType",
+          "netPerBagKg",
           "netWeightKg",
-          "valuationPerKg"
+          "sellingMark",
+          "warehouseOrBasis",
+          "category",
+          "valuationPerKg",
+          "sourceLine"
         ],
         "type": "object",
         "properties": {
@@ -260,6 +267,9 @@
             ],
             "format": "int32"
           },
+          "factoryCode": {
+            "type": "string"
+          },
           "gardenMark": {
             "type": "string"
           },
@@ -277,6 +287,18 @@
             ],
             "format": "int32"
           },
+          "packageType": {
+            "type": "string"
+          },
+          "netPerBagKg": {
+            "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
+            "type": [
+              "null",
+              "number",
+              "string"
+            ],
+            "format": "double"
+          },
           "netWeightKg": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
             "type": [
@@ -284,6 +306,15 @@
               "string"
             ],
             "format": "double"
+          },
+          "sellingMark": {
+            "type": "string"
+          },
+          "warehouseOrBasis": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
           },
           "valuationPerKg": {
             "pattern": "^-?(?:0|[1-9]\\d*)(?:\\.\\d+)?$",
@@ -293,6 +324,9 @@
               "string"
             ],
             "format": "double"
+          },
+          "sourceLine": {
+            "type": "string"
           }
         }
       },

@@ -39,9 +39,15 @@ export function CatalogueLotsTable({
       const haystack = [
         String(lot.broker),
         String(lot.lotNumber),
+        lot.factoryCode,
         lot.gardenMark,
         lot.invoiceNumber,
         lot.grade,
+        lot.packageType,
+        lot.sellingMark,
+        lot.warehouseOrBasis,
+        lot.category,
+        lot.sourceLine,
       ]
         .join(" ")
         .toLowerCase();
@@ -57,13 +63,13 @@ export function CatalogueLotsTable({
         <TextField
           size="small"
           label="Search lots"
-          placeholder="Garden, invoice, grade, lot…"
+          placeholder="Factory, garden, invoice, grade, mark…"
           value={query}
           onChange={(event) => {
             setQuery(event.target.value);
             setPage(0);
           }}
-          sx={{ maxWidth: 360, width: "100%" }}
+          sx={{ maxWidth: 420, width: "100%" }}
         />
         <Typography variant="body2" color="text.secondary" sx={{ alignSelf: { sm: "center" } }}>
           Showing {filtered.length.toLocaleString("en-GB")} of {lots.length.toLocaleString("en-GB")} lots
@@ -76,17 +82,24 @@ export function CatalogueLotsTable({
         </Paper>
       ) : (
         <Paper sx={{ overflow: "auto" }}>
-          <Table size="small">
+          <Table size="small" stickyHeader>
             <TableHead>
               <TableRow>
                 {showBroker ? <TableCell>Broker</TableCell> : null}
                 <TableCell>Lot</TableCell>
-                <TableCell>Garden mark</TableCell>
+                <TableCell>Factory</TableCell>
+                <TableCell>Garden</TableCell>
                 <TableCell>Invoice</TableCell>
                 <TableCell>Grade</TableCell>
                 <TableCell align="right">Bags</TableCell>
+                <TableCell>Pkg</TableCell>
+                <TableCell align="right">Net / bag</TableCell>
                 <TableCell align="right">Net kg</TableCell>
+                <TableCell>Selling mark</TableCell>
+                <TableCell>Warehouse / basis</TableCell>
+                <TableCell>Category</TableCell>
                 <TableCell align="right">Valuation / kg {currency ? `(${currency})` : ""}</TableCell>
+                <TableCell>Source line</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -94,14 +107,33 @@ export function CatalogueLotsTable({
                 <TableRow key={lot.id} hover>
                   {showBroker ? <TableCell>{String(lot.broker)}</TableCell> : null}
                   <TableCell>{lot.lotNumber}</TableCell>
+                  <TableCell>{blank(lot.factoryCode)}</TableCell>
                   <TableCell>{lot.gardenMark}</TableCell>
                   <TableCell>{lot.invoiceNumber}</TableCell>
                   <TableCell>
                     <Chip size="small" variant="outlined" label={lot.grade} />
                   </TableCell>
                   <TableCell align="right">{lot.bags}</TableCell>
+                  <TableCell>{blank(lot.packageType)}</TableCell>
+                  <TableCell align="right">{formatQuantity(lot.netPerBagKg, 3)}</TableCell>
                   <TableCell align="right">{formatQuantity(lot.netWeightKg, 3)}</TableCell>
+                  <TableCell>{blank(lot.sellingMark)}</TableCell>
+                  <TableCell sx={{ minWidth: 160 }}>{blank(lot.warehouseOrBasis)}</TableCell>
+                  <TableCell>{blank(lot.category)}</TableCell>
                   <TableCell align="right">{formatQuantity(lot.valuationPerKg, 2)}</TableCell>
+                  <TableCell
+                    sx={{
+                      maxWidth: 280,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
+                      fontSize: "0.75rem",
+                    }}
+                    title={lot.sourceLine || undefined}
+                  >
+                    {blank(lot.sourceLine)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -122,4 +154,8 @@ export function CatalogueLotsTable({
       )}
     </Stack>
   );
+}
+
+function blank(value: string | null | undefined) {
+  return value && value.trim().length > 0 ? value : "—";
 }

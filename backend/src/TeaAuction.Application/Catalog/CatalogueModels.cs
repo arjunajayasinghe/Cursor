@@ -20,12 +20,19 @@ public sealed record CreateUploadCommand
 public sealed record LotCsvRow(
     int LineNumber,
     int LotNumber,
+    string FactoryCode,
     string GardenMark,
     string InvoiceNumber,
     string Grade,
     int Bags,
+    string PackageType,
+    decimal? NetPerBagKg,
     decimal NetWeightKg,
-    decimal? ValuationPerKg);
+    string SellingMark,
+    string WarehouseOrBasis,
+    string Category,
+    decimal? ValuationPerKg,
+    string SourceLine);
 
 public sealed record LotCsvParseResult(IReadOnlyList<LotCsvRow> Rows, IReadOnlyList<string> Errors);
 

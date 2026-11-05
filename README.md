@@ -91,7 +91,7 @@ cd frontend && npm run generate:api
 
 ## Catalogue files
 
-These uploads are **pre-auction catalogues** (offer books). Set the sale header once, drop all eight broker files in one go (filenames like `AS_-_SC_03.txt` are auto-matched), then click **Upload all 8**. Open an upload or the sale to browse lot details (garden, invoice, grade, bags, net kg). After the auction, broker **sales result** files will be a separate upload step.
+These uploads are **pre-auction catalogues** (offer books). Set the sale header once, drop all eight broker files in one go (filenames like `AS_-_SC_03.txt` are auto-matched), then click **Upload all 8**. Open an upload or the sale to browse the full catalogue line: factory, garden, invoice, grade, bags, package type, net/bag, net kg, selling mark, warehouse/basis, category, and the source row. After the auction, broker **sales result** files will be a separate upload step.
 
 Broker `.txt` fixed-width files and `.csv` files are accepted.
 
