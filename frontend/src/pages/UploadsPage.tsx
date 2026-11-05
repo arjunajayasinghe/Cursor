@@ -116,23 +116,21 @@ export function UploadsPage() {
       ) : null}
 
       {failed.length > 0 ? (
-        <Alert
-          severity="warning"
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              variant="outlined"
-              onClick={() => setShowFailed((current) => !current)}
-              aria-pressed={showFailed}
-            >
-              {showFailed ? "Hide failed" : "Show failed"}
-            </Button>
-          }
-        >
-          {failed.length} failed upload{failed.length === 1 ? "" : "s"} (0 lots). These do not contain catalogue
-          details — use a completed row for the same broker instead.
-        </Alert>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { sm: "center" } }}>
+          <Alert severity="warning" sx={{ flex: 1 }}>
+            {failed.length} failed upload{failed.length === 1 ? "" : "s"} (0 lots). These do not contain catalogue
+            details — use a completed row for the same broker instead.
+          </Alert>
+          <Button
+            id="toggle-failed-uploads"
+            variant={showFailed ? "contained" : "outlined"}
+            color="warning"
+            onClick={() => setShowFailed((current) => !current)}
+            aria-pressed={showFailed}
+          >
+            {showFailed ? "Hide failed" : "Show failed"}
+          </Button>
+        </Stack>
       ) : null}
 
       {uploads.isPending ? <CircularProgress aria-label="Loading uploads" /> : null}
