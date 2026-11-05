@@ -43,6 +43,8 @@ export function UploadDetailPage() {
   const lots = detail.lots ?? [];
   const totalBags = lots.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
   const totalKg = lots.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
+  const isSales = String(detail.kind) === "PostAuctionSales";
+  const failed = detail.status === "Failed";
 
   return (
     <Stack spacing={3}>
@@ -53,7 +55,7 @@ export function UploadDetailPage() {
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
         <div>
           <Typography variant="overline" color="text.secondary">
-            Pre-auction catalogue · {detail.centre}
+            {isSales ? "Post-auction sales" : "Pre-auction catalogue"} · {detail.centre}
           </Typography>
           <Typography variant="h4">
             {String(detail.broker)} · {brokerName(String(detail.broker))}
@@ -68,16 +70,37 @@ export function UploadDetailPage() {
         <Stack spacing={1} sx={{ alignItems: { md: "flex-end" } }}>
           <StatusChip status={String(detail.status)} />
           {detail.saleId ? (
-            <Button component={RouterLink} to={`/sales/${detail.saleId}`}>
+            <Button component={RouterLink} to={`/sales/${detail.saleId}`} variant={failed ? "contained" : "text"}>
               Full sale catalogue
             </Button>
           ) : null}
         </Stack>
       </Stack>
 
-      {detail.status === "Failed" && detail.error ? <Alert severity="error">{detail.error}</Alert> : null}
+      {failed ? (
+        <Alert
+          severity="error"
+          action={
+            <Stack direction="row" spacing={1}>
+              <Button color="inherit" size="small" component={RouterLink} to="/uploads">
+                Back to uploads
+              </Button>
+              {detail.saleId ? (
+                <Button color="inherit" size="small" component={RouterLink} to={`/sales/${detail.saleId}`}>
+                  Open sale lots
+                </Button>
+              ) : null}
+            </Stack>
+          }
+        >
+          This upload failed, so it has no lot lines. {detail.error ? detail.error : null} Use a completed upload for
+          this broker, or open the full sale catalogue if other brokers already loaded.
+        </Alert>
+      ) : null}
       {detail.status === "Pending" || detail.status === "Processing" ? (
-        <Alert severity="info">Catalogue is still importing. Lot lines will appear when processing finishes.</Alert>
+        <Alert severity="info">
+          {isSales ? "Sales file" : "Catalogue"} is still importing. Lot lines will appear when processing finishes.
+        </Alert>
       ) : null}
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
@@ -88,22 +111,28 @@ export function UploadDetailPage() {
 
       <div>
         <Typography variant="h6" sx={{ mb: 0.5 }}>
-          Catalogue lots
+          {isSales ? "Sales results" : "Catalogue lots"}
         </Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>
-          Pre-auction offer book for this broker. Sold price and buyer arrive later with post-auction sales files.
+          {failed
+            ? "No lots were stored from this failed file."
+            : isSales
+              ? "Sold price and buyer applied onto matching catalogue lots."
+              : "Pre-auction offer book for this broker. Sold price and buyer arrive later with post-auction sales files."}
         </Typography>
         <CatalogueLotsTable
           lots={lots}
           currency={currency}
           showSalesResults={
-            String(detail.kind) === "PostAuctionSales" ||
+            isSales ||
             lots.some((lot) => lot.soldPricePerKg != null || (lot.buyerCode && String(lot.buyerCode).trim()))
           }
           emptyMessage={
-            detail.status === "Completed"
-              ? "No lots were linked from this file."
-              : "Lots are not available yet."
+            failed
+              ? "This upload failed — there are no lot details here."
+              : detail.status === "Completed"
+                ? "No lots were linked from this file."
+                : "Lots are not available yet."
           }
         />
       </div>

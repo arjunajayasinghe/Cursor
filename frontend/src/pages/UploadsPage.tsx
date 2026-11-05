@@ -2,8 +2,11 @@ import {
   Alert,
   Button,
   CircularProgress,
+  FormControlLabel,
+  Link,
   Paper,
   Stack,
+  Switch,
   Table,
   TableBody,
   TableCell,
@@ -12,12 +15,32 @@ import {
   Typography,
 } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { Link as RouterLink } from "react-router-dom";
-import { listUploads } from "../api/client";
+import { useMemo, useState } from "react";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
+import { listUploads, type UploadBatch } from "../api/client";
 import { brokerName, formatSaleDate } from "../catalogue";
 import { StatusChip } from "./StatusChip";
 
+function isReady(upload: UploadBatch) {
+  return upload.status === "Completed" && Number(upload.lotCount) > 0;
+}
+
+function isFailed(upload: UploadBatch) {
+  return upload.status === "Failed";
+}
+
+function openLabel(upload: UploadBatch) {
+  if (isReady(upload)) {
+    return String(upload.kind) === "PostAuctionSales" ? "View sales" : "View catalogue";
+  }
+  if (isFailed(upload)) return "View error";
+  if (upload.status === "Pending" || upload.status === "Processing") return "Processing…";
+  return "Open";
+}
+
 export function UploadsPage() {
+  const navigate = useNavigate();
+  const [showFailed, setShowFailed] = useState(false);
   const uploads = useQuery({
     queryKey: ["uploads"],
     queryFn: listUploads,
@@ -28,7 +51,24 @@ export function UploadsPage() {
     },
   });
 
-  const completed = uploads.data?.filter((row) => row.status === "Completed" && Number(row.lotCount) > 0) ?? [];
+  const ready = useMemo(
+    () => uploads.data?.filter(isReady) ?? [],
+    [uploads.data],
+  );
+  const failed = useMemo(
+    () => uploads.data?.filter(isFailed) ?? [],
+    [uploads.data],
+  );
+  const visible = useMemo(() => {
+    const rows = uploads.data ?? [];
+    if (showFailed) return rows;
+    return rows.filter((row) => !isFailed(row));
+  }, [uploads.data, showFailed]);
+
+  function openUpload(upload: UploadBatch) {
+    if (upload.status === "Pending" || upload.status === "Processing") return;
+    navigate(`/uploads/${upload.id}`);
+  }
 
   return (
     <Stack spacing={3}>
@@ -38,29 +78,65 @@ export function UploadsPage() {
         sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}
       >
         <div>
-          <Typography variant="h4">Pre-auction uploads</Typography>
+          <Typography variant="h4">Uploads</Typography>
           <Typography color="text.secondary">
-            Click <strong>View catalogue</strong> on a completed upload to open every lot line from that broker file.
+            Open a completed row to see every lot from that broker file. Failed attempts are hidden by default.
           </Typography>
         </div>
-        <Button variant="contained" component={RouterLink} to="/upload">
-          Upload all 8 brokers
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" component={RouterLink} to="/upload-sales">
+            Upload sales
+          </Button>
+          <Button variant="contained" component={RouterLink} to="/upload">
+            Upload catalogues
+          </Button>
+        </Stack>
       </Stack>
 
-      {completed.length > 0 ? (
-        <Alert severity="info">
-          {completed.length} catalogue{completed.length === 1 ? "" : "s"} ready with lot details. Open any of them below —
-          for example{" "}
-          <Button
+      {ready.length > 0 ? (
+        <Alert severity="success">
+          {ready.length} file{ready.length === 1 ? "" : "s"} ready with lot details. Start with{" "}
+          <Link
             component={RouterLink}
-            to={`/uploads/${completed[0].id}`}
-            size="small"
-            sx={{ verticalAlign: "baseline", textTransform: "none" }}
+            to={`/uploads/${ready[0].id}`}
+            underline="hover"
+            sx={{ fontWeight: 600 }}
           >
-            {String(completed[0].broker)} sale {completed[0].saleNumber}/{completed[0].year}
-          </Button>
+            {String(ready[0].broker)} sale {ready[0].saleNumber}/{ready[0].year}
+          </Link>
+          {ready[0].saleId ? (
+            <>
+              {" "}
+              or the{" "}
+              <Link component={RouterLink} to={`/sales/${ready[0].saleId}`} underline="hover" sx={{ fontWeight: 600 }}>
+                full sale catalogue
+              </Link>
+            </>
+          ) : null}
           .
+        </Alert>
+      ) : null}
+
+      {failed.length > 0 ? (
+        <Alert
+          severity="warning"
+          action={
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={showFailed}
+                  onChange={(_, checked) => setShowFailed(checked)}
+                  slotProps={{ input: { "aria-label": "Show failed uploads" } }}
+                />
+              }
+              label="Show failed"
+              sx={{ mr: 0, whiteSpace: "nowrap" }}
+            />
+          }
+        >
+          {failed.length} failed upload{failed.length === 1 ? "" : "s"} (0 lots). These do not contain catalogue
+          details — use a completed row for the same broker instead.
         </Alert>
       ) : null}
 
@@ -77,7 +153,15 @@ export function UploadsPage() {
         </Paper>
       ) : null}
 
-      {uploads.data && uploads.data.length > 0 ? (
+      {uploads.data && uploads.data.length > 0 && visible.length === 0 ? (
+        <Paper sx={{ p: 4 }}>
+          <Typography>
+            Only failed uploads are on file. Turn on <strong>Show failed</strong> above, or upload catalogues again.
+          </Typography>
+        </Paper>
+      ) : null}
+
+      {visible.length > 0 ? (
         <Paper sx={{ overflow: "auto" }}>
           <Table>
             <TableHead>
@@ -96,23 +180,32 @@ export function UploadsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {uploads.data.map((upload) => {
-                const canOpen = upload.status === "Completed" && Number(upload.lotCount) > 0;
+              {visible.map((upload) => {
+                const readyRow = isReady(upload);
+                const failedRow = isFailed(upload);
+                const busy = upload.status === "Pending" || upload.status === "Processing";
                 return (
-                  <TableRow key={upload.id} hover>
-                    <TableCell>
+                  <TableRow
+                    key={upload.id}
+                    hover={!busy}
+                    selected={readyRow}
+                    sx={{
+                      cursor: busy ? "default" : "pointer",
+                      opacity: failedRow ? 0.72 : 1,
+                      bgcolor: failedRow ? "rgba(176, 0, 32, 0.04)" : undefined,
+                    }}
+                    onClick={() => openUpload(upload)}
+                  >
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       <Button
-                        variant={canOpen ? "contained" : "outlined"}
+                        variant={readyRow ? "contained" : "outlined"}
+                        color={failedRow ? "error" : "primary"}
                         size="small"
+                        disabled={busy}
                         component={RouterLink}
                         to={`/uploads/${upload.id}`}
-                        disabled={upload.status === "Pending" || upload.status === "Processing"}
                       >
-                        {canOpen
-                          ? String(upload.kind) === "PostAuctionSales"
-                            ? "View sales"
-                            : "View catalogue"
-                          : "Open"}
+                        {openLabel(upload)}
                       </Button>
                     </TableCell>
                     <TableCell>
@@ -128,7 +221,7 @@ export function UploadsPage() {
                       }).format(new Date(upload.createdAt))}
                     </TableCell>
                     <TableCell>{brokerName(String(upload.broker))}</TableCell>
-                    <TableCell>
+                    <TableCell onClick={(event) => event.stopPropagation()}>
                       {upload.saleId ? (
                         <Button
                           component={RouterLink}
@@ -143,11 +236,7 @@ export function UploadsPage() {
                     </TableCell>
                     <TableCell>{upload.centre}</TableCell>
                     <TableCell>{formatSaleDate(upload.saleDate)}</TableCell>
-                    <TableCell>
-                      <Button component={RouterLink} to={`/uploads/${upload.id}`} sx={{ textTransform: "none" }}>
-                        {upload.originalFileName}
-                      </Button>
-                    </TableCell>
+                    <TableCell sx={{ maxWidth: 220, whiteSpace: "normal" }}>{upload.originalFileName}</TableCell>
                     <TableCell>
                       <StatusChip status={String(upload.status)} />
                     </TableCell>
