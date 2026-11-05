@@ -11,12 +11,15 @@ export function SalesPage() {
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}>
         <BoxHeading
-          title="Pre-auction catalogues"
-          lede="Open a sale for the combined offer book, or go to Uploads → View catalogue for one broker file."
+          title="Auction catalogues"
+          lede="Open a sale for the auction view (all brokers or one). Sales files add sold price and buyer on the same lots."
         />
         <Stack direction="row" spacing={1}>
           <Button variant="outlined" component={RouterLink} to="/uploads">
             Uploads
+          </Button>
+          <Button variant="outlined" component={RouterLink} to="/upload-sales">
+            Upload sales
           </Button>
           <Button variant="contained" component={RouterLink} to="/upload">
             Upload catalogues
@@ -63,7 +66,7 @@ export function SalesPage() {
                   <TableCell align="right">{sale.lotCount}</TableCell>
                   <TableCell align="right">
                     <Button variant="contained" size="small" component={RouterLink} to={`/sales/${sale.id}`}>
-                      View lots
+                      Auction view
                     </Button>
                   </TableCell>
                 </TableRow>
