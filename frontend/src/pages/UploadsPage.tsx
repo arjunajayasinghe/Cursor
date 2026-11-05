@@ -36,8 +36,10 @@ export function UploadsPage() {
         sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}
       >
         <div>
-          <Typography variant="h4">Uploads</Typography>
-          <Typography color="text.secondary">Catalogue files received and their processing status.</Typography>
+          <Typography variant="h4">Pre-auction uploads</Typography>
+          <Typography color="text.secondary">
+            Broker catalogue files received for each sale. Open a row to see the imported lot lines.
+          </Typography>
         </div>
         <Button variant="contained" component={RouterLink} to="/upload">
           Upload all 8 brokers
@@ -101,7 +103,11 @@ export function UploadsPage() {
                   </TableCell>
                   <TableCell>{upload.centre}</TableCell>
                   <TableCell>{formatSaleDate(upload.saleDate)}</TableCell>
-                  <TableCell>{upload.originalFileName}</TableCell>
+                  <TableCell>
+                    <Button component={RouterLink} to={`/uploads/${upload.id}`}>
+                      {upload.originalFileName}
+                    </Button>
+                  </TableCell>
                   <TableCell>
                     <StatusChip status={String(upload.status)} />
                   </TableCell>

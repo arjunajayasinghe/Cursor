@@ -10,9 +10,12 @@ export function SalesPage() {
   return (
     <Stack spacing={3}>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}>
-        <BoxHeading title="Sales" lede="Catalogues accepted into the book." />
+        <BoxHeading
+          title="Pre-auction catalogues"
+          lede="Broker offer books accepted for each sale. Open a sale to browse lot details."
+        />
         <Button variant="contained" component={RouterLink} to="/upload">
-          Upload a catalogue
+          Upload catalogues
         </Button>
       </Stack>
       {sales.isPending ? <CircularProgress aria-label="Loading sales" /> : null}
@@ -23,7 +26,7 @@ export function SalesPage() {
       ) : null}
       {sales.data && sales.data.length === 0 ? (
         <Paper sx={{ p: 4 }}>
-          <Typography>No catalogues yet. Upload a sale to open the book.</Typography>
+          <Typography>No pre-auction catalogues yet. Upload the eight broker files to open a sale.</Typography>
         </Paper>
       ) : null}
       {sales.data && sales.data.length > 0 ? (

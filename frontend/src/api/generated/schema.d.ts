@@ -79,7 +79,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the status of a catalogue upload */
+        /** Get a pre-auction catalogue upload and its lots */
         get: operations["GetUpload"];
         put?: never;
         post?: never;
@@ -178,6 +178,29 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             processedAt: null | string;
+        };
+        UploadDetailDto: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            saleId: null | string;
+            saleNumber: string;
+            /** Format: int32 */
+            year: number | string;
+            centre: components["schemas"]["AuctionCentre"];
+            /** Format: date */
+            saleDate: string;
+            broker: components["schemas"]["BrokerCode"];
+            status: components["schemas"]["UploadStatus"];
+            originalFileName: string;
+            /** Format: int32 */
+            lotCount: number | string;
+            error: null | string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            processedAt: null | string;
+            lots: components["schemas"]["LotDto"][];
         };
         UploadForm: {
             saleNumber?: string;
@@ -338,7 +361,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UploadBatchDto"];
+                    "application/json": components["schemas"]["UploadDetailDto"];
                 };
             };
             /** @description Not Found */

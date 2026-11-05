@@ -24,6 +24,11 @@ public sealed class UploadBatchRepository(TeaAuctionDbContext db) : IUploadBatch
     public Task<UploadBatch?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.UploadBatches.AsNoTracking().FirstOrDefaultAsync(batch => batch.Id == id, cancellationToken);
 
+    public Task<UploadBatch?> GetWithLotsAsync(Guid id, CancellationToken cancellationToken) =>
+        db.UploadBatches.AsNoTracking()
+            .Include(batch => batch.Lots)
+            .FirstOrDefaultAsync(batch => batch.Id == id, cancellationToken);
+
     public async Task MarkFailedAsync(Guid id, string error, CancellationToken cancellationToken)
     {
         db.ChangeTracker.Clear();

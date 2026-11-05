@@ -207,9 +207,10 @@ export function UploadPage() {
   return (
     <Stack spacing={3}>
       <div>
-        <Typography variant="h4">Upload all 8 brokers</Typography>
+        <Typography variant="h4">Upload pre-auction catalogues</Typography>
         <Typography color="text.secondary">
-          Set the sale once, drop all eight catalogues in one go, then send them together.
+          Set the sale once, drop all eight broker offer books in one go, then open each catalogue to review lots.
+          After the auction you will upload sales result files separately.
         </Typography>
       </div>
 
@@ -477,16 +478,23 @@ export function UploadPage() {
                 </Stack>
               );
             })}
-            {saleId ? (
-              <Stack direction="row" spacing={1}>
+            <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+              {batchRows
+                .filter((row) => row.accepted?.id)
+                .map((row) => (
+                  <Button key={row.broker} component={RouterLink} to={`/uploads/${row.accepted!.id}`}>
+                    View {row.broker} catalogue
+                  </Button>
+                ))}
+              {saleId ? (
                 <Button component={RouterLink} to={`/sales/${saleId}`}>
-                  View sale
+                  Full sale catalogue
                 </Button>
-                <Button component={RouterLink} to="/uploads">
-                  All uploads
-                </Button>
-              </Stack>
-            ) : null}
+              ) : null}
+              <Button component={RouterLink} to="/uploads">
+                All uploads
+              </Button>
+            </Stack>
           </Stack>
         </Paper>
       ) : null}

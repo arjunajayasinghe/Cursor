@@ -51,4 +51,20 @@ public sealed record SaleDetailDto(
 
 public sealed record UploadAcceptedDto(Guid Id, UploadStatus Status, Guid? SaleId);
 
+public sealed record UploadDetailDto(
+    Guid Id,
+    Guid? SaleId,
+    string SaleNumber,
+    int Year,
+    AuctionCentre Centre,
+    DateOnly SaleDate,
+    BrokerCode Broker,
+    UploadStatus Status,
+    string OriginalFileName,
+    int LotCount,
+    string? Error,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? ProcessedAt,
+    IReadOnlyList<LotDto> Lots);
+
 public sealed record ErrorResponse(IReadOnlyList<string> Errors);

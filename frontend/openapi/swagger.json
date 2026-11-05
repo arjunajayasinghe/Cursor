@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "http://127.0.0.1:8080/"
+      "url": "http://localhost:8080/"
     }
   ],
   "paths": {
@@ -156,7 +156,7 @@
         "tags": [
           "Uploads"
         ],
-        "summary": "Get the status of a catalogue upload",
+        "summary": "Get a pre-auction catalogue upload and its lots",
         "operationId": "GetUpload",
         "parameters": [
           {
@@ -175,7 +175,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/UploadBatchDto"
+                  "$ref": "#/components/schemas/UploadDetailDto"
                 }
               }
             }
@@ -516,6 +516,96 @@
               "string"
             ],
             "format": "date-time"
+          }
+        }
+      },
+      "UploadDetailDto": {
+        "required": [
+          "id",
+          "saleId",
+          "saleNumber",
+          "year",
+          "centre",
+          "saleDate",
+          "broker",
+          "status",
+          "originalFileName",
+          "lotCount",
+          "error",
+          "createdAt",
+          "processedAt",
+          "lots"
+        ],
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "saleId": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "uuid"
+          },
+          "saleNumber": {
+            "type": "string"
+          },
+          "year": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "centre": {
+            "$ref": "#/components/schemas/AuctionCentre"
+          },
+          "saleDate": {
+            "type": "string",
+            "format": "date"
+          },
+          "broker": {
+            "$ref": "#/components/schemas/BrokerCode"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UploadStatus"
+          },
+          "originalFileName": {
+            "type": "string"
+          },
+          "lotCount": {
+            "pattern": "^-?(?:0|[1-9]\\d*)$",
+            "type": [
+              "integer",
+              "string"
+            ],
+            "format": "int32"
+          },
+          "error": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "processedAt": {
+            "type": [
+              "null",
+              "string"
+            ],
+            "format": "date-time"
+          },
+          "lots": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/LotDto"
+            }
           }
         }
       },

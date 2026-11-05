@@ -13,7 +13,11 @@ public static class SaleMapper
         sale.SaleDate,
         sale.Status,
         sale.CreatedAt,
-        sale.Lots.OrderBy(lot => lot.LotNumber).Select(ToLot).ToList(),
+        sale.Lots
+            .OrderBy(lot => lot.Broker)
+            .ThenBy(lot => lot.LotNumber)
+            .Select(ToLot)
+            .ToList(),
         sale.Uploads.OrderByDescending(upload => upload.CreatedAt).Select(ToUpload).ToList());
 
     public static LotDto ToLot(Lot lot) => new(
@@ -41,4 +45,23 @@ public static class SaleMapper
         batch.Error,
         batch.CreatedAt,
         batch.ProcessedAt);
+
+    public static UploadDetailDto ToUploadDetail(UploadBatch batch) => new(
+        batch.Id,
+        batch.SaleId,
+        batch.SaleNumber,
+        batch.Year,
+        batch.Centre,
+        batch.SaleDate,
+        batch.Broker,
+        batch.Status,
+        batch.OriginalFileName,
+        batch.LotCount,
+        batch.Error,
+        batch.CreatedAt,
+        batch.ProcessedAt,
+        batch.Lots
+            .OrderBy(lot => lot.LotNumber)
+            .Select(ToLot)
+            .ToList());
 }

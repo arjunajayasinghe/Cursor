@@ -6,6 +6,7 @@ export type SaleSummary = components["schemas"]["SaleSummaryDto"];
 export type SaleDetail = components["schemas"]["SaleDetailDto"];
 export type Lot = components["schemas"]["LotDto"];
 export type UploadBatch = components["schemas"]["UploadBatchDto"];
+export type UploadDetail = components["schemas"]["UploadDetailDto"];
 export type UploadAccepted = components["schemas"]["UploadAcceptedDto"];
 export type AuctionCentre = components["schemas"]["AuctionCentre"];
 

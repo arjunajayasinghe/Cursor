@@ -76,6 +76,14 @@ internal sealed class InMemoryCatalogue :
     public Task<UploadBatch?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         GetTrackedAsync(id, cancellationToken);
 
+    public Task<UploadBatch?> GetWithLotsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var batch = Uploads.FirstOrDefault(item => item.Id == id);
+        if (batch is null) return Task.FromResult<UploadBatch?>(null);
+        batch.Lots = Lots.Where(lot => lot.UploadBatchId == id).ToList();
+        return Task.FromResult<UploadBatch?>(batch);
+    }
+
     public Task MarkFailedAsync(Guid id, string error, CancellationToken cancellationToken)
     {
         var batch = Uploads.First(item => item.Id == id);

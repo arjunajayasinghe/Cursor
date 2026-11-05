@@ -49,8 +49,8 @@ public static class CatalogueEndpoints
             })
             .WithName("GetUpload")
             .WithTags("Uploads")
-            .WithSummary("Get the status of a catalogue upload")
-            .Produces<UploadBatchDto>()
+            .WithSummary("Get a pre-auction catalogue upload and its lots")
+            .Produces<UploadDetailDto>()
             .Produces(StatusCodes.Status404NotFound);
 
         return group;

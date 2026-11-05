@@ -1,0 +1,131 @@
+import {
+  Alert,
+  Button,
+  CircularProgress,
+  Paper,
+  Stack,
+  Typography,
+} from "@mui/material";
+import { useQuery } from "@tanstack/react-query";
+import { Link as RouterLink, useParams } from "react-router-dom";
+import { getUpload } from "../api/client";
+import { CatalogueLotsTable } from "../components/CatalogueLotsTable";
+import { brokerName, currencyFor, formatQuantity, formatSaleDate } from "../catalogue";
+import { StatusChip } from "./StatusChip";
+
+export function UploadDetailPage() {
+  const { uploadId = "" } = useParams();
+  const upload = useQuery({
+    queryKey: ["upload", uploadId],
+    queryFn: () => getUpload(uploadId),
+    enabled: uploadId.length > 0,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === "Pending" || status === "Processing") return 1000;
+      return false;
+    },
+  });
+
+  if (upload.isPending) return <CircularProgress aria-label="Loading catalogue upload" />;
+  if (upload.isError) {
+    return (
+      <Stack spacing={2}>
+        <Button component={RouterLink} to="/uploads" sx={{ alignSelf: "flex-start" }}>
+          All uploads
+        </Button>
+        <Alert severity="error">{upload.error.message}</Alert>
+      </Stack>
+    );
+  }
+
+  const detail = upload.data;
+  const currency = currencyFor(String(detail.centre));
+  const lots = detail.lots ?? [];
+  const totalBags = lots.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
+  const totalKg = lots.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
+
+  return (
+    <Stack spacing={3}>
+      <Button component={RouterLink} to="/uploads" sx={{ alignSelf: "flex-start" }}>
+        All uploads
+      </Button>
+
+      <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
+        <div>
+          <Typography variant="overline" color="text.secondary">
+            Pre-auction catalogue · {detail.centre}
+          </Typography>
+          <Typography variant="h4">
+            {String(detail.broker)} · {brokerName(String(detail.broker))}
+          </Typography>
+          <Typography color="text.secondary">
+            Sale {detail.saleNumber}/{detail.year} · {formatSaleDate(detail.saleDate)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+            {detail.originalFileName}
+          </Typography>
+        </div>
+        <Stack spacing={1} sx={{ alignItems: { md: "flex-end" } }}>
+          <StatusChip status={String(detail.status)} />
+          {detail.saleId ? (
+            <Button component={RouterLink} to={`/sales/${detail.saleId}`}>
+              Full sale catalogue
+            </Button>
+          ) : null}
+        </Stack>
+      </Stack>
+
+      {detail.status === "Failed" && detail.error ? <Alert severity="error">{detail.error}</Alert> : null}
+      {detail.status === "Pending" || detail.status === "Processing" ? (
+        <Alert severity="info">Catalogue is still importing. Lot lines will appear when processing finishes.</Alert>
+      ) : null}
+
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+        <SummaryCard label="Lots" value={lots.length.toLocaleString("en-GB")} />
+        <SummaryCard label="Bags" value={totalBags.toLocaleString("en-GB")} />
+        <SummaryCard label="Net kg" value={formatQuantity(totalKg, 1)} />
+      </Stack>
+
+      <div>
+        <Typography variant="h6" sx={{ mb: 0.5 }}>
+          Catalogue lots
+        </Typography>
+        <Typography color="text.secondary" sx={{ mb: 2 }}>
+          Pre-auction offer book for this broker. Sold price and buyer arrive later with post-auction sales files.
+        </Typography>
+        <CatalogueLotsTable
+          lots={lots}
+          currency={currency}
+          emptyMessage={
+            detail.status === "Completed"
+              ? "No lots were imported from this file."
+              : "Lots are not available yet."
+          }
+        />
+      </div>
+
+      <Paper sx={{ p: 3, bgcolor: "rgba(31, 77, 58, 0.04)" }}>
+        <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
+          After the auction
+        </Typography>
+        <Typography color="text.secondary">
+          When the sale is over, upload each broker’s sales result file here. That step will add sold price and
+          buyer against these catalogue lots — it is not available yet.
+        </Typography>
+      </Paper>
+    </Stack>
+  );
+}
+
+function SummaryCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Paper sx={{ p: 2, flex: 1 }}>
+      <Typography variant="overline" color="text.secondary">
+        {label}
+      </Typography>
+      <Typography variant="h5" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
+        {value}
+      </Typography>
+    </Paper>
+  );
+}

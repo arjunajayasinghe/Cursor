@@ -19,9 +19,9 @@ npm run dev
 ```
 
 - Catalogue desk: http://localhost:5173
-- Sales list: http://localhost:5173/
-- Uploads list: http://localhost:5173/uploads
-- Upload all 8 brokers (one go): http://localhost:5173/upload
+- Pre-auction catalogues: http://localhost:5173/
+- Uploads list (open a file for lot details): http://localhost:5173/uploads
+- Upload all 8 broker catalogues: http://localhost:5173/upload
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger
 - OpenAPI document: http://localhost:8080/openapi/v1.json
@@ -91,7 +91,9 @@ cd frontend && npm run generate:api
 
 ## Catalogue files
 
-Set the sale header once on the upload page, drop all eight broker catalogues in one go (filenames like `AS_-_SC_03.txt` are auto-matched), then click **Upload all 8**. You can still drop or replace a single file on its tile. Broker `.txt` fixed-width files and `.csv` files are accepted.
+These uploads are **pre-auction catalogues** (offer books). Set the sale header once, drop all eight broker files in one go (filenames like `AS_-_SC_03.txt` are auto-matched), then click **Upload all 8**. Open an upload or the sale to browse lot details (garden, invoice, grade, bags, net kg). After the auction, broker **sales result** files will be a separate upload step.
+
+Broker `.txt` fixed-width files and `.csv` files are accepted.
 
 CSV lots-only header:
 

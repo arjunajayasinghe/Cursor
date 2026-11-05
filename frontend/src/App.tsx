@@ -5,6 +5,7 @@ import { getApiKey, setApiKey, subscribeApiKey } from "./api/session";
 import { AppLayout } from "./layout/AppLayout";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
+import { UploadDetailPage } from "./pages/UploadDetailPage";
 import { UploadPage } from "./pages/UploadPage";
 import { UploadsPage } from "./pages/UploadsPage";
 
@@ -18,6 +19,7 @@ export function App() {
         <Route index element={<SalesPage />} />
         <Route path="sales/:saleId" element={<SaleDetailPage />} />
         <Route path="uploads" element={<UploadsPage />} />
+        <Route path="uploads/:uploadId" element={<UploadDetailPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>

@@ -21,9 +21,9 @@ public sealed class SaleQueryService(ISaleRepository sales, IUploadBatchReposito
         return batches.Select(SaleMapper.ToUpload).ToList();
     }
 
-    public async Task<UploadBatchDto?> GetUploadAsync(Guid id, CancellationToken cancellationToken)
+    public async Task<UploadDetailDto?> GetUploadAsync(Guid id, CancellationToken cancellationToken)
     {
-        var batch = await uploads.GetAsync(id, cancellationToken);
-        return batch is null ? null : SaleMapper.ToUpload(batch);
+        var batch = await uploads.GetWithLotsAsync(id, cancellationToken);
+        return batch is null ? null : SaleMapper.ToUploadDetail(batch);
     }
 }

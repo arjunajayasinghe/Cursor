@@ -17,13 +17,13 @@ export function AppLayout() {
             </Typography>
           </Box>
           <Button color="inherit" component={RouterLink} to="/">
-            Sales
+            Catalogues
           </Button>
           <Button color="inherit" component={RouterLink} to="/uploads">
             Uploads
           </Button>
           <Button color="inherit" component={RouterLink} to="/upload">
-            Upload
+            Upload catalogues
           </Button>
         </Toolbar>
       </AppBar>

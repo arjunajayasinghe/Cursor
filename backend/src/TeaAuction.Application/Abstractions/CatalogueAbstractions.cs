@@ -38,6 +38,8 @@ public interface IUploadBatchRepository
 
     Task<UploadBatch?> GetAsync(Guid id, CancellationToken cancellationToken);
 
+    Task<UploadBatch?> GetWithLotsAsync(Guid id, CancellationToken cancellationToken);
+
     Task MarkFailedAsync(Guid id, string error, CancellationToken cancellationToken);
 }
 
