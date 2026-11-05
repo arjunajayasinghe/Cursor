@@ -3,11 +3,7 @@ import {
   Button,
   Chip,
   CircularProgress,
-  FormControl,
-  InputLabel,
-  MenuItem,
   Paper,
-  Select,
   Stack,
   Table,
   TableBody,
@@ -18,41 +14,37 @@ import {
 } from "@mui/material";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link as RouterLink, useParams } from "react-router-dom";
-import { getSale, type Lot, type UploadBatch } from "../api/client";
+import { useNavigate, useParams } from "react-router-dom";
+import { getSale, type UploadBatch } from "../api/client";
+import { AuctionBoard } from "../components/AuctionBoard";
 import { CatalogueLotsTable } from "../components/CatalogueLotsTable";
-import { brokerName, brokers, currencyFor, formatQuantity, formatSaleDate } from "../catalogue";
+import { brokerName, currencyFor, formatQuantity, formatSaleDate } from "../catalogue";
 import { StatusChip } from "./StatusChip";
-
-type BrokerFilter = "ALL" | (typeof brokers)[number]["code"];
-type ResultFilter = "ALL" | "SOLD" | "UNSOLD";
 
 export function SaleDetailPage() {
   const { saleId = "" } = useParams();
-  const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>("ALL");
-  const [resultFilter, setResultFilter] = useState<ResultFilter>("ALL");
+  const navigate = useNavigate();
+  const [showFullCatalogue, setShowFullCatalogue] = useState(false);
   const sale = useQuery({
     queryKey: ["sale", saleId],
     queryFn: () => getSale(saleId),
     enabled: saleId.length > 0,
   });
 
-  const lotsByBroker = useMemo(() => {
-    const map = new Map<string, Lot[]>();
-    for (const lot of sale.data?.lots ?? []) {
-      const code = String(lot.broker);
-      const list = map.get(code) ?? [];
-      list.push(lot);
-      map.set(code, list);
-    }
-    return map;
+  const soldCount = useMemo(() => {
+    const lots = sale.data?.lots ?? [];
+    return lots.filter(
+      (lot) =>
+        (lot.soldPricePerKg != null && Number(lot.soldPricePerKg) > 0) ||
+        Boolean(lot.buyerCode && String(lot.buyerCode).trim()),
+    ).length;
   }, [sale.data?.lots]);
 
   if (sale.isPending) return <CircularProgress aria-label="Loading auction" />;
   if (sale.isError) {
     return (
       <Stack spacing={2}>
-        <Button component={RouterLink} to="/" sx={{ alignSelf: "flex-start" }}>
+        <Button onClick={() => navigate("/")} sx={{ alignSelf: "flex-start" }}>
           All catalogues
         </Button>
         <Alert severity="error">{sale.error.message}</Alert>
@@ -62,29 +54,9 @@ export function SaleDetailPage() {
 
   const detail = sale.data;
   const currency = currencyFor(String(detail.centre));
-  const showSalesResults = detail.lots.some(
-    (lot) => lot.soldPricePerKg != null || (lot.buyerCode && String(lot.buyerCode).trim().length > 0),
-  );
-
-  const brokerScoped =
-    brokerFilter === "ALL" ? detail.lots : (lotsByBroker.get(brokerFilter) ?? []);
-
-  const visibleLots = brokerScoped.filter((lot) => {
-    if (resultFilter === "ALL") return true;
-    const sold =
-      (lot.soldPricePerKg != null && Number(lot.soldPricePerKg) > 0) ||
-      Boolean(lot.buyerCode && String(lot.buyerCode).trim());
-    return resultFilter === "SOLD" ? sold : !sold;
-  });
-
-  const totalBags = visibleLots.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
-  const totalKg = visibleLots.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
-  const soldCount = brokerScoped.filter(
-    (lot) =>
-      (lot.soldPricePerKg != null && Number(lot.soldPricePerKg) > 0) ||
-      Boolean(lot.buyerCode && String(lot.buyerCode).trim()),
-  ).length;
-  const brokerCodesPresent = brokers.filter((broker) => (lotsByBroker.get(broker.code)?.length ?? 0) > 0);
+  const showSalesResults = soldCount > 0;
+  const totalBags = detail.lots.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
+  const totalKg = detail.lots.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
 
   const catalogueUploads = detail.uploads.filter(
     (upload) => String(upload.kind) !== "PostAuctionSales",
@@ -93,7 +65,7 @@ export function SaleDetailPage() {
 
   return (
     <Stack spacing={3}>
-      <Button component={RouterLink} to="/" sx={{ alignSelf: "flex-start" }}>
+      <Button onClick={() => navigate("/")} sx={{ alignSelf: "flex-start" }}>
         All catalogues
       </Button>
 
@@ -107,105 +79,74 @@ export function SaleDetailPage() {
           </Typography>
           <Typography color="text.secondary">{formatSaleDate(detail.saleDate)}</Typography>
         </div>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start" }}>
+        <Stack direction="row" spacing={1} sx={{ alignItems: "flex-start", flexWrap: "wrap" }}>
           <Chip label={detail.status} color={detail.status === "Open" ? "success" : "default"} />
-          <Button variant="outlined" component={RouterLink} to="/upload-sales">
+          <Button variant="contained" onClick={() => navigate("/upload-sales")}>
             Upload sales
           </Button>
         </Stack>
       </Stack>
 
-      <Paper sx={{ p: 2 }}>
-        <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
-          <FormControl size="small" sx={{ minWidth: 220 }}>
-            <InputLabel id="broker-filter-label">Broker</InputLabel>
-            <Select
-              labelId="broker-filter-label"
-              label="Broker"
-              value={brokerFilter}
-              onChange={(event) => setBrokerFilter(event.target.value as BrokerFilter)}
-            >
-              <MenuItem value="ALL">All brokers ({detail.lots.length})</MenuItem>
-              {brokers.map((broker) => {
-                const count = lotsByBroker.get(broker.code)?.length ?? 0;
-                return (
-                  <MenuItem key={broker.code} value={broker.code} disabled={count === 0}>
-                    {broker.code} · {broker.name} ({count})
-                  </MenuItem>
-                );
-              })}
-            </Select>
-          </FormControl>
-
-          <FormControl size="small" sx={{ minWidth: 180 }} disabled={!showSalesResults}>
-            <InputLabel id="result-filter-label">Results</InputLabel>
-            <Select
-              labelId="result-filter-label"
-              label="Results"
-              value={resultFilter}
-              onChange={(event) => setResultFilter(event.target.value as ResultFilter)}
-            >
-              <MenuItem value="ALL">All lots</MenuItem>
-              <MenuItem value="SOLD">Sold only</MenuItem>
-              <MenuItem value="UNSOLD">Unsold only</MenuItem>
-            </Select>
-          </FormControl>
-
-          <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-            {brokerFilter === "ALL"
-              ? "Showing every broker on this sale."
-              : `Showing ${brokerName(brokerFilter)} only.`}{" "}
-            Use the search boxes under each column header to narrow further.
-          </Typography>
-        </Stack>
-      </Paper>
-
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-        <SummaryCard label="Lots" value={visibleLots.length.toLocaleString("en-GB")} />
+        <SummaryCard label="Lots" value={detail.lots.length.toLocaleString("en-GB")} />
         <SummaryCard label="Bags" value={totalBags.toLocaleString("en-GB")} />
         <SummaryCard label="Net kg" value={formatQuantity(totalKg, 1)} />
         <SummaryCard
-          label={showSalesResults ? "Sold lots" : "Brokers"}
-          value={showSalesResults ? soldCount.toLocaleString("en-GB") : String(brokerCodesPresent.length)}
+          label="Sold lots"
+          value={showSalesResults ? soldCount.toLocaleString("en-GB") : "—"}
         />
       </Stack>
 
+      {!showSalesResults ? (
+        <Alert
+          severity="info"
+          action={
+            <Button color="inherit" size="small" onClick={() => navigate("/upload-sales")}>
+              Upload sales
+            </Button>
+          }
+        >
+          No sold price / buyer on this sale yet. Upload the post-auction sales files to fill the auction board.
+        </Alert>
+      ) : null}
+
       <div>
         <Typography variant="h6" sx={{ mb: 0.5 }}>
-          {showSalesResults ? "Auction results" : "Catalogue lots"}
-          {brokerFilter !== "ALL" ? ` · ${brokerName(brokerFilter)}` : " · all brokers"}
+          Auction board
         </Typography>
         <Typography color="text.secondary" sx={{ mb: 2 }}>
-          {showSalesResults
-            ? "Sold price and buyer from the post-auction sales files. Catalogue fields stay on each lot."
-            : "Pre-auction offer book. Upload sales files to fill sold price and buyer."}
+          Choose All or one broker from the dropdown, then search lot / garden / buyer. Sold and unsold are marked on
+          each row.
         </Typography>
-        <CatalogueLotsTable
-          lots={visibleLots}
-          currency={currency}
-          showBroker={brokerFilter === "ALL"}
-          showSalesResults={showSalesResults}
-          emptyMessage={
-            resultFilter === "SOLD"
-              ? "No sold lots for this broker filter."
-              : resultFilter === "UNSOLD"
-                ? "No unsold lots for this broker filter."
-                : "No lots for this broker filter."
-          }
-        />
+        <AuctionBoard lots={detail.lots} currency={currency} />
       </div>
 
-      <UploadList
-        title="Sales file uploads"
-        empty="No post-auction sales files for this sale yet."
-        uploads={salesUploads}
-      />
+      <Paper sx={{ p: 2 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+          <div>
+            <Typography variant="subtitle1">Full catalogue columns</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Factory, invoice, warehouse, source line, and per-column filters.
+            </Typography>
+          </div>
+          <Button variant="outlined" onClick={() => setShowFullCatalogue((value) => !value)}>
+            {showFullCatalogue ? "Hide full catalogue" : "Show full catalogue"}
+          </Button>
+        </Stack>
+        {showFullCatalogue ? (
+          <Stack sx={{ mt: 2 }}>
+            <CatalogueLotsTable
+              lots={detail.lots}
+              currency={currency}
+              showBroker
+              showSalesResults={showSalesResults}
+            />
+          </Stack>
+        ) : null}
+      </Paper>
 
-      <UploadList
-        title="Catalogue uploads"
-        empty="No broker catalogues uploaded for this sale yet."
-        uploads={catalogueUploads}
-      />
+      <UploadList title="Sales file uploads" empty="No post-auction sales files for this sale yet." uploads={salesUploads} />
+      <UploadList title="Catalogue uploads" empty="No broker catalogues uploaded for this sale yet." uploads={catalogueUploads} />
     </Stack>
   );
 }
@@ -219,6 +160,7 @@ function UploadList({
   empty: string;
   uploads: UploadBatch[];
 }) {
+  const navigate = useNavigate();
   return (
     <div>
       <Typography variant="h6" sx={{ mb: 1 }}>
@@ -242,7 +184,7 @@ function UploadList({
               {uploads.map((upload) => (
                 <TableRow key={upload.id} hover>
                   <TableCell>
-                    <Button component={RouterLink} to={`/uploads/${upload.id}`}>
+                    <Button onClick={() => navigate(`/uploads/${upload.id}`)}>
                       {String(upload.broker)} · {brokerName(String(upload.broker))}
                     </Button>
                   </TableCell>

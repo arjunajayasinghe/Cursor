@@ -1,10 +1,11 @@
 import { Alert, Button, Chip, CircularProgress, Paper, Stack, Table, TableBody, TableCell, TableHead, TableRow, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import { listSales } from "../api/client";
 import { formatSaleDate } from "../catalogue";
 
 export function SalesPage() {
+  const navigate = useNavigate();
   const sales = useQuery({ queryKey: ["sales"], queryFn: listSales });
 
   return (
@@ -54,7 +55,10 @@ export function SalesPage() {
               {sales.data.map((sale) => (
                 <TableRow key={sale.id} hover>
                   <TableCell>
-                    <Button component={RouterLink} to={`/sales/${sale.id}`} sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}>
+                    <Button
+                      onClick={() => navigate(`/sales/${sale.id}`)}
+                      sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}
+                    >
                       {sale.saleNumber}/{sale.year}
                     </Button>
                   </TableCell>
@@ -65,7 +69,11 @@ export function SalesPage() {
                   </TableCell>
                   <TableCell align="right">{sale.lotCount}</TableCell>
                   <TableCell align="right">
-                    <Button variant="contained" size="small" component={RouterLink} to={`/sales/${sale.id}`}>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      onClick={() => navigate(`/sales/${sale.id}`)}
+                    >
                       Auction view
                     </Button>
                   </TableCell>
