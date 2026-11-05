@@ -2,11 +2,9 @@ import {
   Alert,
   Button,
   CircularProgress,
-  FormControlLabel,
   Link,
   Paper,
   Stack,
-  Switch,
   Table,
   TableBody,
   TableCell,
@@ -121,18 +119,15 @@ export function UploadsPage() {
         <Alert
           severity="warning"
           action={
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={showFailed}
-                  onChange={(_, checked) => setShowFailed(checked)}
-                  slotProps={{ input: { "aria-label": "Show failed uploads" } }}
-                />
-              }
-              label="Show failed"
-              sx={{ mr: 0, whiteSpace: "nowrap" }}
-            />
+            <Button
+              color="inherit"
+              size="small"
+              variant="outlined"
+              onClick={() => setShowFailed((current) => !current)}
+              aria-pressed={showFailed}
+            >
+              {showFailed ? "Hide failed" : "Show failed"}
+            </Button>
           }
         >
           {failed.length} failed upload{failed.length === 1 ? "" : "s"} (0 lots). These do not contain catalogue
