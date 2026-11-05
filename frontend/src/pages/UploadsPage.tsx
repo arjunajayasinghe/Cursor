@@ -28,6 +28,8 @@ export function UploadsPage() {
     },
   });
 
+  const completed = uploads.data?.filter((row) => row.status === "Completed" && Number(row.lotCount) > 0) ?? [];
+
   return (
     <Stack spacing={3}>
       <Stack
@@ -38,13 +40,29 @@ export function UploadsPage() {
         <div>
           <Typography variant="h4">Pre-auction uploads</Typography>
           <Typography color="text.secondary">
-            Broker catalogue files received for each sale. Open a row to see the imported lot lines.
+            Click <strong>View catalogue</strong> on a completed upload to open every lot line from that broker file.
           </Typography>
         </div>
         <Button variant="contained" component={RouterLink} to="/upload">
           Upload all 8 brokers
         </Button>
       </Stack>
+
+      {completed.length > 0 ? (
+        <Alert severity="info">
+          {completed.length} catalogue{completed.length === 1 ? "" : "s"} ready with lot details. Open any of them below —
+          for example{" "}
+          <Button
+            component={RouterLink}
+            to={`/uploads/${completed[0].id}`}
+            size="small"
+            sx={{ verticalAlign: "baseline", textTransform: "none" }}
+          >
+            {String(completed[0].broker)} sale {completed[0].saleNumber}/{completed[0].year}
+          </Button>
+          .
+        </Alert>
+      ) : null}
 
       {uploads.isPending ? <CircularProgress aria-label="Loading uploads" /> : null}
       {uploads.isError ? (
@@ -64,6 +82,7 @@ export function UploadsPage() {
           <Table>
             <TableHead>
               <TableRow>
+                <TableCell>Catalogue</TableCell>
                 <TableCell>Uploaded</TableCell>
                 <TableCell>Broker</TableCell>
                 <TableCell>Sale</TableCell>
@@ -76,45 +95,59 @@ export function UploadsPage() {
               </TableRow>
             </TableHead>
             <TableBody>
-              {uploads.data.map((upload) => (
-                <TableRow key={upload.id} hover>
-                  <TableCell>
-                    {new Intl.DateTimeFormat("en-GB", {
-                      day: "numeric",
-                      month: "short",
-                      year: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }).format(new Date(upload.createdAt))}
-                  </TableCell>
-                  <TableCell>{brokerName(String(upload.broker))}</TableCell>
-                  <TableCell>
-                    {upload.saleId ? (
+              {uploads.data.map((upload) => {
+                const canOpen = upload.status === "Completed" && Number(upload.lotCount) > 0;
+                return (
+                  <TableRow key={upload.id} hover>
+                    <TableCell>
                       <Button
+                        variant={canOpen ? "contained" : "outlined"}
+                        size="small"
                         component={RouterLink}
-                        to={`/sales/${upload.saleId}`}
-                        sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}
+                        to={`/uploads/${upload.id}`}
+                        disabled={upload.status === "Pending" || upload.status === "Processing"}
                       >
-                        {upload.saleNumber}/{upload.year}
+                        {canOpen ? "View catalogue" : "Open"}
                       </Button>
-                    ) : (
-                      `${upload.saleNumber}/${upload.year}`
-                    )}
-                  </TableCell>
-                  <TableCell>{upload.centre}</TableCell>
-                  <TableCell>{formatSaleDate(upload.saleDate)}</TableCell>
-                  <TableCell>
-                    <Button component={RouterLink} to={`/uploads/${upload.id}`}>
-                      {upload.originalFileName}
-                    </Button>
-                  </TableCell>
-                  <TableCell>
-                    <StatusChip status={String(upload.status)} />
-                  </TableCell>
-                  <TableCell align="right">{upload.lotCount}</TableCell>
-                  <TableCell sx={{ maxWidth: 280, whiteSpace: "normal" }}>{upload.error ?? ""}</TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell>
+                      {new Intl.DateTimeFormat("en-GB", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }).format(new Date(upload.createdAt))}
+                    </TableCell>
+                    <TableCell>{brokerName(String(upload.broker))}</TableCell>
+                    <TableCell>
+                      {upload.saleId ? (
+                        <Button
+                          component={RouterLink}
+                          to={`/sales/${upload.saleId}`}
+                          sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}
+                        >
+                          {upload.saleNumber}/{upload.year}
+                        </Button>
+                      ) : (
+                        `${upload.saleNumber}/${upload.year}`
+                      )}
+                    </TableCell>
+                    <TableCell>{upload.centre}</TableCell>
+                    <TableCell>{formatSaleDate(upload.saleDate)}</TableCell>
+                    <TableCell>
+                      <Button component={RouterLink} to={`/uploads/${upload.id}`} sx={{ textTransform: "none" }}>
+                        {upload.originalFileName}
+                      </Button>
+                    </TableCell>
+                    <TableCell>
+                      <StatusChip status={String(upload.status)} />
+                    </TableCell>
+                    <TableCell align="right">{upload.lotCount}</TableCell>
+                    <TableCell sx={{ maxWidth: 280, whiteSpace: "normal" }}>{upload.error ?? ""}</TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </Paper>

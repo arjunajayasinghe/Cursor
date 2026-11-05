@@ -12,11 +12,16 @@ export function SalesPage() {
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}>
         <BoxHeading
           title="Pre-auction catalogues"
-          lede="Broker offer books accepted for each sale. Open a sale to browse lot details."
+          lede="Open a sale for the combined offer book, or go to Uploads → View catalogue for one broker file."
         />
-        <Button variant="contained" component={RouterLink} to="/upload">
-          Upload catalogues
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" component={RouterLink} to="/uploads">
+            Uploads
+          </Button>
+          <Button variant="contained" component={RouterLink} to="/upload">
+            Upload catalogues
+          </Button>
+        </Stack>
       </Stack>
       {sales.isPending ? <CircularProgress aria-label="Loading sales" /> : null}
       {sales.isError ? (
@@ -39,6 +44,7 @@ export function SalesPage() {
                 <TableCell>Date</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell align="right">Lots</TableCell>
+                <TableCell />
               </TableRow>
             </TableHead>
             <TableBody>
@@ -55,6 +61,11 @@ export function SalesPage() {
                     <Chip size="small" label={sale.status} color={sale.status === "Open" ? "success" : "default"} />
                   </TableCell>
                   <TableCell align="right">{sale.lotCount}</TableCell>
+                  <TableCell align="right">
+                    <Button variant="contained" size="small" component={RouterLink} to={`/sales/${sale.id}`}>
+                      View lots
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
