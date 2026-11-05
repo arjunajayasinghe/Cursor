@@ -1,4 +1,5 @@
 import {
+  Autocomplete,
   Chip,
   IconButton,
   Paper,
@@ -16,7 +17,7 @@ import {
 import ClearIcon from "@mui/icons-material/Clear";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { Lot } from "../api/client";
-import { formatQuantity } from "../catalogue";
+import { brokers, formatQuantity } from "../catalogue";
 
 export type ExplorerMode = "preAuction" | "afterSales";
 
@@ -33,9 +34,12 @@ type SortKey =
   | "soldPricePerKg"
   | "buyerCode";
 
+type BrokerFilter = "ALL" | (typeof brokers)[number]["code"];
+
+type BrokerOption = { value: BrokerFilter; label: string; disabled?: boolean };
+
 type SearchState = {
   lotNumber: string;
-  broker: string;
   estate: string;
   grade: string;
   invoiceNumber: string;
@@ -45,7 +49,6 @@ type SearchState = {
 
 const emptySearch: SearchState = {
   lotNumber: "",
-  broker: "",
   estate: "",
   grade: "",
   invoiceNumber: "",
@@ -87,6 +90,7 @@ export function ExplorerLotsGrid({
   currency = "",
   emptyMessage = "No records match the current filters.",
 }: Props) {
+  const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>("ALL");
   const [search, setSearch] = useState<SearchState>(emptySearch);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -99,10 +103,35 @@ export function ExplorerLotsGrid({
     return lots;
   }, [lots, mode]);
 
+  const brokerOptions = useMemo<BrokerOption[]>(() => {
+    const counts = new Map<string, number>();
+    for (const lot of baseLots) {
+      const code = String(lot.broker);
+      counts.set(code, (counts.get(code) ?? 0) + 1);
+    }
+    return [
+      {
+        value: "ALL",
+        label: `All brokers (${baseLots.length.toLocaleString("en-GB")})`,
+      },
+      ...brokers.map((broker) => {
+        const count = counts.get(broker.code) ?? 0;
+        return {
+          value: broker.code as BrokerFilter,
+          label: `${broker.code} · ${broker.name} (${count.toLocaleString("en-GB")})`,
+          disabled: count === 0,
+        };
+      }),
+    ];
+  }, [baseLots]);
+
+  const selectedBroker =
+    brokerOptions.find((option) => option.value === brokerFilter) ?? brokerOptions[0];
+
   const filtered = useMemo(() => {
     return baseLots.filter((lot) => {
+      if (brokerFilter !== "ALL" && String(lot.broker) !== brokerFilter) return false;
       if (deferred.lotNumber && !String(lot.lotNumber).includes(deferred.lotNumber.trim())) return false;
-      if (deferred.broker && !String(lot.broker).toLowerCase().includes(deferred.broker.trim().toLowerCase())) return false;
       if (deferred.estate && !(lot.gardenMark || "").toLowerCase().includes(deferred.estate.trim().toLowerCase())) return false;
       if (deferred.grade && !(lot.grade || "").toLowerCase().includes(deferred.grade.trim().toLowerCase())) return false;
       if (
@@ -115,7 +144,7 @@ export function ExplorerLotsGrid({
       if (deferred.buyer && !(lot.buyerCode || "").toLowerCase().includes(deferred.buyer.trim().toLowerCase())) return false;
       return true;
     });
-  }, [baseLots, deferred]);
+  }, [baseLots, brokerFilter, deferred]);
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
@@ -132,7 +161,8 @@ export function ExplorerLotsGrid({
     return { bags, kg, sold };
   }, [filtered]);
 
-  const activeFilters = Object.values(search).filter((value) => value.trim()).length;
+  const activeFilters =
+    Object.values(search).filter((value) => value.trim()).length + (brokerFilter === "ALL" ? 0 : 1);
 
   function updateSearch(key: keyof SearchState, value: string) {
     setSearch((current) => ({ ...current, [key]: value }));
@@ -140,6 +170,7 @@ export function ExplorerLotsGrid({
   }
 
   function clearSearch() {
+    setBrokerFilter("ALL");
     setSearch(emptySearch);
     setPage(0);
   }
@@ -166,19 +197,34 @@ export function ExplorerLotsGrid({
     <Stack spacing={2}>
       <Paper sx={{ p: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ flexWrap: "wrap", gap: 1.5 }}>
+          <Autocomplete
+            size="small"
+            sx={{ minWidth: 280, flex: 1 }}
+            options={brokerOptions}
+            value={selectedBroker}
+            disableClearable
+            getOptionDisabled={(option) => Boolean(option.disabled)}
+            getOptionLabel={(option) => option.label}
+            isOptionEqualToValue={(option, value) => option.value === value.value}
+            onChange={(_, option) => {
+              setBrokerFilter(option.value);
+              setPage(0);
+            }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Broker"
+                placeholder="All brokers or one…"
+                helperText="All first, then each broker with lot count in brackets"
+              />
+            )}
+          />
           <TextField
             size="small"
             label="Lot number"
             value={search.lotNumber}
             onChange={(event) => updateSearch("lotNumber", event.target.value)}
             sx={{ minWidth: 130 }}
-          />
-          <TextField
-            size="small"
-            label="Broker"
-            value={search.broker}
-            onChange={(event) => updateSearch("broker", event.target.value)}
-            sx={{ minWidth: 110 }}
           />
           <TextField
             size="small"
