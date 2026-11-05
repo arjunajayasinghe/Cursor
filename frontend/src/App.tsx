@@ -1,0 +1,71 @@
+import { Alert, Box, Button, Paper, Stack, TextField, Typography } from "@mui/material";
+import { useState, useSyncExternalStore } from "react";
+import { Navigate, Route, Routes } from "react-router-dom";
+import { getApiKey, setApiKey, subscribeApiKey } from "./api/session";
+import { AppLayout } from "./layout/AppLayout";
+import { SaleDetailPage } from "./pages/SaleDetailPage";
+import { SalesPage } from "./pages/SalesPage";
+import { UploadPage } from "./pages/UploadPage";
+import { UploadsPage } from "./pages/UploadsPage";
+
+export function App() {
+  const apiKey = useSyncExternalStore(subscribeApiKey, getApiKey, getApiKey);
+  if (!apiKey) return <KeyGate />;
+
+  return (
+    <Routes>
+      <Route element={<AppLayout />}>
+        <Route index element={<SalesPage />} />
+        <Route path="sales/:saleId" element={<SaleDetailPage />} />
+        <Route path="uploads" element={<UploadsPage />} />
+        <Route path="upload" element={<UploadPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Route>
+    </Routes>
+  );
+}
+
+function KeyGate() {
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+
+  return (
+    <Box sx={{ minHeight: "100vh", display: "grid", placeItems: "center", px: 2 }}>
+      <Paper sx={{ p: 4, width: "100%", maxWidth: 420 }}>
+        <Typography variant="overline" color="text.secondary">
+          Broker desk
+        </Typography>
+        <Typography variant="h5" sx={{ mb: 1 }}>
+          Tea auction catalogue
+        </Typography>
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Enter the API key the desk gave you. It stays in this browser tab.
+        </Typography>
+        <Stack
+          component="form"
+          spacing={2}
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!value.trim()) {
+              setError("Enter the API key.");
+              return;
+            }
+            setApiKey(value);
+          }}
+        >
+          {error ? <Alert severity="warning">{error}</Alert> : null}
+          <TextField
+            label="API key"
+            type="password"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            autoFocus
+          />
+          <Button type="submit" variant="contained">
+            Continue
+          </Button>
+        </Stack>
+      </Paper>
+    </Box>
+  );
+}

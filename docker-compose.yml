@@ -1,0 +1,72 @@
+# Local stand-in for the private AWS network.
+# Postgres is published on loopback only so the host migrate script can reach it.
+# In AWS the database has no public ingress; only the API security group can open 5432.
+# Uploads use the filesystem adapter here. Set FileStore__Provider=S3 and
+# FileStore__ServiceUrl to point the same IFileStore at MinIO or Amazon S3.
+
+name: tea-auction
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: tea
+      POSTGRES_PASSWORD: tea
+      POSTGRES_DB: tea_auction
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - tea_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tea -d tea_auction"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks:
+      - tea_private
+
+  migrate:
+    profiles: ["migrate"]
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: migrate
+    environment:
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=tea_auction;Username=tea;Password=tea
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tea_private
+    restart: "no"
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Database: Host=postgres;Port=5432;Database=tea_auction;Username=tea;Password=tea
+      Auth__ApiKey: dev-tea-auction-key
+      Seed__SampleData: "true"
+      Swagger__Enabled: "true"
+      FileStore__Provider: FileSystem
+      FileStore__Root: /tmp/tea-uploads
+      Notifications__OperatorEmail: ops@tea-auction.local
+      Cors__Origins__0: http://localhost:5173
+      Cors__Origins__1: http://127.0.0.1:5173
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - tea_private
+
+networks:
+  tea_private:
+    name: tea_auction_private
+
+volumes:
+  tea_pg:
