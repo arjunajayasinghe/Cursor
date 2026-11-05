@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { getApiKey, setApiKey, subscribeApiKey } from "./api/session";
 import { AppLayout } from "./layout/AppLayout";
+import { AuctionDataExplorerPage } from "./pages/AuctionDataExplorerPage";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
 import { SalesUploadPage } from "./pages/SalesUploadPage";
@@ -17,19 +18,20 @@ export function App() {
   return (
     <Routes>
       <Route element={<AppLayout />}>
-        <Route index element={<Navigate to="/auctions" replace />} />
+        <Route index element={<Navigate to="/explorer" replace />} />
+        <Route path="explorer" element={<AuctionDataExplorerPage />} />
         <Route path="auctions" element={<SalesPage />} />
         <Route path="auctions/:saleId" element={<SaleDetailPage />} />
         {/* Keep old sale URLs working */}
         <Route path="sales/:saleId" element={<SaleDetailPage />} />
-        {/* Pre-auction catalogues + upload history / failure reasons */}
+        {/* Upload history / failure reasons */}
         <Route path="catalogues" element={<UploadsPage />} />
         <Route path="uploads" element={<Navigate to="/catalogues" replace />} />
         <Route path="uploads/:uploadId" element={<UploadDetailPage />} />
         <Route path="catalogues/:uploadId" element={<UploadDetailPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="upload-sales" element={<SalesUploadPage />} />
-        <Route path="*" element={<Navigate to="/auctions" replace />} />
+        <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Route>
     </Routes>
   );

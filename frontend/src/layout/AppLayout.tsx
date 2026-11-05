@@ -4,6 +4,11 @@ import { Link as RouterLink, Outlet, useLocation } from "react-router-dom";
 
 const navItems = [
   {
+    to: "/explorer",
+    label: "Auction Data Explorer",
+    match: (path: string) => path.startsWith("/explorer"),
+  },
+  {
     to: "/auctions",
     label: "Auctions",
     match: (path: string) =>
@@ -32,14 +37,7 @@ export function AppLayout() {
   return (
     <Box sx={{ minHeight: "100vh" }}>
       <AppBar position="sticky" elevation={0} color="primary">
-        <Toolbar
-          sx={{
-            gap: { xs: 0.5, md: 1 },
-            flexWrap: "wrap",
-            rowGap: 1,
-            py: 1,
-          }}
-        >
+        <Toolbar sx={{ gap: { xs: 0.5, md: 1 }, flexWrap: "wrap", rowGap: 1, py: 1 }}>
           <SpaIcon fontSize="small" />
           <Box sx={{ mr: { xs: 1, md: 2 }, minWidth: "fit-content" }}>
             <Typography
@@ -51,7 +49,7 @@ export function AppLayout() {
             <Typography
               variant="h6"
               component={RouterLink}
-              to="/auctions"
+              to="/explorer"
               sx={{ color: "inherit", textDecoration: "none", whiteSpace: "nowrap" }}
             >
               Tea auction
@@ -87,7 +85,7 @@ export function AppLayout() {
       </Container>
       <Stack component="footer" sx={{ px: 3, pb: 3, color: "text.secondary" }}>
         <Typography variant="caption">
-          Pre-auction catalogues and post-auction sales — Colombo and other centres.
+          Auction Data Explorer — pre-auction catalogues and after-sales results in one place.
         </Typography>
       </Stack>
     </Box>

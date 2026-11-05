@@ -31,13 +31,13 @@ export function SalesPage() {
         <div>
           <Typography variant="h4">Auctions</Typography>
           <Typography color="text.secondary">
-            Open a sale for auction results or the pre-auction catalogue tab. Use Catalogues in the menu to check
-            upload status and failure reasons.
+            Sale boards stay here. For search and analysis across pre-auction and after-sales data, use{" "}
+            <strong>Auction Data Explorer</strong> in the menu.
           </Typography>
         </div>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" component={RouterLink} to="/upload-sales">
-            Upload sales
+          <Button variant="outlined" component={RouterLink} to="/explorer">
+            Data explorer
           </Button>
           <Button variant="contained" component={RouterLink} to="/upload">
             Upload catalogues
@@ -77,7 +77,7 @@ export function SalesPage() {
                   key={sale.id}
                   hover
                   sx={{ cursor: "pointer" }}
-                  onClick={() => navigate(`/auctions/${sale.id}`)}
+                  onClick={() => navigate(`/explorer?saleId=${sale.id}`)}
                 >
                   <TableCell sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}>
                     {sale.saleNumber}/{sale.year}
@@ -92,9 +92,9 @@ export function SalesPage() {
                     <Button
                       variant="contained"
                       size="small"
-                      onClick={() => navigate(`/auctions/${sale.id}`)}
+                      onClick={() => navigate(`/explorer?saleId=${sale.id}`)}
                     >
-                      Open board
+                      Open explorer
                     </Button>
                   </TableCell>
                 </TableRow>
