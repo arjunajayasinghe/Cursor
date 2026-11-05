@@ -41,8 +41,8 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
 
                     b.Property<string>("BuyerCode")
                         .IsRequired()
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
                         .HasColumnName("buyer_code");
 
                     b.Property<string>("Category")

@@ -28,7 +28,7 @@ public sealed class LotConfiguration : IEntityTypeConfiguration<Lot>
         builder.Property(lot => lot.Category).HasColumnName("category").HasMaxLength(40).IsRequired();
         builder.Property(lot => lot.ValuationPerKg).HasColumnName("valuation_per_kg").HasPrecision(14, 2);
         builder.Property(lot => lot.SoldPricePerKg).HasColumnName("sold_price_per_kg").HasPrecision(14, 2);
-        builder.Property(lot => lot.BuyerCode).HasColumnName("buyer_code").HasMaxLength(40).IsRequired();
+        builder.Property(lot => lot.BuyerCode).HasColumnName("buyer_code").HasMaxLength(120).IsRequired();
         builder.Property(lot => lot.SalesUploadBatchId).HasColumnName("sales_upload_batch_id");
         builder.Property(lot => lot.SourceLine).HasColumnName("source_line").HasMaxLength(400).IsRequired();
         builder.HasIndex(lot => new { lot.SaleId, lot.Broker, lot.LotNumber }).IsUnique();

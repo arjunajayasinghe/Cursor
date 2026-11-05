@@ -24,7 +24,10 @@ public sealed record SalesResultRow(
     int LotNumber,
     decimal? SoldPricePerKg,
     string BuyerCode,
-    string SourceLine);
+    string SourceLine,
+    string GardenMark = "",
+    string Grade = "",
+    decimal? NetWeightKg = null);
 
 public sealed record SalesResultParseResult(
     IReadOnlyList<SalesResultRow> Rows,

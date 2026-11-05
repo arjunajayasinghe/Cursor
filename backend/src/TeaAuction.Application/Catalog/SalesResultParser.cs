@@ -9,15 +9,16 @@ using TeaAuction.Domain;
 namespace TeaAuction.Application.Catalog;
 
 /// <summary>
-/// Post-auction sales files. Prefer matching columns by header name
-/// (Lot / Buyer / Price / Sold…); fall back to broker fixed-width text dialects.
+/// Post-auction sales files. Match Lot / Buyer / Price by header when present;
+/// otherwise use broker fixed-width / packed dialects. Same lot may appear with
+/// different prices — later rows win; duplicates are not rejected.
 /// </summary>
 public sealed class SalesResultParser : ISalesResultParser
 {
     private static readonly string[] LotHeaders = ["lot", "lotno", "lotnumber", "lot#", "lot_no", "lot no", "brokerlot", "lot no."];
     private static readonly string[] PriceHeaders =
     [
-        "sold", "soldprice", "soldperkg", "price", "priceperkg", "saleprice", "realized", "proceeds", "lkr", "rate"
+        "sold", "soldprice", "soldperkg", "price", "priceperkg", "saleprice", "realized", "proceeds", "rate"
     ];
     private static readonly string[] BuyerHeaders = ["buyer", "buyercode", "buyerid", "purchaser", "client", "account"];
 
@@ -29,12 +30,12 @@ public sealed class SalesResultParser : ISalesResultParser
     public SalesResultParseResult Parse(BrokerCode broker, string fileName, Stream content)
     {
         if (CatalogueFileKinds.IsExcel(fileName) || CatalogueFileKinds.IsCsv(fileName))
-            return ParseByHeaders(fileName, content);
+            return ParseTabular(fileName, content);
 
         return ParseTextDialect(broker, content);
     }
 
-    private static SalesResultParseResult ParseByHeaders(string fileName, Stream content)
+    private static SalesResultParseResult ParseTabular(string fileName, Stream content)
     {
         using var buffer = new MemoryStream();
         content.CopyTo(buffer);
@@ -56,9 +57,17 @@ public sealed class SalesResultParser : ISalesResultParser
             return new SalesResultParseResult([], ["The sales file has no rows."]);
 
         var headerRowIndex = FindHeaderRow(table);
-        if (headerRowIndex < 0)
-            return new SalesResultParseResult([], ["Could not find a header row with Lot / Buyer / Price columns."]);
+        if (headerRowIndex >= 0)
+            return ParseHeaderTable(table, headerRowIndex);
 
+        if (LooksLikeHeaderlessSales(table))
+            return ParseHeaderlessSales(table);
+
+        return new SalesResultParseResult([], ["Could not find a header row with Lot / Buyer / Price columns."]);
+    }
+
+    private static SalesResultParseResult ParseHeaderTable(DataTable table, int headerRowIndex)
+    {
         var headers = table.Rows[headerRowIndex].ItemArray
             .Select(value => NormalizeHeader(value?.ToString() ?? ""))
             .ToList();
@@ -72,9 +81,8 @@ public sealed class SalesResultParser : ISalesResultParser
         if (priceCol < 0 && buyerCol < 0)
             return new SalesResultParseResult([], ["Header row needs a Sold/Price and/or Buyer column."]);
 
-        var rows = new List<SalesResultRow>();
+        var rows = new Dictionary<int, SalesResultRow>();
         var errors = new List<string>();
-        var seen = new HashSet<int>();
 
         for (var r = headerRowIndex + 1; r < table.Rows.Count; r++)
         {
@@ -90,39 +98,133 @@ public sealed class SalesResultParser : ISalesResultParser
                 continue;
             }
 
-            if (!seen.Add(lotNumber))
-            {
-                errors.Add($"Line {lineNo}: lot {lotNumber} is duplicated.");
-                continue;
-            }
-
             decimal? price = null;
             if (priceCol >= 0)
             {
                 var priceRaw = Cell(cells, priceCol);
-                if (!string.IsNullOrWhiteSpace(priceRaw))
-                {
-                    if (!TryDec(priceRaw, out var parsedPrice))
-                    {
-                        errors.Add($"Line {lineNo}: price '{priceRaw}' is not a number.");
-                        continue;
-                    }
-
+                if (!string.IsNullOrWhiteSpace(priceRaw) && TryDec(priceRaw, out var parsedPrice))
                     price = parsedPrice;
-                }
             }
 
             var buyer = buyerCol >= 0 ? Cell(cells, buyerCol) : "";
-            if (price is null && string.IsNullOrWhiteSpace(buyer))
+            if (IsUnsold(price, buyer))
+            {
+                rows[lotNumber] = new SalesResultRow(lineNo, lotNumber, null, "", string.Join(" | ", cells.Where(c => c.Length > 0)));
                 continue;
+            }
 
-            rows.Add(new SalesResultRow(lineNo, lotNumber, price, buyer, string.Join(" | ", cells.Where(c => c.Length > 0))));
+            rows[lotNumber] = new SalesResultRow(
+                lineNo,
+                lotNumber,
+                price,
+                NormalizeBuyer(buyer),
+                string.Join(" | ", cells.Where(c => c.Length > 0)));
         }
 
         if (rows.Count == 0 && errors.Count == 0)
             errors.Add("No sales result rows were found under the headers.");
 
-        return new SalesResultParseResult(rows, errors);
+        return new SalesResultParseResult(rows.Values.OrderBy(row => row.LotNumber).ToList(), errors);
+    }
+
+    /// <summary>
+    /// LCB / EB style sheets: lot | grade | garden | … | buyer name | net | price (no header).
+    /// </summary>
+    private static SalesResultParseResult ParseHeaderlessSales(DataTable table)
+    {
+        var rows = new Dictionary<int, SalesResultRow>();
+        var errors = new List<string>();
+
+        for (var r = 0; r < table.Rows.Count; r++)
+        {
+            var lineNo = r + 1;
+            var cells = table.Rows[r].ItemArray.Select(value => value?.ToString()?.Trim() ?? "").ToArray();
+            if (cells.Length == 0 || cells.All(string.IsNullOrWhiteSpace))
+                continue;
+
+            if (!TryInt(cells[0], out var lotNumber) || lotNumber <= 0)
+            {
+                errors.Add($"Line {lineNo}: lot '{cells[0]}' is not a whole number.");
+                continue;
+            }
+
+            // Typical layout: lot, grade, garden, [blank], buyer name, net, price
+            decimal? price = null;
+            if (cells.Length >= 7 && TryDec(cells[^1], out var trailingPrice))
+                price = trailingPrice;
+            else
+            {
+                for (var i = cells.Length - 1; i >= 1; i--)
+                {
+                    if (TryDec(cells[i], out var parsed) && parsed >= 0)
+                    {
+                        price = parsed;
+                        break;
+                    }
+                }
+            }
+
+            var buyer = "";
+            if (cells.Length >= 5)
+            {
+                var name = cells[4];
+                if (name.Equals("UNSOLD", StringComparison.OrdinalIgnoreCase))
+                {
+                    buyer = "";
+                    price = null;
+                }
+                else if (name.Length > 0 && !TryDec(name, out _))
+                {
+                    buyer = name;
+                }
+            }
+
+            var garden = cells.Length > 2 ? cells[2] : "";
+            var grade = cells.Length > 1 ? cells[1] : "";
+            decimal? net = null;
+            if (cells.Length >= 6 && TryDec(cells[^2], out var netKg))
+                net = netKg;
+
+            if (IsUnsold(price, buyer))
+            {
+                rows[lotNumber] = new SalesResultRow(
+                    lineNo, lotNumber, null, "", string.Join(" | ", cells.Where(c => c.Length > 0)), garden, grade, net);
+                continue;
+            }
+
+            rows[lotNumber] = new SalesResultRow(
+                lineNo,
+                lotNumber,
+                price,
+                NormalizeBuyer(buyer),
+                string.Join(" | ", cells.Where(c => c.Length > 0)),
+                garden,
+                grade,
+                net);
+        }
+
+        if (rows.Count == 0)
+            errors.Add("No sales result rows were found in the workbook.");
+
+        return new SalesResultParseResult(rows.Values.OrderBy(row => row.LotNumber).ToList(), errors);
+    }
+
+    private static bool LooksLikeHeaderlessSales(DataTable table)
+    {
+        var sample = Math.Min(table.Rows.Count, 8);
+        var ok = 0;
+        for (var r = 0; r < sample; r++)
+        {
+            var cells = table.Rows[r].ItemArray.Select(value => value?.ToString()?.Trim() ?? "").ToArray();
+            if (cells.Length < 3)
+                continue;
+            if (!TryInt(cells[0], out var lot) || lot <= 0)
+                continue;
+            if (cells.Skip(1).Any(cell => TryDec(cell, out _)))
+                ok++;
+        }
+
+        return ok >= Math.Min(3, sample);
     }
 
     private static SalesResultParseResult ParseTextDialect(BrokerCode broker, Stream content)
@@ -131,38 +233,34 @@ public sealed class SalesResultParser : ISalesResultParser
         var lines = reader.ReadToEnd()
             .Replace("\r\n", "\n")
             .Replace('\r', '\n')
-            .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            .Split('\n');
 
-        var rows = new List<SalesResultRow>();
+        var rows = new Dictionary<int, SalesResultRow>();
         var errors = new List<string>();
-        var seen = new HashSet<int>();
 
         for (var i = 0; i < lines.Length; i++)
         {
             var lineNo = i + 1;
             var line = lines[i];
+            if (string.IsNullOrWhiteSpace(line))
+                continue;
+
             if (!TryParseTextSalesLine(broker, line, out var lot, out var price, out var buyer))
+                continue;
+
+            if (IsUnsold(price, buyer))
             {
-                // Skip non-lot noise quietly when other rows succeed.
+                rows[lot] = new SalesResultRow(lineNo, lot, null, "", line);
                 continue;
             }
 
-            if (!seen.Add(lot))
-            {
-                errors.Add($"Line {lineNo}: lot {lot} is duplicated.");
-                continue;
-            }
-
-            if (price is null && string.IsNullOrWhiteSpace(buyer))
-                continue;
-
-            rows.Add(new SalesResultRow(lineNo, lot, price, buyer, line));
+            rows[lot] = new SalesResultRow(lineNo, lot, price, NormalizeBuyer(buyer), line);
         }
 
         if (rows.Count == 0)
-            errors.Add($"No post-auction sales rows could be read for {broker}. Attach the broker sales file if this dialect is new.");
+            errors.Add($"No post-auction sales rows could be read for {broker}.");
 
-        return new SalesResultParseResult(rows, errors);
+        return new SalesResultParseResult(rows.Values.OrderBy(row => row.LotNumber).ToList(), errors);
     }
 
     private static bool TryParseTextSalesLine(
@@ -176,144 +274,156 @@ public sealed class SalesResultParser : ISalesResultParser
         price = null;
         buyer = "";
 
-        // Prefer explicit lot + sold + buyer tokens when present.
-        var labeled = Regex.Match(
-            line,
-            @"\b(?:LOT|Lot)?\s*[#:]?\s*(\d{1,5})\b.*?\b(?:SOLD|PRICE|RATE)?\s*[:=]?\s*([\d]+(?:\.\d+)?)\b.*?\b(?:BUYER|BYR)?\s*[:=]?\s*([A-Z0-9]{2,12})\b",
-            RegexOptions.IgnoreCase);
-        if (labeled.Success)
-        {
-            lot = int.Parse(labeled.Groups[1].Value, CultureInfo.InvariantCulture);
-            price = decimal.Parse(labeled.Groups[2].Value, CultureInfo.InvariantCulture);
-            buyer = labeled.Groups[3].Value.ToUpperInvariant();
-            return true;
-        }
-
         return broker switch
         {
-            BrokerCode.AS => TryAs(line, out lot, out price, out buyer),
+            BrokerCode.AS => TryAsc(line, out lot, out price, out buyer),
             BrokerCode.FW => TryFw(line, out lot, out price, out buyer),
-            BrokerCode.MB => TryMb(line, out lot, out price, out buyer),
-            BrokerCode.CT or BrokerCode.LC => TryCtLc(line, out lot, out price, out buyer),
+            BrokerCode.MB => TryMpb(line, out lot, out price, out buyer),
+            BrokerCode.CT or BrokerCode.LC => TryCtb(line, out lot, out price, out buyer),
             BrokerCode.JK => TryJk(line, out lot, out price, out buyer),
-            BrokerCode.BC => TryBc(line, out lot, out price, out buyer),
-            BrokerCode.EB => TryEb(line, out lot, out price, out buyer),
+            BrokerCode.BC => TryBp(line, out lot, out price, out buyer),
+            BrokerCode.EB => TryEbText(line, out lot, out price, out buyer),
             _ => false
         };
     }
 
-    private static bool TryAs(string line, out int lot, out decimal? price, out string buyer)
+    /// <summary>
+    /// ASC.txt: sale date cat lot inv factory garden grade net price … buyerCode buyerName
+    /// </summary>
+    private static bool TryAsc(string line, out int lot, out decimal? price, out string buyer)
     {
         lot = 0; price = null; buyer = "";
-        if (!line.StartsWith("AS", StringComparison.OrdinalIgnoreCase) &&
-            !line.StartsWith("ASC", StringComparison.OrdinalIgnoreCase))
+        if (line.Length < 110)
             return false;
-
-        var match = Regex.Match(
-            line,
-            @"(?:AS|ASC)\s+\d+\s+\d{2}/\d{2}/\d{4}\s+(\d+)\s+\S+\s+.*?\s+(\d+)\s+[A-Z]\s+[\d.]+\s+([\d.]+)\s+(\S+)\s+",
-            RegexOptions.IgnoreCase);
-        if (!match.Success) return false;
-        lot = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
-        // Group 3 is often total net in catalogue; post-auction files may carry sold in a later money field.
-        var money = Regex.Matches(line, @"\b(\d+\.\d{2})\b");
-        if (money.Count >= 3 && TryDec(money[^1].Groups[1].Value, out var sold) && sold > 0)
+        if (!TryInt(Slice(line, 17, 22), out lot) || lot <= 0)
+            return false;
+        if (TryDec(Slice(line, 94, 103), out var sold))
             price = sold;
-        var buyerMatch = Regex.Match(line, @"\b([A-Z]{2,6})\s+(?:EX ESTATE|EX-ESTATE|WAREHOUSE)\b", RegexOptions.IgnoreCase);
-        if (buyerMatch.Success) buyer = buyerMatch.Groups[1].Value;
-        var trailingBuyer = Regex.Match(line, @"\b([A-Z0-9]{2,8})\s*$");
-        if (string.IsNullOrEmpty(buyer) && trailingBuyer.Success) buyer = trailingBuyer.Groups[1].Value;
-        return lot > 0 && (price is not null || buyer.Length > 0);
+        buyer = Slice(line, 106, 112);
+        return true;
     }
 
+    /// <summary>
+    /// BP.txt: … BC0001  1060.00VEN…
+    /// </summary>
+    private static bool TryBp(string line, out int lot, out decimal? price, out string buyer)
+    {
+        lot = 0; price = null; buyer = "";
+        var match = Regex.Match(line, @"BC0*(\d+)\s+(\d+\.\d{2})([A-Z]{0,6})", RegexOptions.IgnoreCase);
+        if (!match.Success)
+            return false;
+        lot = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        price = decimal.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+        var rawBuyer = match.Groups[3].Value;
+        // Buyer code is glued to the name (VENVENTURE → VEN). Keep 2–4 leading letters.
+        buyer = rawBuyer.Length <= 4 ? rawBuyer : rawBuyer[..Math.Min(3, rawBuyer.Length)];
+        if (rawBuyer.Length >= 2 && rawBuyer.Length <= 4)
+            buyer = rawBuyer;
+        else if (rawBuyer.Length > 4)
+            buyer = GuessGluedBuyer(rawBuyer);
+        return lot > 0;
+    }
+
+    private static string GuessGluedBuyer(string raw)
+    {
+        // Prefer 3-char codes used by Bartleet sales (VEN, RTP, …); fall back to 2.
+        if (raw.Length >= 3)
+            return raw[..3];
+        return raw;
+    }
+
+    /// <summary>
+    /// CTB.txt: lot at cols 5–10, packed net/price at fixed tail, buyer code then name.
+    /// </summary>
+    private static bool TryCtb(string line, out int lot, out decimal? price, out string buyer)
+    {
+        lot = 0; price = null; buyer = "";
+        if (line.Length < 102)
+            return false;
+        if (!TryInt(Slice(line, 4, 10), out lot) || lot <= 0)
+            return false;
+
+        if (TryInt(Slice(line, 95, 102), out var packedPrice))
+            price = packedPrice / 100m;
+        buyer = Slice(line, 103, 107);
+        return true;
+    }
+
+    /// <summary>
+    /// FW priced catalogue: … INV  LOT  PRICE  BUYER CODE  BUYER NAME
+    /// </summary>
     private static bool TryFw(string line, out int lot, out decimal? price, out string buyer)
     {
         lot = 0; price = null; buyer = "";
-        if (!line.StartsWith("FW", StringComparison.OrdinalIgnoreCase)) return false;
-        if (!int.TryParse(Slice(line, 21, 30), NumberStyles.Integer, CultureInfo.InvariantCulture, out lot) || lot <= 0)
+        var trimmed = line.TrimStart();
+        if (!trimmed.StartsWith("MF", StringComparison.OrdinalIgnoreCase))
             return false;
-        var money = Regex.Matches(line, @"\b(\d+\.\d{2})\b");
-        if (money.Count > 0 && TryDec(money[^1].Groups[1].Value, out var sold) && sold > 0)
-            price = sold;
-        var buyerMatch = Regex.Match(line, @"\b([A-Z]{2,8})\b(?!.*\b(?:EX-ESTATE|EXESTATE|BAGS|BOP|BOPF)\b)");
-        if (buyerMatch.Success) buyer = buyerMatch.Groups[1].Value;
-        return price is not null || buyer.Length > 0;
+
+        var matches = Regex.Matches(line, @"(\d{1,5})\s+(\d{1,3}(?:,\d{3})*\.\d{2}|\d+\.\d{2})\s+([A-Z0-9]{2,6})(?:\s+|$)");
+        if (matches.Count == 0)
+            return false;
+
+        // Last match is lot/price/buyer; earlier decimals are net weight.
+        var match = matches[^1];
+        lot = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        if (!TryDec(match.Groups[2].Value, out var sold))
+            return false;
+        price = sold;
+        buyer = match.Groups[3].Value;
+        return lot > 0;
     }
 
-    private static bool TryMb(string line, out int lot, out decimal? price, out string buyer)
-    {
-        lot = 0; price = null; buyer = "";
-        if (!int.TryParse(Slice(line, 8, 14), NumberStyles.Integer, CultureInfo.InvariantCulture, out lot) || lot <= 0)
-            return false;
-        var mark = Slice(line, 82, 87);
-        if (mark.Length > 0) buyer = mark;
-        if (line.Length >= 125)
-        {
-            var packed = line[87..Math.Min(125, line.Length)];
-            if (packed.Length >= 8 && TryDec((decimal.Parse(packed[^8..], CultureInfo.InvariantCulture) / 100m).ToString(CultureInfo.InvariantCulture), out var sold))
-                price = sold;
-        }
-        return price is not null || buyer.Length > 0;
-    }
-
-    private static bool TryCtLc(string line, out int lot, out decimal? price, out string buyer)
-    {
-        lot = 0; price = null; buyer = "";
-        if (!int.TryParse(Slice(line, 22, 26), NumberStyles.Integer, CultureInfo.InvariantCulture, out lot) || lot <= 0)
-            return false;
-        var money = Regex.Matches(line, @"\b(\d+\.\d{2})\b");
-        if (money.Count > 0 && TryDec(money[^1].Groups[1].Value, out var sold) && sold > 0)
-            price = sold;
-        var mark = Regex.Match(line, @"\b(SPBS|MWPS|MWP|SPB|PS|RTS)\b");
-        if (mark.Success) buyer = mark.Groups[1].Value;
-        return price is not null || buyer.Length > 0;
-    }
-
+    /// <summary>
+    /// JK.txt packed: sale+lot … net(9) price(10) buyer(4) name
+    /// </summary>
     private static bool TryJk(string line, out int lot, out decimal? price, out string buyer)
     {
         lot = 0; price = null; buyer = "";
-        if (line.Length < 20) return false;
-        if (!int.TryParse(line[..5], NumberStyles.Integer, CultureInfo.InvariantCulture, out lot) || lot <= 0)
+        if (line.Length < 40)
             return false;
-        var money = Regex.Matches(line, @"(\d+\.\d{2})");
-        // JK sales often put realized price among the trailing money fields (non-zero).
-        foreach (Match match in money.Cast<Match>().Reverse())
-        {
-            if (TryDec(match.Groups[1].Value, out var sold) && sold > 0)
-            {
-                price = sold;
-                break;
-            }
-        }
-        var buyerMatch = Regex.Match(line, @"\b([A-Z0-9]{2,10})\s+\d{2}-\d{2}-\d{4}\s*$");
-        if (buyerMatch.Success) buyer = buyerMatch.Groups[1].Value;
-        return price is not null || buyer.Length > 0;
+        if (!TryInt(Slice(line, 2, 7), out lot) || lot <= 0)
+            return false;
+
+        // Prefer the trailing net/price/buyer block (ignore sale/date digits earlier on the line).
+        var matches = Regex.Matches(line, @"(\d{9})(\d{10})([A-Z0-9]{2,4})");
+        if (matches.Count == 0)
+            return false;
+        var match = matches[^1];
+        if (TryDec((decimal.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture) / 100m).ToString(CultureInfo.InvariantCulture), out var sold))
+            price = sold;
+        buyer = match.Groups[3].Value;
+        return true;
     }
 
-    private static bool TryBc(string line, out int lot, out decimal? price, out string buyer)
+    /// <summary>
+    /// MPB.txt: … invoice  lot  price  buyerCode buyerName …
+    /// </summary>
+    private static bool TryMpb(string line, out int lot, out decimal? price, out string buyer)
     {
         lot = 0; price = null; buyer = "";
-        var lotMatch = Regex.Match(line, @"BC(\d+)", RegexOptions.IgnoreCase);
-        if (!lotMatch.Success) return false;
-        lot = int.Parse(lotMatch.Groups[1].Value, CultureInfo.InvariantCulture);
-        var valuation = Regex.Match(line, @"BC\d+\s+([\d.]+)", RegexOptions.IgnoreCase);
-        if (valuation.Success && TryDec(valuation.Groups[1].Value, out var sold) && sold > 0)
-            price = sold;
-        var buyerMatch = Regex.Match(line, @"\b(MWPS|SPBS|MWP|SPB)\b");
-        if (buyerMatch.Success) buyer = buyerMatch.Groups[1].Value;
-        return price is not null || buyer.Length > 0;
+        if (!line.TrimStart().StartsWith("MF", StringComparison.OrdinalIgnoreCase))
+            return false;
+
+        var match = Regex.Match(line, @"\b(\d{3,5})\s+(\d{1,5})\s+(\d+\.\d{2})\s+([A-Z0-9]{0,4})\s");
+        if (!match.Success)
+            return false;
+        lot = int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+        price = decimal.Parse(match.Groups[3].Value, CultureInfo.InvariantCulture);
+        buyer = match.Groups[4].Value;
+        return lot > 0;
     }
 
-    private static bool TryEb(string line, out int lot, out decimal? price, out string buyer)
+    private static bool TryEbText(string line, out int lot, out decimal? price, out string buyer)
     {
+        // Prefer Excel for EB; keep a soft text fallback.
         lot = 0; price = null; buyer = "";
-        if (!int.TryParse(Slice(line, 90, 95), NumberStyles.Integer, CultureInfo.InvariantCulture, out lot) || lot <= 0)
+        var match = Regex.Match(line, @"^\s*(\d{1,5})\b.*?\b(\d+\.\d{2})\b.*?([A-Z0-9]{2,6})\b");
+        if (!match.Success)
             return false;
-        var money = Regex.Matches(line, @"(\d+\.\d{2})");
-        if (money.Count > 0 && TryDec(money[^1].Groups[1].Value, out var sold) && sold > 0)
-            price = sold;
-        buyer = Slice(line, 84, 90);
-        return price is not null || buyer.Length > 0;
+        lot = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+        price = decimal.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+        buyer = match.Groups[3].Value;
+        return lot > 0;
     }
 
     private static DataTable ReadExcelTable(Stream stream)
@@ -397,6 +507,18 @@ public sealed class SalesResultParser : ISalesResultParser
         var trimmed = value.Trim().ToLowerInvariant();
         return Regex.Replace(trimmed, @"[\s_\-./#]+", "");
     }
+
+    private static string NormalizeBuyer(string buyer)
+    {
+        var trimmed = buyer.Trim();
+        if (trimmed.Equals("UNSOLD", StringComparison.OrdinalIgnoreCase))
+            return "";
+        var normalized = trimmed.ToUpperInvariant();
+        return normalized.Length <= 120 ? normalized : normalized[..120];
+    }
+
+    private static bool IsUnsold(decimal? price, string buyer) =>
+        (price is null or 0) && string.IsNullOrWhiteSpace(buyer);
 
     private static string Cell(IReadOnlyList<string> cells, int index) =>
         index >= 0 && index < cells.Count ? cells[index] : "";

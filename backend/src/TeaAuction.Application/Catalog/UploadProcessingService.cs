@@ -129,9 +129,14 @@ public sealed class UploadProcessingService(
     {
         await using var stream = await files.OpenReadAsync(batch.StorageKey, cancellationToken);
         var parsed = salesParser.Parse(batch.Broker, batch.OriginalFileName, stream);
-        if (parsed.Errors.Count > 0)
+        if (parsed.Rows.Count == 0)
         {
-            await FailAsync(batch, string.Join(" ", parsed.Errors.Take(20)), cancellationToken);
+            await FailAsync(
+                batch,
+                parsed.Errors.Count > 0
+                    ? string.Join(" ", parsed.Errors.Take(20))
+                    : "No post-auction sales rows could be read.",
+                cancellationToken);
             return;
         }
 
@@ -154,33 +159,58 @@ public sealed class UploadProcessingService(
             return;
         }
 
-        var numbers = parsed.Rows.Select(row => row.LotNumber).ToArray();
+        // Same lot may appear with different prices/values — last row already wins in the parser.
+        var numbers = parsed.Rows.Select(row => row.LotNumber).Distinct().ToArray();
         var lots = await sales.FindTrackedLotsAsync(sale.Id, batch.Broker, numbers, cancellationToken);
         var byNumber = lots.ToDictionary(lot => lot.LotNumber);
-        var missing = numbers.Where(number => !byNumber.ContainsKey(number)).Order().Take(20).ToArray();
-        if (missing.Length > 0)
-        {
-            await FailAsync(
-                batch,
-                $"No catalogue lots for {batch.Broker} lot numbers: {string.Join(", ", missing)}. Upload the pre-auction catalogue first.",
-                cancellationToken);
-            return;
-        }
 
+        var applied = 0;
         foreach (var row in parsed.Rows)
         {
-            var lot = byNumber[row.LotNumber];
-            if (row.SoldPricePerKg.HasValue)
-                lot.SoldPricePerKg = row.SoldPricePerKg;
-            if (!string.IsNullOrWhiteSpace(row.BuyerCode))
-                lot.BuyerCode = row.BuyerCode.Trim();
+            if (!byNumber.TryGetValue(row.LotNumber, out var lot))
+            {
+                // Sales files can arrive before / without a successful catalogue import for a broker.
+                lot = new Lot
+                {
+                    Id = Guid.CreateVersion7(),
+                    SaleId = sale.Id,
+                    Broker = batch.Broker,
+                    LotNumber = row.LotNumber,
+                    FactoryCode = "",
+                    GardenMark = row.GardenMark ?? "",
+                    InvoiceNumber = "",
+                    Grade = row.Grade ?? "",
+                    Bags = 0,
+                    PackageType = "",
+                    NetWeightKg = row.NetWeightKg ?? 0,
+                    SellingMark = "",
+                    WarehouseOrBasis = "",
+                    Category = "",
+                    SourceLine = row.SourceLine
+                };
+                sales.AddLot(lot);
+                byNumber[row.LotNumber] = lot;
+            }
+
+            lot.SoldPricePerKg = row.SoldPricePerKg;
+            lot.BuyerCode = string.IsNullOrWhiteSpace(row.BuyerCode) ? "" : row.BuyerCode.Trim();
             lot.SalesUploadBatchId = batch.Id;
+            if (string.IsNullOrWhiteSpace(lot.GardenMark) && !string.IsNullOrWhiteSpace(row.GardenMark))
+                lot.GardenMark = row.GardenMark;
+            if (string.IsNullOrWhiteSpace(lot.Grade) && !string.IsNullOrWhiteSpace(row.Grade))
+                lot.Grade = row.Grade;
+            if (lot.NetWeightKg == 0 && row.NetWeightKg is > 0)
+                lot.NetWeightKg = row.NetWeightKg.Value;
+            if (string.IsNullOrWhiteSpace(lot.SourceLine))
+                lot.SourceLine = row.SourceLine;
+            applied++;
         }
 
-        await CompleteAsync(batch, sale.Id, parsed.Rows.Count, cancellationToken);
+        await CompleteAsync(batch, sale.Id, applied, cancellationToken);
         logger.LogInformation(
-            "Applied {LotCount} {Broker} post-auction sales rows for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
+            "Applied {LotCount} of {ParsedCount} {Broker} post-auction sales rows for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
             batch.LotCount,
+            parsed.Rows.Count,
             batch.Broker,
             batch.Centre,
             batch.SaleNumber,
