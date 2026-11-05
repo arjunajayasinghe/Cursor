@@ -21,7 +21,7 @@ npm run dev
 - Catalogue desk: http://localhost:5173
 - Sales list: http://localhost:5173/
 - Uploads list: http://localhost:5173/uploads
-- Upload by broker (drag-and-drop tiles): http://localhost:5173/upload
+- Upload all 8 brokers (one go): http://localhost:5173/upload
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger
 - OpenAPI document: http://localhost:8080/openapi/v1.json
@@ -91,7 +91,7 @@ cd frontend && npm run generate:api
 
 ## Catalogue files
 
-Set the sale header once on the upload page, then drag each broker catalogue onto its tile (AS, BC, CT, EB, FW, JK, LC, MB). Broker `.txt` fixed-width files and `.csv` files are accepted.
+Set the sale header once on the upload page, drop all eight broker catalogues in one go (filenames like `AS_-_SC_03.txt` are auto-matched), then click **Upload all 8**. You can still drop or replace a single file on its tile. Broker `.txt` fixed-width files and `.csv` files are accepted.
 
 CSV lots-only header:
 

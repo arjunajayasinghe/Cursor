@@ -40,7 +40,7 @@ export function UploadsPage() {
           <Typography color="text.secondary">Catalogue files received and their processing status.</Typography>
         </div>
         <Button variant="contained" component={RouterLink} to="/upload">
-          Upload a catalogue
+          Upload all 8 brokers
         </Button>
       </Stack>
 

@@ -61,6 +61,18 @@ export function isAllowedCatalogueFile(file: File) {
   return name.endsWith(".csv") || name.endsWith(".txt") || name.endsWith(".dat");
 }
 
+/** Match AS_-_SC_03…, "AS - SC 03.txt", AS.csv, etc. Longer codes first so AS wins over a bare A. */
+export function detectBrokerCode(fileName: string): BrokerCode | null {
+  const base = fileName.split(/[/\\]/).pop() ?? fileName;
+  const upper = base.toUpperCase();
+  const codes = [...brokers.map((broker) => broker.code)].sort((a, b) => b.length - a.length);
+  for (const code of codes) {
+    if (upper === code || upper.startsWith(`${code}.`)) return code;
+    if (new RegExp(`^${code}[^A-Z0-9]`).test(upper)) return code;
+  }
+  return null;
+}
+
 export async function csvHeaderError(file: File) {
   if (!file.name.toLowerCase().endsWith(".csv")) return null;
   const text = await file.slice(0, 4096).text();
