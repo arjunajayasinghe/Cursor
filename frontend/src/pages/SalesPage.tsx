@@ -31,7 +31,8 @@ export function SalesPage() {
         <div>
           <Typography variant="h4">Auctions</Typography>
           <Typography color="text.secondary">
-            Open a sale to see the auction board — all brokers or one, with sold price and buyer from the sales files.
+            Open a sale for auction results or the pre-auction catalogue tab. Use Catalogues in the menu to check
+            upload status and failure reasons.
           </Typography>
         </div>
         <Stack direction="row" spacing={1}>

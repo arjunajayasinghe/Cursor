@@ -22,8 +22,11 @@ export function App() {
         <Route path="auctions/:saleId" element={<SaleDetailPage />} />
         {/* Keep old sale URLs working */}
         <Route path="sales/:saleId" element={<SaleDetailPage />} />
-        <Route path="uploads" element={<UploadsPage />} />
+        {/* Pre-auction catalogues + upload history / failure reasons */}
+        <Route path="catalogues" element={<UploadsPage />} />
+        <Route path="uploads" element={<Navigate to="/catalogues" replace />} />
         <Route path="uploads/:uploadId" element={<UploadDetailPage />} />
+        <Route path="catalogues/:uploadId" element={<UploadDetailPage />} />
         <Route path="upload" element={<UploadPage />} />
         <Route path="upload-sales" element={<SalesUploadPage />} />
         <Route path="*" element={<Navigate to="/auctions" replace />} />

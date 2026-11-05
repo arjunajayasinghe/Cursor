@@ -480,7 +480,7 @@ export function SalesUploadPage() {
               {batchRows
                 .filter((row) => row.accepted?.id)
                 .map((row) => (
-                  <Button key={row.broker} component={RouterLink} to={`/uploads/${row.accepted!.id}`}>
+                  <Button key={row.broker} component={RouterLink} to={`/catalogues/${row.accepted!.id}`}>
                     View {row.broker} results
                   </Button>
                 ))}
@@ -489,8 +489,8 @@ export function SalesUploadPage() {
                   Open auction board
                 </Button>
               ) : null}
-              <Button component={RouterLink} to="/uploads">
-                All uploads
+              <Button component={RouterLink} to="/catalogues">
+                All catalogues
               </Button>
             </Stack>
           </Stack>

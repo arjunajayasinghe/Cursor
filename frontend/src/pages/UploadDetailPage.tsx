@@ -30,8 +30,8 @@ export function UploadDetailPage() {
   if (upload.isError) {
     return (
       <Stack spacing={2}>
-        <Button component={RouterLink} to="/uploads" sx={{ alignSelf: "flex-start" }}>
-          All uploads
+        <Button component={RouterLink} to="/catalogues" sx={{ alignSelf: "flex-start" }}>
+          All catalogues
         </Button>
         <Alert severity="error">{upload.error.message}</Alert>
       </Stack>
@@ -48,8 +48,8 @@ export function UploadDetailPage() {
 
   return (
     <Stack spacing={3}>
-      <Button component={RouterLink} to="/uploads" sx={{ alignSelf: "flex-start" }}>
-        All uploads
+      <Button component={RouterLink} to="/catalogues" sx={{ alignSelf: "flex-start" }}>
+        All catalogues
       </Button>
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
@@ -70,8 +70,8 @@ export function UploadDetailPage() {
         <Stack spacing={1} sx={{ alignItems: { md: "flex-end" } }}>
           <StatusChip status={String(detail.status)} />
           {detail.saleId ? (
-            <Button component={RouterLink} to={`/auctions/${detail.saleId}`} variant={failed ? "contained" : "text"}>
-              Auction board
+            <Button component={RouterLink} to={`/auctions/${detail.saleId}?view=catalogue`} variant={failed ? "contained" : "text"}>
+              Pre-auction on sale
             </Button>
           ) : null}
         </Stack>
@@ -82,12 +82,12 @@ export function UploadDetailPage() {
           severity="error"
           action={
             <Stack direction="row" spacing={1}>
-              <Button color="inherit" size="small" component={RouterLink} to="/uploads">
-                Back to uploads
+              <Button color="inherit" size="small" component={RouterLink} to="/catalogues">
+                Back to catalogues
               </Button>
               {detail.saleId ? (
-                <Button color="inherit" size="small" component={RouterLink} to={`/auctions/${detail.saleId}`}>
-                  Open sale lots
+                <Button color="inherit" size="small" component={RouterLink} to={`/auctions/${detail.saleId}?view=catalogue`}>
+                  Open pre-auction catalogue
                 </Button>
               ) : null}
             </Stack>

@@ -65,8 +65,10 @@ export function UploadsPage() {
 
   function openUpload(upload: UploadBatch) {
     if (upload.status === "Pending" || upload.status === "Processing") return;
-    navigate(`/uploads/${upload.id}`);
+    navigate(`/catalogues/${upload.id}`);
   }
+
+  const catalogueReady = ready.filter((row) => String(row.kind) !== "PostAuctionSales");
 
   return (
     <Stack spacing={3}>
@@ -76,14 +78,15 @@ export function UploadsPage() {
         sx={{ justifyContent: "space-between", alignItems: { sm: "flex-end" } }}
       >
         <div>
-          <Typography variant="h4">Uploads</Typography>
+          <Typography variant="h4">Catalogues</Typography>
           <Typography color="text.secondary">
-            Open a completed row to see every lot from that broker file. Failed attempts are hidden by default.
+            Pre-auction broker files. Open View catalogue for lot lines, or View error to see why an upload failed.
+            Failed rows are hidden until you click Show failed.
           </Typography>
         </div>
         <Stack direction="row" spacing={1}>
-          <Button variant="outlined" component={RouterLink} to="/upload-sales">
-            Upload sales
+          <Button variant="outlined" component={RouterLink} to="/auctions">
+            Auctions
           </Button>
           <Button variant="contained" component={RouterLink} to="/upload">
             Upload catalogues
@@ -91,23 +94,28 @@ export function UploadsPage() {
         </Stack>
       </Stack>
 
-      {ready.length > 0 ? (
+      {catalogueReady.length > 0 ? (
         <Alert severity="success">
-          {ready.length} file{ready.length === 1 ? "" : "s"} ready with lot details. Start with{" "}
+          {catalogueReady.length} catalogue{catalogueReady.length === 1 ? "" : "s"} ready. Start with{" "}
           <Link
             component={RouterLink}
-            to={`/uploads/${ready[0].id}`}
+            to={`/catalogues/${catalogueReady[0].id}`}
             underline="hover"
             sx={{ fontWeight: 600 }}
           >
-            {String(ready[0].broker)} sale {ready[0].saleNumber}/{ready[0].year}
+            {String(catalogueReady[0].broker)} sale {catalogueReady[0].saleNumber}/{catalogueReady[0].year}
           </Link>
-          {ready[0].saleId ? (
+          {catalogueReady[0].saleId ? (
             <>
               {" "}
               or the{" "}
-              <Link component={RouterLink} to={`/auctions/${ready[0].saleId}`} underline="hover" sx={{ fontWeight: 600 }}>
-                auction board
+              <Link
+                component={RouterLink}
+                to={`/auctions/${catalogueReady[0].saleId}?view=catalogue`}
+                underline="hover"
+                sx={{ fontWeight: 600 }}
+              >
+                pre-auction catalogue on the sale
               </Link>
             </>
           ) : null}
@@ -196,7 +204,7 @@ export function UploadsPage() {
                         size="small"
                         disabled={busy}
                         component={RouterLink}
-                        to={`/uploads/${upload.id}`}
+                        to={`/catalogues/${upload.id}`}
                       >
                         {openLabel(upload)}
                       </Button>
@@ -218,7 +226,7 @@ export function UploadsPage() {
                       {upload.saleId ? (
                         <Button
                           component={RouterLink}
-                          to={`/auctions/${upload.saleId}`}
+                          to={`/auctions/${upload.saleId}?view=catalogue`}
                           sx={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: "1.05rem" }}
                         >
                           {upload.saleNumber}/{upload.year}
