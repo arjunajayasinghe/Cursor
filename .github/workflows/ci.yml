@@ -47,6 +47,7 @@ jobs:
           ConnectionStrings__Database: Host=localhost;Port=5432;Database=tea_auction;Username=tea;Password=tea
         run: |
           dotnet tool restore
+          dotnet restore TeaAuction.slnx
           dotnet ef database update --project src/TeaAuction.Infrastructure --startup-project src/TeaAuction.Api
 
   frontend:
