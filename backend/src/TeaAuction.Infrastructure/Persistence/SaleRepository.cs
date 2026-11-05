@@ -55,5 +55,16 @@ public sealed class SaleRepository(TeaAuctionDbContext db) : ISaleRepository
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<Lot>> FindTrackedLotsAsync(
+        Guid saleId,
+        BrokerCode broker,
+        IReadOnlyCollection<int> lotNumbers,
+        CancellationToken cancellationToken)
+    {
+        return await db.Lots
+            .Where(lot => lot.SaleId == saleId && lot.Broker == broker && lotNumbers.Contains(lot.LotNumber))
+            .ToListAsync(cancellationToken);
+    }
+
     public void AddLot(Lot lot) => db.Lots.Add(lot);
 }

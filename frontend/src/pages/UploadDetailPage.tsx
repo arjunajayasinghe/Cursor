@@ -96,23 +96,31 @@ export function UploadDetailPage() {
         <CatalogueLotsTable
           lots={lots}
           currency={currency}
+          showSalesResults={
+            String(detail.kind) === "PostAuctionSales" ||
+            lots.some((lot) => lot.soldPricePerKg != null || (lot.buyerCode && String(lot.buyerCode).trim()))
+          }
           emptyMessage={
             detail.status === "Completed"
-              ? "No lots were imported from this file."
+              ? "No lots were linked from this file."
               : "Lots are not available yet."
           }
         />
       </div>
 
-      <Paper sx={{ p: 3, bgcolor: "rgba(31, 77, 58, 0.04)" }}>
-        <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
-          After the auction
-        </Typography>
-        <Typography color="text.secondary">
-          When the sale is over, upload each broker’s sales result file here. That step will add sold price and
-          buyer against these catalogue lots — it is not available yet.
-        </Typography>
-      </Paper>
+      {String(detail.kind) !== "PostAuctionSales" ? (
+        <Paper sx={{ p: 3, bgcolor: "rgba(31, 77, 58, 0.04)" }}>
+          <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
+            After the auction
+          </Typography>
+          <Typography color="text.secondary" sx={{ mb: 1 }}>
+            When the sale is over, upload each broker’s sales result file to add sold price and buyer.
+          </Typography>
+          <Button component={RouterLink} to="/upload-sales" variant="contained">
+            Upload sales
+          </Button>
+        </Paper>
+      ) : null}
     </Stack>
   );
 }

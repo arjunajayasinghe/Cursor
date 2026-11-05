@@ -17,7 +17,9 @@ public sealed class UploadBatchConfiguration : IEntityTypeConfiguration<UploadBa
         builder.Property(batch => batch.Centre).HasColumnName("centre").HasConversion<string>().HasMaxLength(32);
         builder.Property(batch => batch.SaleDate).HasColumnName("sale_date");
         builder.Property(batch => batch.Broker).HasColumnName("broker").HasConversion<string>().HasMaxLength(8);
+        builder.Property(batch => batch.Kind).HasColumnName("kind").HasConversion<string>().HasMaxLength(32);
         builder.Property(batch => batch.OriginalFileName).HasColumnName("original_file_name").HasMaxLength(260).IsRequired();
+        builder.HasIndex(batch => batch.Kind);
         builder.Property(batch => batch.StorageKey).HasColumnName("storage_key").HasMaxLength(500).IsRequired();
         builder.Property(batch => batch.ContentType).HasColumnName("content_type").HasMaxLength(100).IsRequired();
         builder.Property(batch => batch.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(32);

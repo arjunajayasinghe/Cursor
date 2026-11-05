@@ -61,10 +61,48 @@ export function isAllowedCatalogueFile(file: File) {
   return name.endsWith(".csv") || name.endsWith(".txt") || name.endsWith(".dat");
 }
 
+export function isAllowedSalesFile(file: File) {
+  const name = file.name.toLowerCase();
+  return (
+    name.endsWith(".csv") ||
+    name.endsWith(".txt") ||
+    name.endsWith(".dat") ||
+    name.endsWith(".xls") ||
+    name.endsWith(".xlsx")
+  );
+}
+
+/** Post-auction sales filenames: ASC, BP, CTB, EB, FW, JK, LCB, MPB. */
+export const salesFileAliases: Record<string, BrokerCode> = {
+  ASC: "AS",
+  AS: "AS",
+  BP: "BC",
+  BC: "BC",
+  CTB: "CT",
+  CT: "CT",
+  EB: "EB",
+  FW: "FW",
+  JK: "JK",
+  LCB: "LC",
+  LC: "LC",
+  MPB: "MB",
+  MB: "MB",
+};
+
 /** Match AS_-_SC_03…, "AS - SC 03.txt", AS.csv, etc. Longer codes first so AS wins over a bare A. */
 export function detectBrokerCode(fileName: string): BrokerCode | null {
   const base = fileName.split(/[/\\]/).pop() ?? fileName;
   const upper = base.toUpperCase();
+  const stem = upper.replace(/\.[^.]+$/, "");
+  if (stem in salesFileAliases) return salesFileAliases[stem];
+
+  const aliases = Object.keys(salesFileAliases).sort((a, b) => b.length - a.length);
+  for (const alias of aliases) {
+    if (upper.startsWith(`${alias}.`) || new RegExp(`^${alias}[^A-Z0-9]`).test(upper)) {
+      return salesFileAliases[alias];
+    }
+  }
+
   const codes = [...brokers.map((broker) => broker.code)].sort((a, b) => b.length - a.length);
   for (const code of codes) {
     if (upper === code || upper.startsWith(`${code}.`)) return code;

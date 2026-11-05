@@ -13,6 +13,7 @@ public static class DependencyInjection
         services.AddValidatorsFromAssemblyContaining<CreateUploadValidator>();
         services.AddSingleton<ILotCsvParser, LotCsvParser>();
         services.AddSingleton<IBrokerCatalogueParser, BrokerCatalogueParser>();
+        services.AddSingleton<ISalesResultParser, SalesResultParser>();
         services.AddScoped<SaleQueryService>();
         services.AddScoped<UploadService>();
         services.AddScoped<UploadProcessingService>();

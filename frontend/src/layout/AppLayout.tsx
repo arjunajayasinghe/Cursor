@@ -25,6 +25,9 @@ export function AppLayout() {
           <Button color="inherit" component={RouterLink} to="/upload">
             Upload catalogues
           </Button>
+          <Button color="inherit" component={RouterLink} to="/upload-sales">
+            Upload sales
+          </Button>
         </Toolbar>
       </AppBar>
       <Container maxWidth="lg" sx={{ py: 4 }}>

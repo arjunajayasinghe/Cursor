@@ -20,12 +20,23 @@ public interface ISaleRepository
         IReadOnlyCollection<int> lotNumbers,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<Lot>> FindTrackedLotsAsync(
+        Guid saleId,
+        BrokerCode broker,
+        IReadOnlyCollection<int> lotNumbers,
+        CancellationToken cancellationToken);
+
     void AddLot(Lot lot);
 }
 
 public interface IBrokerCatalogueParser
 {
     LotCsvParseResult Parse(BrokerCode broker, Stream content);
+}
+
+public interface ISalesResultParser
+{
+    SalesResultParseResult Parse(BrokerCode broker, string fileName, Stream content);
 }
 
 public interface IUploadBatchRepository
@@ -82,4 +93,13 @@ public static class CatalogueFileKinds
         var name = fileName.ToLowerInvariant();
         return name.EndsWith(".txt") || name.EndsWith(".dat");
     }
+
+    public static bool IsExcel(string fileName)
+    {
+        var name = fileName.ToLowerInvariant();
+        return name.EndsWith(".xls") || name.EndsWith(".xlsx");
+    }
+
+    public static bool IsSalesFile(string fileName) =>
+        IsCsv(fileName) || IsBrokerText(fileName) || IsExcel(fileName);
 }

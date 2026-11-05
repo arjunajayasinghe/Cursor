@@ -28,6 +28,8 @@ public sealed record LotDto(
     string WarehouseOrBasis,
     string Category,
     decimal? ValuationPerKg,
+    decimal? SoldPricePerKg,
+    string BuyerCode,
     string SourceLine);
 
 public sealed record UploadBatchDto(
@@ -38,6 +40,7 @@ public sealed record UploadBatchDto(
     AuctionCentre Centre,
     DateOnly SaleDate,
     BrokerCode Broker,
+    UploadKind Kind,
     UploadStatus Status,
     string OriginalFileName,
     int LotCount,
@@ -66,6 +69,7 @@ public sealed record UploadDetailDto(
     AuctionCentre Centre,
     DateOnly SaleDate,
     BrokerCode Broker,
+    UploadKind Kind,
     UploadStatus Status,
     string OriginalFileName,
     int LotCount,

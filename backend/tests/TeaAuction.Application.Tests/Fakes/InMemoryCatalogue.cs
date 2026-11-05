@@ -54,6 +54,18 @@ internal sealed class InMemoryCatalogue :
         return Task.FromResult(found);
     }
 
+    public Task<IReadOnlyList<Lot>> FindTrackedLotsAsync(
+        Guid saleId,
+        BrokerCode broker,
+        IReadOnlyCollection<int> lotNumbers,
+        CancellationToken cancellationToken)
+    {
+        IReadOnlyList<Lot> found = Lots
+            .Where(lot => lot.SaleId == saleId && lot.Broker == broker && lotNumbers.Contains(lot.LotNumber))
+            .ToList();
+        return Task.FromResult(found);
+    }
+
     public void AddLot(Lot lot)
     {
         Lots.Add(lot);

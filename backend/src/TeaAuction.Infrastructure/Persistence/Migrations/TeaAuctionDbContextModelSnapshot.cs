@@ -39,6 +39,12 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(8)")
                         .HasColumnName("broker");
 
+                    b.Property<string>("BuyerCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("buyer_code");
+
                     b.Property<string>("Category")
                         .IsRequired()
                         .HasMaxLength(40)
@@ -93,11 +99,20 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("sale_id");
 
+                    b.Property<Guid?>("SalesUploadBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sales_upload_batch_id");
+
                     b.Property<string>("SellingMark")
                         .IsRequired()
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("selling_mark");
+
+                    b.Property<decimal?>("SoldPricePerKg")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("sold_price_per_kg");
 
                     b.Property<string>("SourceLine")
                         .IsRequired()
@@ -121,6 +136,8 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnName("warehouse_or_basis");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("SalesUploadBatchId");
 
                     b.HasIndex("UploadBatchId");
 
@@ -209,6 +226,12 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(2000)")
                         .HasColumnName("error");
 
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("kind");
+
                     b.Property<int>("LotCount")
                         .HasColumnType("integer")
                         .HasColumnName("lot_count");
@@ -254,6 +277,8 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnName("year");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("Kind");
 
                     b.HasIndex("SaleId");
 

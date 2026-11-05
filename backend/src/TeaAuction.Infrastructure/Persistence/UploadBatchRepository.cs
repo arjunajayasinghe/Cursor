@@ -24,10 +24,29 @@ public sealed class UploadBatchRepository(TeaAuctionDbContext db) : IUploadBatch
     public Task<UploadBatch?> GetAsync(Guid id, CancellationToken cancellationToken) =>
         db.UploadBatches.AsNoTracking().FirstOrDefaultAsync(batch => batch.Id == id, cancellationToken);
 
-    public Task<UploadBatch?> GetWithLotsAsync(Guid id, CancellationToken cancellationToken) =>
-        db.UploadBatches.AsNoTracking()
-            .Include(batch => batch.Lots)
-            .FirstOrDefaultAsync(batch => batch.Id == id, cancellationToken);
+    public async Task<UploadBatch?> GetWithLotsAsync(Guid id, CancellationToken cancellationToken)
+    {
+        var batch = await db.UploadBatches.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (batch is null) return null;
+
+        if (batch.Kind == UploadKind.PostAuctionSales)
+        {
+            batch.Lots = await db.Lots.AsNoTracking()
+                .Where(lot => lot.SalesUploadBatchId == id)
+                .OrderBy(lot => lot.LotNumber)
+                .ToListAsync(cancellationToken);
+        }
+        else
+        {
+            batch.Lots = await db.Lots.AsNoTracking()
+                .Where(lot => lot.UploadBatchId == id)
+                .OrderBy(lot => lot.LotNumber)
+                .ToListAsync(cancellationToken);
+        }
+
+        return batch;
+    }
 
     public async Task MarkFailedAsync(Guid id, string error, CancellationToken cancellationToken)
     {

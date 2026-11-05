@@ -12,5 +12,7 @@ public sealed class UploadForm
 
     public string Broker { get; set; } = "";
 
+    public string Kind { get; set; } = "PreAuctionCatalogue";
+
     public IFormFile? File { get; set; }
 }

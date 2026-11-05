@@ -69,6 +69,7 @@ public static class CatalogueEndpoints
             Centre = form.Centre,
             SaleDate = form.SaleDate,
             Broker = form.Broker,
+            Kind = string.IsNullOrWhiteSpace(form.Kind) ? "PreAuctionCatalogue" : form.Kind,
             FileName = form.File?.FileName ?? "",
             Length = form.File?.Length ?? 0
         }, stream, cancellationToken);

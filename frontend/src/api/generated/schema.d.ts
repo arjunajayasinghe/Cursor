@@ -124,8 +124,13 @@ export interface components {
             category: string;
             /** Format: double */
             valuationPerKg: null | number | string;
+            /** Format: double */
+            soldPricePerKg: null | number | string;
+            buyerCode: string;
             sourceLine: string;
         };
+        /** @enum {unknown} */
+        UploadKind: "PreAuctionCatalogue" | "PostAuctionSales";
         SaleDetailDto: {
             /** Format: uuid */
             id: string;
@@ -177,6 +182,7 @@ export interface components {
             /** Format: date */
             saleDate: string;
             broker: components["schemas"]["BrokerCode"];
+            kind: components["schemas"]["UploadKind"];
             status: components["schemas"]["UploadStatus"];
             originalFileName: string;
             /** Format: int32 */
@@ -199,6 +205,7 @@ export interface components {
             /** Format: date */
             saleDate: string;
             broker: components["schemas"]["BrokerCode"];
+            kind: components["schemas"]["UploadKind"];
             status: components["schemas"]["UploadStatus"];
             originalFileName: string;
             /** Format: int32 */
@@ -218,6 +225,7 @@ export interface components {
             /** Format: date */
             saleDate?: string;
             broker?: string;
+            kind?: string;
             file?: null | components["schemas"]["IFormFile"];
         };
         /** @enum {unknown} */

@@ -82,7 +82,8 @@ export function UploadsPage() {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Catalogue</TableCell>
+                <TableCell>Open</TableCell>
+                <TableCell>Kind</TableCell>
                 <TableCell>Uploaded</TableCell>
                 <TableCell>Broker</TableCell>
                 <TableCell>Sale</TableCell>
@@ -107,8 +108,15 @@ export function UploadsPage() {
                         to={`/uploads/${upload.id}`}
                         disabled={upload.status === "Pending" || upload.status === "Processing"}
                       >
-                        {canOpen ? "View catalogue" : "Open"}
+                        {canOpen
+                          ? String(upload.kind) === "PostAuctionSales"
+                            ? "View sales"
+                            : "View catalogue"
+                          : "Open"}
                       </Button>
+                    </TableCell>
+                    <TableCell>
+                      {String(upload.kind) === "PostAuctionSales" ? "Sales" : "Catalogue"}
                     </TableCell>
                     <TableCell>
                       {new Intl.DateTimeFormat("en-GB", {

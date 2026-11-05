@@ -164,6 +164,7 @@ public class UploadProcessingServiceTests
         store,
         new LotCsvParser(),
         new BrokerCatalogueParser(),
+        new SalesResultParser(),
         new LotCsvRowValidator(),
         store,
         store,

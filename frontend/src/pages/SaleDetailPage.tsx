@@ -63,6 +63,9 @@ export function SaleDetailPage() {
   const totalBags = visibleLots.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
   const totalKg = visibleLots.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
   const brokerCodesPresent = brokers.filter((broker) => (lotsByBroker.get(broker.code)?.length ?? 0) > 0);
+  const showSalesResults = detail.lots.some(
+    (lot) => lot.soldPricePerKg != null || (lot.buyerCode && String(lot.buyerCode).trim().length > 0),
+  );
 
   return (
     <Stack spacing={3}>
@@ -120,7 +123,12 @@ export function SaleDetailPage() {
         <Typography color="text.secondary" sx={{ mb: 2 }}>
           These are the pre-auction offer lines. After the auction, broker sales files will add sold results.
         </Typography>
-        <CatalogueLotsTable lots={visibleLots} currency={currency} showBroker={brokerFilter === "ALL"} />
+        <CatalogueLotsTable
+          lots={visibleLots}
+          currency={currency}
+          showBroker={brokerFilter === "ALL"}
+          showSalesResults={showSalesResults}
+        />
       </div>
 
       <div>
@@ -164,13 +172,21 @@ export function SaleDetailPage() {
       </div>
 
       <Paper sx={{ p: 3, bgcolor: "rgba(31, 77, 58, 0.04)" }}>
-        <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
-          Post-auction sales files
-        </Typography>
-        <Typography color="text.secondary">
-          Once this auction is over, upload each broker’s sales result file by broker. That step will fill sold
-          price and buyer against these catalogue lots. Upload for sales results is coming next.
-        </Typography>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ justifyContent: "space-between", alignItems: { sm: "center" } }}>
+          <div>
+            <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
+              Post-auction sales files
+            </Typography>
+            <Typography color="text.secondary">
+              {showSalesResults
+                ? "Sold price and buyer are on the lot table above. Re-upload sales files to refresh results."
+                : "Once this auction is over, upload each broker’s sales result file to fill sold price and buyer."}
+            </Typography>
+          </div>
+          <Button variant="contained" component={RouterLink} to="/upload-sales">
+            Upload sales
+          </Button>
+        </Stack>
       </Paper>
     </Stack>
   );

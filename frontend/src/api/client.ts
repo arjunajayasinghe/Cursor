@@ -55,6 +55,7 @@ export function createUpload(input: {
   centre: string;
   saleDate: string;
   broker: string;
+  kind?: "PreAuctionCatalogue" | "PostAuctionSales";
   file: File;
 }) {
   const body = new FormData();
@@ -63,6 +64,7 @@ export function createUpload(input: {
   body.set("centre", input.centre);
   body.set("saleDate", input.saleDate);
   body.set("broker", input.broker);
+  body.set("kind", input.kind ?? "PreAuctionCatalogue");
   body.set("file", input.file);
   return unwrap(
     api.POST("/api/uploads", {

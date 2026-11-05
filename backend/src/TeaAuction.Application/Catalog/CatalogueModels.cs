@@ -12,10 +12,23 @@ public sealed record CreateUploadCommand
 
     public required string Broker { get; init; }
 
+    public string Kind { get; init; } = "PreAuctionCatalogue";
+
     public required string FileName { get; init; }
 
     public required long Length { get; init; }
 }
+
+public sealed record SalesResultRow(
+    int LineNumber,
+    int LotNumber,
+    decimal? SoldPricePerKg,
+    string BuyerCode,
+    string SourceLine);
+
+public sealed record SalesResultParseResult(
+    IReadOnlyList<SalesResultRow> Rows,
+    IReadOnlyList<string> Errors);
 
 public sealed record LotCsvRow(
     int LineNumber,

@@ -32,11 +32,23 @@ public sealed class CreateUploadValidator : AbstractValidator<CreateUploadComman
             .Must(broker => Enum.TryParse<BrokerCode>(broker, ignoreCase: true, out _))
             .WithMessage($"Broker must be one of: {string.Join(", ", Enum.GetNames<BrokerCode>())}.");
 
+        RuleFor(command => command.Kind)
+            .Must(kind => string.IsNullOrWhiteSpace(kind) || Enum.TryParse<UploadKind>(kind, ignoreCase: true, out _))
+            .WithMessage($"Kind must be one of: {string.Join(", ", Enum.GetNames<UploadKind>())}.");
+
         RuleFor(command => command.FileName)
             .NotEmpty()
             .MaximumLength(260)
-            .Must(name => CatalogueFileKinds.IsCsv(name) || CatalogueFileKinds.IsBrokerText(name))
-            .WithMessage("Upload a broker catalogue (.txt) or a .csv file.");
+            .Must((command, name) =>
+            {
+                var kind = Enum.TryParse<UploadKind>(command.Kind, ignoreCase: true, out var parsed)
+                    ? parsed
+                    : UploadKind.PreAuctionCatalogue;
+                return kind == UploadKind.PostAuctionSales
+                    ? CatalogueFileKinds.IsSalesFile(name)
+                    : CatalogueFileKinds.IsCsv(name) || CatalogueFileKinds.IsBrokerText(name);
+            })
+            .WithMessage("Upload a broker .txt/.csv catalogue, or for sales results a .txt/.csv/.xls/.xlsx file.");
 
         RuleFor(command => command.Length)
             .GreaterThan(0).WithMessage("The file is empty.")

@@ -18,6 +18,8 @@ public sealed class UploadBatch
 
     public BrokerCode Broker { get; set; }
 
+    public UploadKind Kind { get; set; } = UploadKind.PreAuctionCatalogue;
+
     public string OriginalFileName { get; set; } = "";
 
     public string StorageKey { get; set; } = "";

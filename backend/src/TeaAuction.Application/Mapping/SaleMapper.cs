@@ -36,6 +36,8 @@ public static class SaleMapper
         lot.WarehouseOrBasis,
         lot.Category,
         lot.ValuationPerKg,
+        lot.SoldPricePerKg,
+        lot.BuyerCode,
         lot.SourceLine);
 
     public static UploadBatchDto ToUpload(UploadBatch batch) => new(
@@ -46,6 +48,7 @@ public static class SaleMapper
         batch.Centre,
         batch.SaleDate,
         batch.Broker,
+        batch.Kind,
         batch.Status,
         batch.OriginalFileName,
         batch.LotCount,
@@ -61,6 +64,7 @@ public static class SaleMapper
         batch.Centre,
         batch.SaleDate,
         batch.Broker,
+        batch.Kind,
         batch.Status,
         batch.OriginalFileName,
         batch.LotCount,

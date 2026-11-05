@@ -12,6 +12,7 @@ public sealed class UploadProcessingService(
     IUnitOfWork unitOfWork,
     ILotCsvParser csvParser,
     IBrokerCatalogueParser brokerParser,
+    ISalesResultParser salesParser,
     IValidator<LotCsvRow> rowValidator,
     IFileStore files,
     IEmailSender email,
@@ -32,7 +33,10 @@ public sealed class UploadProcessingService(
 
         try
         {
-            await ImportAsync(batch, cancellationToken);
+            if (batch.Kind == UploadKind.PostAuctionSales)
+                await ImportSalesAsync(batch, cancellationToken);
+            else
+                await ImportCatalogueAsync(batch, cancellationToken);
         }
         catch (Exception exception)
         {
@@ -42,7 +46,7 @@ public sealed class UploadProcessingService(
         }
     }
 
-    private async Task ImportAsync(UploadBatch batch, CancellationToken cancellationToken)
+    private async Task ImportCatalogueAsync(UploadBatch batch, CancellationToken cancellationToken)
     {
         await using var stream = await files.OpenReadAsync(batch.StorageKey, cancellationToken);
         var parsed = CatalogueFileKinds.IsCsv(batch.OriginalFileName)
@@ -69,29 +73,9 @@ public sealed class UploadProcessingService(
             return;
         }
 
-        var sale = await sales.FindByKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken);
+        var sale = await EnsureSaleAsync(batch, cancellationToken);
         if (sale is null)
-        {
-            sale = new Sale
-            {
-                Id = Guid.CreateVersion7(),
-                SaleNumber = batch.SaleNumber,
-                Year = batch.Year,
-                Centre = batch.Centre,
-                SaleDate = batch.SaleDate,
-                Status = SaleStatus.Open,
-                CreatedAt = DateTimeOffset.UtcNow
-            };
-            await sales.AddAsync(sale, cancellationToken);
-        }
-        else if (sale.SaleDate != batch.SaleDate)
-        {
-            await FailAsync(
-                batch,
-                $"Sale {batch.SaleNumber}/{batch.Year} at {batch.Centre} already exists on {sale.SaleDate:yyyy-MM-dd}.",
-                cancellationToken);
             return;
-        }
 
         var numbers = parsed.Rows.Select(row => row.LotNumber).ToArray();
         var existing = await sales.FindExistingLotNumbersAsync(sale.Id, batch.Broker, numbers, cancellationToken);
@@ -125,25 +109,125 @@ public sealed class UploadProcessingService(
                 WarehouseOrBasis = row.WarehouseOrBasis.Trim(),
                 Category = row.Category.Trim(),
                 ValuationPerKg = row.ValuationPerKg,
+                BuyerCode = "",
                 SourceLine = Truncate(row.SourceLine.Trim(), 400)
             });
         }
 
-        batch.SaleId = sale.Id;
-        batch.LotCount = parsed.Rows.Count;
-        batch.Status = UploadStatus.Completed;
-        batch.ProcessedAt = DateTimeOffset.UtcNow;
-        batch.Error = null;
-        await unitOfWork.SaveChangesAsync(cancellationToken);
-        await TryEmailAsync(batch, cancellationToken);
+        await CompleteAsync(batch, sale.Id, parsed.Rows.Count, cancellationToken);
         logger.LogInformation(
-            "Accepted {LotCount} {Broker} lots for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
+            "Accepted {LotCount} {Broker} catalogue lots for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
             batch.LotCount,
             batch.Broker,
             batch.Centre,
             batch.SaleNumber,
             batch.Year,
             batch.Id);
+    }
+
+    private async Task ImportSalesAsync(UploadBatch batch, CancellationToken cancellationToken)
+    {
+        await using var stream = await files.OpenReadAsync(batch.StorageKey, cancellationToken);
+        var parsed = salesParser.Parse(batch.Broker, batch.OriginalFileName, stream);
+        if (parsed.Errors.Count > 0)
+        {
+            await FailAsync(batch, string.Join(" ", parsed.Errors.Take(20)), cancellationToken);
+            return;
+        }
+
+        var sale = await sales.FindByKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken);
+        if (sale is null)
+        {
+            await FailAsync(
+                batch,
+                $"No pre-auction catalogue exists for {batch.Centre} sale {batch.SaleNumber}/{batch.Year}. Upload catalogues first.",
+                cancellationToken);
+            return;
+        }
+
+        if (sale.SaleDate != batch.SaleDate)
+        {
+            await FailAsync(
+                batch,
+                $"Sale {batch.SaleNumber}/{batch.Year} at {batch.Centre} is on {sale.SaleDate:yyyy-MM-dd}, not {batch.SaleDate:yyyy-MM-dd}.",
+                cancellationToken);
+            return;
+        }
+
+        var numbers = parsed.Rows.Select(row => row.LotNumber).ToArray();
+        var lots = await sales.FindTrackedLotsAsync(sale.Id, batch.Broker, numbers, cancellationToken);
+        var byNumber = lots.ToDictionary(lot => lot.LotNumber);
+        var missing = numbers.Where(number => !byNumber.ContainsKey(number)).Order().Take(20).ToArray();
+        if (missing.Length > 0)
+        {
+            await FailAsync(
+                batch,
+                $"No catalogue lots for {batch.Broker} lot numbers: {string.Join(", ", missing)}. Upload the pre-auction catalogue first.",
+                cancellationToken);
+            return;
+        }
+
+        foreach (var row in parsed.Rows)
+        {
+            var lot = byNumber[row.LotNumber];
+            if (row.SoldPricePerKg.HasValue)
+                lot.SoldPricePerKg = row.SoldPricePerKg;
+            if (!string.IsNullOrWhiteSpace(row.BuyerCode))
+                lot.BuyerCode = row.BuyerCode.Trim();
+            lot.SalesUploadBatchId = batch.Id;
+        }
+
+        await CompleteAsync(batch, sale.Id, parsed.Rows.Count, cancellationToken);
+        logger.LogInformation(
+            "Applied {LotCount} {Broker} post-auction sales rows for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
+            batch.LotCount,
+            batch.Broker,
+            batch.Centre,
+            batch.SaleNumber,
+            batch.Year,
+            batch.Id);
+    }
+
+    private async Task<Sale?> EnsureSaleAsync(UploadBatch batch, CancellationToken cancellationToken)
+    {
+        var sale = await sales.FindByKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken);
+        if (sale is null)
+        {
+            sale = new Sale
+            {
+                Id = Guid.CreateVersion7(),
+                SaleNumber = batch.SaleNumber,
+                Year = batch.Year,
+                Centre = batch.Centre,
+                SaleDate = batch.SaleDate,
+                Status = SaleStatus.Open,
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+            await sales.AddAsync(sale, cancellationToken);
+            return sale;
+        }
+
+        if (sale.SaleDate != batch.SaleDate)
+        {
+            await FailAsync(
+                batch,
+                $"Sale {batch.SaleNumber}/{batch.Year} at {batch.Centre} already exists on {sale.SaleDate:yyyy-MM-dd}.",
+                cancellationToken);
+            return null;
+        }
+
+        return sale;
+    }
+
+    private async Task CompleteAsync(UploadBatch batch, Guid saleId, int lotCount, CancellationToken cancellationToken)
+    {
+        batch.SaleId = saleId;
+        batch.LotCount = lotCount;
+        batch.Status = UploadStatus.Completed;
+        batch.ProcessedAt = DateTimeOffset.UtcNow;
+        batch.Error = null;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        await TryEmailAsync(batch, cancellationToken);
     }
 
     private async Task FailAsync(UploadBatch batch, string error, CancellationToken cancellationToken)
@@ -163,9 +247,10 @@ public sealed class UploadProcessingService(
         if (string.IsNullOrWhiteSpace(to))
             return;
 
-        var subject = $"Catalogue upload {batch.Status}: {batch.Broker} {batch.Centre} sale {batch.SaleNumber}/{batch.Year}";
+        var kind = batch.Kind == UploadKind.PostAuctionSales ? "Sales" : "Catalogue";
+        var subject = $"{kind} upload {batch.Status}: {batch.Broker} {batch.Centre} sale {batch.SaleNumber}/{batch.Year}";
         var body = batch.Status == UploadStatus.Completed
-            ? $"Accepted {batch.LotCount} lots from {batch.OriginalFileName}."
+            ? $"Accepted {batch.LotCount} rows from {batch.OriginalFileName}."
             : $"Rejected {batch.OriginalFileName}. {batch.Error}";
 
         try

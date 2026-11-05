@@ -22,6 +22,7 @@ npm run dev
 - Pre-auction catalogues: http://localhost:5173/
 - Uploads list (open a file for lot details): http://localhost:5173/uploads
 - Upload all 8 broker catalogues: http://localhost:5173/upload
+- Upload post-auction sales (same 8-broker desk): http://localhost:5173/upload-sales
 - API: http://localhost:8080
 - Swagger UI: http://localhost:8080/swagger
 - OpenAPI document: http://localhost:8080/openapi/v1.json

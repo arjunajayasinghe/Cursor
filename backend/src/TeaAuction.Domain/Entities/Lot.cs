@@ -40,5 +40,11 @@ public sealed class Lot
 
     public decimal? ValuationPerKg { get; set; }
 
+    public decimal? SoldPricePerKg { get; set; }
+
+    public string BuyerCode { get; set; } = "";
+
+    public Guid? SalesUploadBatchId { get; set; }
+
     public string SourceLine { get; set; } = "";
 }

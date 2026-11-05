@@ -22,6 +22,7 @@ public sealed class UploadService(
             SaleNumber = command.SaleNumber.Trim(),
             Centre = command.Centre.Trim(),
             Broker = command.Broker.Trim().ToUpperInvariant(),
+            Kind = string.IsNullOrWhiteSpace(command.Kind) ? nameof(UploadKind.PreAuctionCatalogue) : command.Kind.Trim(),
             FileName = Path.GetFileName(command.FileName.Trim())
         };
 
@@ -35,7 +36,12 @@ public sealed class UploadService(
         if (!Enum.TryParse<BrokerCode>(command.Broker, ignoreCase: true, out var broker))
             return OperationResult<UploadAcceptedDto>.Fail(["Broker is not recognised."]);
 
-        var contentType = CatalogueFileKinds.IsCsv(command.FileName) ? "text/csv" : "text/plain";
+        if (!Enum.TryParse<UploadKind>(command.Kind, ignoreCase: true, out var kind))
+            return OperationResult<UploadAcceptedDto>.Fail(["Upload kind is not recognised."]);
+
+        var contentType = CatalogueFileKinds.IsExcel(command.FileName)
+            ? "application/vnd.ms-excel"
+            : CatalogueFileKinds.IsCsv(command.FileName) ? "text/csv" : "text/plain";
         var storageKey = await files.SaveAsync(command.FileName, content, contentType, cancellationToken);
         var batch = new UploadBatch
         {
@@ -45,6 +51,7 @@ public sealed class UploadService(
             Centre = centre,
             SaleDate = command.SaleDate,
             Broker = broker,
+            Kind = kind,
             OriginalFileName = command.FileName,
             StorageKey = storageKey,
             ContentType = contentType,
