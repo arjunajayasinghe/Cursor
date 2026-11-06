@@ -12,19 +12,42 @@ import {
   Tabs,
   Typography,
 } from "@mui/material";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
-import { getSale, listSales } from "../api/client";
+import { getSale, listSales, type SaleSummary } from "../api/client";
 import { ExplorerLotsGrid, type ExplorerMode } from "../components/ExplorerLotsGrid";
 import { currencyFor, formatSaleDate } from "../catalogue";
+
+function pickDefaultSale(sales: SaleSummary[]) {
+  if (sales.length === 0) return "";
+  return [...sales].sort((a, b) => Number(b.lotCount) - Number(a.lotCount) || b.saleDate.localeCompare(a.saleDate))[0]
+    .id;
+}
 
 export function AuctionDataExplorerPage() {
   const [params, setParams] = useSearchParams();
   const tab: ExplorerMode = params.get("tab") === "afterSales" ? "afterSales" : "preAuction";
-  const saleId = params.get("saleId") ?? "";
+  const saleIdParam = params.get("saleId") ?? "";
 
   const sales = useQuery({ queryKey: ["sales"], queryFn: listSales });
-  const selectedSaleId = saleId || sales.data?.[0]?.id || "";
+  const orderedSales = useMemo(() => {
+    const rows = sales.data ?? [];
+    return [...rows].sort(
+      (a, b) => Number(b.lotCount) - Number(a.lotCount) || b.saleDate.localeCompare(a.saleDate),
+    );
+  }, [sales.data]);
+
+  const selectedSaleId = saleIdParam || (sales.data ? pickDefaultSale(sales.data) : "");
+
+  // Keep the chosen sale in the URL so refresh and share links stay on the full book.
+  useEffect(() => {
+    if (!selectedSaleId || saleIdParam === selectedSaleId) return;
+    const next = new URLSearchParams(params);
+    next.set("saleId", selectedSaleId);
+    setParams(next, { replace: true });
+  }, [selectedSaleId, saleIdParam, params, setParams]);
+
   const sale = useQuery({
     queryKey: ["sale", selectedSaleId],
     queryFn: () => getSale(selectedSaleId),
@@ -44,6 +67,8 @@ export function AuctionDataExplorerPage() {
     setParams(nextParams, { replace: true });
   }
 
+  const selectedSummary = orderedSales.find((item) => item.id === selectedSaleId);
+
   return (
     <Stack spacing={3}>
       <Stack
@@ -54,7 +79,8 @@ export function AuctionDataExplorerPage() {
         <div>
           <Typography variant="h4">Auction Data Explorer</Typography>
           <Typography color="text.secondary">
-            View, search, and filter pre-auction catalogues and after-sales results in one place. Uploads are unchanged.
+            Choose a sale, then use the horizontal broker row (All, AS, BC…) and search fields. Pre-auction and
+            after-sales share the same layout.
           </Typography>
         </div>
         <Stack direction="row" spacing={1}>
@@ -69,30 +95,39 @@ export function AuctionDataExplorerPage() {
 
       <Paper sx={{ p: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ alignItems: { md: "center" } }}>
-          <FormControl size="small" sx={{ minWidth: 260 }}>
+          <FormControl size="small" sx={{ minWidth: 320 }}>
             <InputLabel id="explorer-sale-label">Sale</InputLabel>
             <Select
               labelId="explorer-sale-label"
               label="Sale"
               value={selectedSaleId}
               onChange={(event) => setSale(String(event.target.value))}
-              disabled={!sales.data?.length}
+              disabled={!orderedSales.length}
             >
-              {(sales.data ?? []).map((item) => (
+              {orderedSales.map((item) => (
                 <MenuItem key={item.id} value={item.id}>
                   {item.saleNumber}/{item.year} · {item.centre} · {formatSaleDate(item.saleDate)} ·{" "}
-                  {item.lotCount.toLocaleString("en-GB")} lots
+                  {Number(item.lotCount).toLocaleString("en-GB")} lots
                 </MenuItem>
               ))}
             </Select>
           </FormControl>
-          {sale.data ? (
+          {selectedSummary ? (
             <Typography variant="body2" color="text.secondary">
-              {sale.data.centre} · {formatSaleDate(sale.data.saleDate)} · status {sale.data.status}
+              Showing sale {selectedSummary.saleNumber}/{selectedSummary.year} —{" "}
+              {Number(selectedSummary.lotCount).toLocaleString("en-GB")} lots. Use the broker tabs below the data
+              tabs.
             </Typography>
           ) : null}
         </Stack>
       </Paper>
+
+      {selectedSummary && Number(selectedSummary.lotCount) < 50 ? (
+        <Alert severity="warning">
+          This sale only has {Number(selectedSummary.lotCount).toLocaleString("en-GB")} lots. Pick a larger sale
+          from the Sale list (for example 03/2026) to see all brokers with counts.
+        </Alert>
+      ) : null}
 
       {sales.isPending ? <CircularProgress aria-label="Loading sales" /> : null}
       {sales.isError ? (
@@ -129,8 +164,8 @@ export function AuctionDataExplorerPage() {
               <>
                 <Typography color="text.secondary">
                   {tab === "preAuction"
-                    ? "All uploaded pre-auction lot fields for this sale. Search by lot, broker, estate, grade, invoice, or mark."
-                    : "After-sales rows with sold price and buyer applied from sales uploads. Same search layout as pre-auction."}
+                    ? "Pre-auction lot fields for this sale. Broker row: All first, then AS, BC… with lot counts."
+                    : "After-sales rows with sold price and buyer. Same broker row and search fields as pre-auction."}
                 </Typography>
                 <ExplorerLotsGrid
                   key={`${sale.data.id}-${tab}`}
