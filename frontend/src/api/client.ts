@@ -11,8 +11,10 @@ export type UploadAccepted = components["schemas"]["UploadAcceptedDto"];
 export type AuctionCentre = components["schemas"]["AuctionCentre"];
 
 const api = createClient<paths>({
-  baseUrl: import.meta.env.VITE_API_BASE_URL || "http://localhost:8080",
+  // Prefer same-origin (Vite /api proxy) when VITE_API_BASE_URL is unset or blank.
+  baseUrl: (import.meta.env.VITE_API_BASE_URL ?? "").trim() || "",
 });
+
 
 function headers() {
   return { "X-Api-Key": getApiKey() };
