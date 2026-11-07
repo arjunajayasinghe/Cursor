@@ -19,6 +19,10 @@ public sealed class TeaAuctionDbContext(DbContextOptions<TeaAuctionDbContext> op
 
     public DbSet<CollectionLot> CollectionLots => Set<CollectionLot>();
 
+    public DbSet<SampleBox> SampleBoxes => Set<SampleBox>();
+
+    public DbSet<NumberSeries> NumberSeries => Set<NumberSeries>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TeaAuctionDbContext).Assembly);

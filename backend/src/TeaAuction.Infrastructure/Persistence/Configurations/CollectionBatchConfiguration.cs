@@ -65,10 +65,12 @@ public sealed class CollectionLotConfiguration : IEntityTypeConfiguration<Collec
         builder.Property(x => x.BuyerName).HasColumnName("buyer_name").HasMaxLength(160);
         builder.Property(x => x.GardenMark).HasColumnName("garden_mark").HasMaxLength(80);
         builder.Property(x => x.SelectedAt).HasColumnName("selected_at");
+        builder.Property(x => x.SampleBoxId).HasColumnName("sample_box_id");
         builder.HasIndex(x => new { x.CollectionBatchId, x.Broker, x.LotNumber }).IsUnique();
         // One PDF invoice lot may appear in collection only once (no duplicates).
         builder.HasIndex(x => x.PurchasedInvoiceLotId)
             .IsUnique()
             .HasFilter("purchased_invoice_lot_id IS NOT NULL");
+        builder.HasIndex(x => x.SampleBoxId);
     }
 }

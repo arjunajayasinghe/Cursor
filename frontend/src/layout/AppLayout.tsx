@@ -44,6 +44,11 @@ const navItems = [
     label: "Collection",
     match: (path: string) => path.startsWith("/collections"),
   },
+  {
+    to: "/blending",
+    label: "Blending",
+    match: (path: string) => path.startsWith("/blending"),
+  },
 ] as const;
 
 export function AppLayout() {

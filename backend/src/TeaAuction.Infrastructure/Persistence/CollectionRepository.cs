@@ -21,6 +21,7 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
         var batch = await db.CollectionBatches
             .AsNoTracking()
             .Include(x => x.Lots)
+                .ThenInclude(l => l.SampleBox)
             .FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
         return batch is null ? null : MapDetail(batch);
     }
@@ -220,5 +221,7 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
             lot.BuyerCode,
             lot.BuyerName,
             lot.GardenMark,
-            lot.SelectedAt);
+            lot.SelectedAt,
+            lot.SampleBoxId,
+            lot.SampleBox?.BoxNumber);
 }
