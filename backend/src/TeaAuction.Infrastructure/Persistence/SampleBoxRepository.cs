@@ -125,6 +125,16 @@ public sealed class SampleBoxRepository(TeaAuctionDbContext db) : ISampleBoxRepo
             .ToListAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<SampleBox>> GetTrackedActiveBoxesForBatchAsync(
+        Guid batchId,
+        CancellationToken cancellationToken)
+    {
+        return await db.SampleBoxes
+            .Include(x => x.Lots)
+            .Where(x => x.CollectionBatchId == batchId && x.Status != SampleBoxStatus.Cancelled)
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task ClearLotBoxLinksAsync(
         IReadOnlyCollection<Guid> boxIds,
         CancellationToken cancellationToken)

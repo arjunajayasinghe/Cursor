@@ -428,7 +428,10 @@ export async function markSampleBoxesReceived(input: {
 }
 
 export async function reverseSampleBoxes(input: {
-  sampleBoxIds: string[];
+  sampleBoxIds?: string[];
+  collectionBatchId?: string;
+  reverseAll?: boolean;
+  includeReceived?: boolean;
   reason?: string;
 }) {
   const response = await fetch(

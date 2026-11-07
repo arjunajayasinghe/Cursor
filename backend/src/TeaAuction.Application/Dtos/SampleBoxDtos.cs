@@ -67,8 +67,13 @@ public sealed record MarkSampleBoxesReceivedRequest(
     string? ReceivedBy);
 
 public sealed record ReverseSampleBoxesRequest(
-    IReadOnlyList<Guid> SampleBoxIds,
-    string? Reason);
+    IReadOnlyList<Guid>? SampleBoxIds,
+    string? Reason,
+    /// <summary>When set with ReverseAll, reverses every active box on that batch.</summary>
+    Guid? CollectionBatchId = null,
+    bool ReverseAll = false,
+    /// <summary>Also reverse Received/Completed boxes (desk reset). Default false.</summary>
+    bool IncludeReceived = false);
 
 public sealed record RecordSampleBoxPrintRequest(
     Guid SampleBoxId);

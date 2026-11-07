@@ -189,39 +189,64 @@ public sealed class SampleBoxService(
     }
 
     /// <summary>
-    /// Reverse box generation for Open/Printed boxes: unlink lots so they can be boxed again.
-    /// Received/Completed boxes cannot be reversed (samples already in). Box numbers stay in
-    /// history as Cancelled and are not reused.
+    /// Reverse box generation: unlink lots so they can be boxed again.
+    /// Default: Open/Printed only. IncludeReceived (used by Reverse all) also clears collected boxes.
+    /// Box numbers stay Cancelled and are not reused.
     /// </summary>
     public async Task<OperationResult<IReadOnlyList<SampleBoxSummaryDto>>> ReverseAsync(
         ReverseSampleBoxesRequest request,
         CancellationToken cancellationToken)
     {
-        if (request.SampleBoxIds is null || request.SampleBoxIds.Count == 0)
-            return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["Select at least one sample box to reverse."]);
+        IReadOnlyList<SampleBox> tracked;
+        Guid batchId;
 
-        var ids = request.SampleBoxIds.Distinct().ToArray();
-        var tracked = await boxes.GetTrackedBoxesAsync(ids, cancellationToken);
-        if (tracked.Count != ids.Length)
-            return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["One or more sample boxes were not found."]);
-
-        var blocked = tracked
-            .Where(b => b.Status is SampleBoxStatus.Received or SampleBoxStatus.Completed)
-            .Select(b => b.BoxNumber)
-            .ToList();
-        if (blocked.Count > 0)
+        if (request.ReverseAll)
         {
-            return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail([
-                $"Cannot reverse received boxes: {string.Join(", ", blocked)}. Mark collected is final for those samples."
-            ]);
+            if (request.CollectionBatchId is null || request.CollectionBatchId == Guid.Empty)
+                return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["Collection batch is required to reverse all boxes."]);
+            batchId = request.CollectionBatchId.Value;
+            tracked = await boxes.GetTrackedActiveBoxesForBatchAsync(batchId, cancellationToken);
+            if (tracked.Count == 0)
+                return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["No active box numbers to reverse on this collection."]);
+        }
+        else
+        {
+            if (request.SampleBoxIds is null || request.SampleBoxIds.Count == 0)
+                return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["Select at least one sample box to reverse."]);
+
+            var ids = request.SampleBoxIds.Distinct().ToArray();
+            tracked = await boxes.GetTrackedBoxesAsync(ids, cancellationToken);
+            if (tracked.Count != ids.Length)
+                return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["One or more sample boxes were not found."]);
+            batchId = tracked[0].CollectionBatchId;
         }
 
-        var alreadyCancelled = tracked.Where(b => b.Status == SampleBoxStatus.Cancelled).ToList();
-        var reversible = tracked.Where(b => b.Status is SampleBoxStatus.Open or SampleBoxStatus.Printed).ToList();
-        if (reversible.Count == 0 && alreadyCancelled.Count == tracked.Count)
-            return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["Selected boxes are already cancelled."]);
+        // Reverse-all always clears every active box (including collected).
+        var includeReceived = request.IncludeReceived || request.ReverseAll;
+        List<SampleBox> reversible;
+        if (includeReceived)
+        {
+            reversible = tracked.Where(b => b.Status != SampleBoxStatus.Cancelled).ToList();
+        }
+        else
+        {
+            var blocked = tracked
+                .Where(b => b.Status is SampleBoxStatus.Received or SampleBoxStatus.Completed)
+                .Select(b => b.BoxNumber)
+                .ToList();
+            if (blocked.Count > 0)
+            {
+                return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail([
+                    $"Cannot reverse collected boxes: {string.Join(", ", blocked)}. Use Reverse all box numbers."
+                ]);
+            }
 
-        var batchId = tracked[0].CollectionBatchId;
+            reversible = tracked.Where(b => b.Status is SampleBoxStatus.Open or SampleBoxStatus.Printed).ToList();
+        }
+
+        if (reversible.Count == 0)
+            return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Fail(["No boxes eligible to reverse."]);
+
         var reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim();
         var now = DateTimeOffset.UtcNow;
 
@@ -233,6 +258,8 @@ public sealed class SampleBoxService(
             box.LotCount = 0;
             box.BagCount = 0;
             box.NetWeightKg = 0;
+            box.ReceivedAt = null;
+            box.ReceivedBy = null;
             box.Remarks = string.IsNullOrWhiteSpace(reason)
                 ? $"Reversed {now:u}"
                 : $"Reversed {now:u}: {reason}";
@@ -245,9 +272,10 @@ public sealed class SampleBoxService(
         await unitOfWork.SaveChangesAsync(cancellationToken);
 
         logger.LogInformation(
-            "Reversed {Count} sample box(es) on collection batch {BatchId}",
+            "Reversed {Count} sample box(es) on collection batch {BatchId} (reverseAll={All})",
             reversible.Count,
-            batchId);
+            batchId,
+            request.ReverseAll);
 
         var summaries = await boxes.ListByBatchAsync(batchId, cancellationToken);
         return OperationResult<IReadOnlyList<SampleBoxSummaryDto>>.Ok(summaries);

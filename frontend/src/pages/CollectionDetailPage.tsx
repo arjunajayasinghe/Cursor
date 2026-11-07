@@ -92,11 +92,18 @@ export function CollectionDetailPage() {
   });
 
   const reverseMutation = useMutation({
-    mutationFn: () =>
-      reverseSampleBoxes({
-        sampleBoxIds: [...selectedBoxIds],
-        reason: "Reversed from collection desk",
-      }),
+    mutationFn: (mode: "selected" | "all") =>
+      mode === "all"
+        ? reverseSampleBoxes({
+            collectionBatchId: batchId,
+            reverseAll: true,
+            includeReceived: true,
+            reason: "Reverse all box numbers from collection desk",
+          })
+        : reverseSampleBoxes({
+            sampleBoxIds: [...selectedBoxIds],
+            reason: "Reversed from collection desk",
+          }),
     onSuccess: () => {
       setSelectedBoxIds(new Set());
       setTab("lots");
@@ -407,14 +414,32 @@ export function CollectionDetailPage() {
                 onClick={() => {
                   if (
                     window.confirm(
-                      "Reverse box generation for selected boxes? Lots will be unboxed and can get new box numbers. Box numbers stay cancelled (not reused).",
+                      "Reverse selected boxes? Lots will be unboxed. Collected boxes in the selection are blocked — use Reverse all for those.",
                     )
                   ) {
-                    reverseMutation.mutate();
+                    reverseMutation.mutate("selected");
                   }
                 }}
               >
-                {reverseMutation.isPending ? "Reversing…" : `Reverse box generation (${selectedActive.filter((b) => b.status === "Open" || b.status === "Printed").length})`}
+                {reverseMutation.isPending
+                  ? "Reversing…"
+                  : `Reverse selected (${selectedActive.filter((b) => b.status === "Open" || b.status === "Printed").length})`}
+              </Button>
+              <Button
+                variant="contained"
+                color="warning"
+                disabled={activeBoxes.length === 0 || reverseMutation.isPending}
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `Reverse ALL ${activeBoxes.length} box number(s) on this sale (including collected)? Every lot becomes unboxed. Old box numbers stay cancelled and are not reused.`,
+                    )
+                  ) {
+                    reverseMutation.mutate("all");
+                  }
+                }}
+              >
+                Reverse all box numbers
               </Button>
               <Button size="small" variant="text" onClick={() => setTab("lots")}>
                 Back to lots

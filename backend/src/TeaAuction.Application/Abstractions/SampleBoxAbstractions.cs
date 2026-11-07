@@ -28,6 +28,10 @@ public interface ISampleBoxRepository
         IReadOnlyCollection<Guid> ids,
         CancellationToken cancellationToken);
 
+    Task<IReadOnlyList<SampleBox>> GetTrackedActiveBoxesForBatchAsync(
+        Guid batchId,
+        CancellationToken cancellationToken);
+
     Task ClearLotBoxLinksAsync(IReadOnlyCollection<Guid> boxIds, CancellationToken cancellationToken);
 
     Task<bool> BatchReadyForBlendingAsync(Guid batchId, CancellationToken cancellationToken);
