@@ -14,9 +14,11 @@ public static class DependencyInjection
         services.AddSingleton<ILotCsvParser, LotCsvParser>();
         services.AddSingleton<IBrokerCatalogueParser, BrokerCatalogueParser>();
         services.AddSingleton<ISalesResultParser, SalesResultParser>();
+        services.AddSingleton<IPurchasedInvoicePdfParser, PurchasedInvoicePdfParser>();
         services.AddScoped<SaleQueryService>();
         services.AddScoped<UploadService>();
         services.AddScoped<UploadProcessingService>();
+        services.AddScoped<PurchasedInvoiceService>();
         return services;
     }
 }

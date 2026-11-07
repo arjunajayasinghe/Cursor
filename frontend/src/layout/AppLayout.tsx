@@ -29,6 +29,16 @@ const navItems = [
     label: "Upload sales",
     match: (path: string) => path === "/upload-sales",
   },
+  {
+    to: "/upload-invoices",
+    label: "Upload invoices",
+    match: (path: string) => path === "/upload-invoices",
+  },
+  {
+    to: "/purchases",
+    label: "Purchases",
+    match: (path: string) => path.startsWith("/purchases"),
+  },
 ] as const;
 
 export function AppLayout() {

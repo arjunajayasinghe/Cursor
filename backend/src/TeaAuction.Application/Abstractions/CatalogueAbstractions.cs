@@ -12,6 +12,8 @@ public interface ISaleRepository
 
     Task<Sale?> FindByKeyAsync(AuctionCentre centre, int year, string saleNumber, CancellationToken cancellationToken);
 
+    Task<Sale?> FindByNumericKeyAsync(AuctionCentre centre, int year, string saleNumber, CancellationToken cancellationToken);
+
     Task AddAsync(Sale sale, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<int>> FindExistingLotNumbersAsync(
@@ -81,6 +83,20 @@ public interface IUploadJobScheduler
 public interface ILotCsvParser
 {
     LotCsvParseResult Parse(Stream csv);
+}
+
+public interface IPurchasedInvoiceRepository
+{
+    Task AddAsync(PurchasedInvoice invoice, CancellationToken cancellationToken);
+
+    Task<IReadOnlyList<PurchasedInvoiceSummaryDto>> ListAsync(CancellationToken cancellationToken);
+
+    Task<PurchasedInvoiceDetailDto?> GetDetailAsync(Guid id, CancellationToken cancellationToken);
+
+    Task<PurchasedInvoiceWorkbenchDto?> GetWorkbenchAsync(
+        string? saleNumber,
+        int? year,
+        CancellationToken cancellationToken);
 }
 
 public static class CatalogueFileKinds

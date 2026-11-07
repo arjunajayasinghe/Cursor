@@ -72,6 +72,15 @@ export function isAllowedSalesFile(file: File) {
   );
 }
 
+/** Buyer purchased-invoice PDFs (Venture etc.). Broker tax invoices are out of scope. */
+export function isAllowedPurchasedInvoiceFile(file: File) {
+  return file.name.toLowerCase().endsWith(".pdf");
+}
+
+/** Brokers that usually issue buyer purchase PDFs (EB often absent). */
+export const invoiceBrokers = brokers.filter((broker) => broker.code !== "EB");
+
+
 /** Post-auction sales filenames: ASC, BP, CTB, EB, FW, JK, LCB, MPB. */
 export const salesFileAliases: Record<string, BrokerCode> = {
   ASC: "AS",

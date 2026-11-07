@@ -13,6 +13,8 @@ import {
   TableRow,
   TableSortLabel,
   TextField,
+  ToggleButton,
+  ToggleButtonGroup,
   Typography,
 } from "@mui/material";
 import ClearIcon from "@mui/icons-material/Clear";
@@ -36,6 +38,7 @@ type SortKey =
   | "buyerCode";
 
 type BrokerFilter = "ALL" | (typeof brokers)[number]["code"];
+type ResultFilter = "ALL" | "SOLD" | "UNSOLD";
 
 type SearchState = {
   lotNumber: string;
@@ -90,6 +93,7 @@ export function ExplorerLotsGrid({
   emptyMessage = "No records match the current filters.",
 }: Props) {
   const [brokerFilter, setBrokerFilter] = useState<BrokerFilter>("ALL");
+  const [resultFilter, setResultFilter] = useState<ResultFilter>("SOLD");
   const [search, setSearch] = useState<SearchState>(emptySearch);
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
@@ -97,10 +101,15 @@ export function ExplorerLotsGrid({
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const deferred = useDeferredValue(search);
 
+  const soldCountAll = useMemo(() => lots.filter(isSold).length, [lots]);
+  const unsoldCountAll = lots.length - soldCountAll;
+
   const baseLots = useMemo(() => {
-    if (mode === "afterSales") return lots.filter(isSold);
+    if (mode !== "afterSales") return lots;
+    if (resultFilter === "SOLD") return lots.filter(isSold);
+    if (resultFilter === "UNSOLD") return lots.filter((lot) => !isSold(lot));
     return lots;
-  }, [lots, mode]);
+  }, [lots, mode, resultFilter]);
 
   const brokerCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -141,11 +150,14 @@ export function ExplorerLotsGrid({
     const bags = filtered.reduce((sum, lot) => sum + Number(lot.bags || 0), 0);
     const kg = filtered.reduce((sum, lot) => sum + Number(lot.netWeightKg || 0), 0);
     const sold = filtered.filter(isSold).length;
-    return { bags, kg, sold };
+    const unsold = filtered.length - sold;
+    return { bags, kg, sold, unsold };
   }, [filtered]);
 
   const activeFilters =
-    Object.values(search).filter((value) => value.trim()).length + (brokerFilter === "ALL" ? 0 : 1);
+    Object.values(search).filter((value) => value.trim()).length +
+    (brokerFilter === "ALL" ? 0 : 1) +
+    (mode === "afterSales" && resultFilter !== "SOLD" ? 1 : 0);
 
   function updateSearch(key: keyof SearchState, value: string) {
     setSearch((current) => ({ ...current, [key]: value }));
@@ -154,6 +166,7 @@ export function ExplorerLotsGrid({
 
   function clearSearch() {
     setBrokerFilter("ALL");
+    setResultFilter("SOLD");
     setSearch(emptySearch);
     setPage(0);
   }
@@ -178,6 +191,41 @@ export function ExplorerLotsGrid({
 
   return (
     <Stack spacing={2}>
+      {mode === "afterSales" ? (
+        <Paper sx={{ p: 2 }}>
+          <Stack
+            direction={{ xs: "column", sm: "row" }}
+            spacing={2}
+            sx={{ alignItems: { sm: "center" }, justifyContent: "space-between" }}
+          >
+            <div>
+              <Typography variant="subtitle2" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
+                Sale result
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Switch between sold and unsold lots. Broker tabs and search filters stay active.
+              </Typography>
+            </div>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              color="primary"
+              value={resultFilter}
+              onChange={(_, value: ResultFilter | null) => {
+                if (!value) return;
+                setResultFilter(value);
+                setPage(0);
+              }}
+              aria-label="Sold or unsold filter"
+            >
+              <ToggleButton value="ALL">All ({lots.length.toLocaleString("en-GB")})</ToggleButton>
+              <ToggleButton value="SOLD">Sold ({soldCountAll.toLocaleString("en-GB")})</ToggleButton>
+              <ToggleButton value="UNSOLD">Unsold ({unsoldCountAll.toLocaleString("en-GB")})</ToggleButton>
+            </ToggleButtonGroup>
+          </Stack>
+        </Paper>
+      ) : null}
+
       <Paper sx={{ px: 1 }}>
         <Tabs
           value={brokerFilter}
@@ -261,7 +309,10 @@ export function ExplorerLotsGrid({
         <Summary label="Bags" value={summary.bags.toLocaleString("en-GB")} />
         <Summary label="Net kg" value={formatQuantity(summary.kg, 1)} />
         {mode === "afterSales" ? (
-          <Summary label="Sold lots" value={summary.sold.toLocaleString("en-GB")} />
+          <>
+            <Summary label="Sold lots" value={summary.sold.toLocaleString("en-GB")} />
+            <Summary label="Unsold lots" value={summary.unsold.toLocaleString("en-GB")} />
+          </>
         ) : (
           <Summary label="Of sale total" value={lots.length.toLocaleString("en-GB")} />
         )}
@@ -269,7 +320,14 @@ export function ExplorerLotsGrid({
 
       <Typography variant="body2" color="text.secondary">
         Showing {filtered.length.toLocaleString("en-GB")} of {baseLots.length.toLocaleString("en-GB")}{" "}
-        {mode === "afterSales" ? "after-sales" : "pre-auction"} records
+        {mode === "afterSales"
+          ? resultFilter === "UNSOLD"
+            ? "unsold"
+            : resultFilter === "SOLD"
+              ? "sold"
+              : "after-sales"
+          : "pre-auction"}{" "}
+        records
         {activeFilters ? ` · ${activeFilters} search filter${activeFilters === 1 ? "" : "s"} on` : ""}.
       </Typography>
 
@@ -308,14 +366,17 @@ export function ExplorerLotsGrid({
                       align="right"
                     />
                     <SortHeader id="buyerCode" label="Buyer" />
+                    <TableCell>Result</TableCell>
                   </>
                 ) : null}
                 <TableCell>Source line</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {pageRows.map((lot) => (
-                <TableRow key={lot.id} hover>
+              {pageRows.map((lot) => {
+                const sold = isSold(lot);
+                return (
+                <TableRow key={lot.id} hover selected={mode === "afterSales" && sold}>
                   <TableCell>{String(lot.broker)}</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>{lot.lotNumber}</TableCell>
                   <TableCell>{blank(lot.factoryCode)}</TableCell>
@@ -335,9 +396,12 @@ export function ExplorerLotsGrid({
                   {mode === "afterSales" ? (
                     <>
                       <TableCell align="right" sx={{ fontWeight: 600 }}>
-                        {formatQuantity(lot.soldPricePerKg, 2)}
+                        {sold ? formatQuantity(lot.soldPricePerKg, 2) : "—"}
                       </TableCell>
-                      <TableCell>{blank(lot.buyerCode)}</TableCell>
+                      <TableCell>{sold ? blank(lot.buyerCode) : "—"}</TableCell>
+                      <TableCell>
+                        <Chip size="small" color={sold ? "success" : "default"} label={sold ? "Sold" : "Unsold"} />
+                      </TableCell>
                     </>
                   ) : null}
                   <TableCell
@@ -354,7 +418,8 @@ export function ExplorerLotsGrid({
                     {blank(lot.sourceLine)}
                   </TableCell>
                 </TableRow>
-              ))}
+                );
+              })}
             </TableBody>
           </Table>
           <TablePagination

@@ -37,6 +37,29 @@ public sealed class SaleRepository(TeaAuctionDbContext db) : ISaleRepository
             sale => sale.Centre == centre && sale.Year == year && sale.SaleNumber == saleNumber,
             cancellationToken);
 
+    public async Task<Sale?> FindByNumericKeyAsync(
+        AuctionCentre centre,
+        int year,
+        string saleNumber,
+        CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(saleNumber, out var wanted))
+            return null;
+
+        var candidates = await db.Sales
+            .Where(sale => sale.Centre == centre && sale.Year == year)
+            .Select(sale => new { Sale = sale, LotCount = sale.Lots.Count })
+            .ToListAsync(cancellationToken);
+
+        return candidates
+            .Where(row => int.TryParse(row.Sale.SaleNumber, out var n) && n == wanted)
+            // Prefer the row that already has catalogue/sales lots when duplicates exist ("4" vs "04").
+            .OrderByDescending(row => row.LotCount)
+            .ThenBy(row => row.Sale.CreatedAt)
+            .Select(row => row.Sale)
+            .FirstOrDefault();
+    }
+
     public Task AddAsync(Sale sale, CancellationToken cancellationToken)
     {
         db.Sales.Add(sale);

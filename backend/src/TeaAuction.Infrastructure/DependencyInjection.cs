@@ -25,6 +25,7 @@ public static class DependencyInjection
         services.AddDbContext<TeaAuctionDbContext>(options => options.UseNpgsql(connectionString));
         services.AddScoped<ISaleRepository, SaleRepository>();
         services.AddScoped<IUploadBatchRepository, UploadBatchRepository>();
+        services.AddScoped<IPurchasedInvoiceRepository, PurchasedInvoiceRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<SampleDataSeeder>();
 

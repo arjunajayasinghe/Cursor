@@ -19,4 +19,6 @@ public sealed class Sale
     public ICollection<Lot> Lots { get; set; } = new List<Lot>();
 
     public ICollection<UploadBatch> Uploads { get; set; } = new List<UploadBatch>();
+
+    public ICollection<PurchasedInvoice> PurchasedInvoices { get; set; } = new List<PurchasedInvoice>();
 }

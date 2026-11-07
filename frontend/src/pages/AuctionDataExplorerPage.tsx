@@ -165,7 +165,7 @@ export function AuctionDataExplorerPage() {
                 <Typography color="text.secondary">
                   {tab === "preAuction"
                     ? "Pre-auction lot fields for this sale. Broker row: All first, then AS, BC… with lot counts."
-                    : "After-sales rows with sold price and buyer. Same broker row and search fields as pre-auction."}
+                    : "After-sales: use Sold / Unsold / All, then the same broker row and search filters as pre-auction."}
                 </Typography>
                 <ExplorerLotsGrid
                   key={`${sale.data.id}-${tab}`}
