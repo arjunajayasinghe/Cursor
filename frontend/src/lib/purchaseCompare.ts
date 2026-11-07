@@ -56,6 +56,50 @@ function nearlyEqual(a: number, b: number, tolerance = 0.51) {
   return Math.abs(a - b) <= tolerance;
 }
 
+function normText(value: string | null | undefined) {
+  return (value || "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+
+function normInvoiceNo(value: string | null | undefined) {
+  const raw = normText(value).replace(/^0+/, "");
+  return raw;
+}
+
+function collectDiffNotes(pdf: PurchasedInvoiceLot, sales: Lot): string[] {
+  const notes: string[] = [];
+  const salesPrice = sales.soldPricePerKg == null ? null : Number(sales.soldPricePerKg);
+  const pdfPrice = Number(pdf.soldPricePerKg);
+  if (salesPrice != null && Number.isFinite(salesPrice) && !nearlyEqual(pdfPrice, salesPrice)) {
+    notes.push(`Price PDF ${pdfPrice.toFixed(2)} ≠ sales ${salesPrice.toFixed(2)}`);
+  }
+  if (
+    sales.netWeightKg != null &&
+    Number.isFinite(Number(sales.netWeightKg)) &&
+    !nearlyEqual(Number(pdf.netWeightKg), Number(sales.netWeightKg), 0.05)
+  ) {
+    notes.push(`Kg PDF ${Number(pdf.netWeightKg).toFixed(2)} ≠ sales ${Number(sales.netWeightKg).toFixed(2)}`);
+  }
+  if (sales.bags != null && Number(sales.bags) > 0 && pdf.bags > 0 && Number(sales.bags) !== pdf.bags) {
+    notes.push(`Bags PDF ${pdf.bags} ≠ sales ${sales.bags}`);
+  }
+  const pdfInv = normInvoiceNo(pdf.invoiceNumber);
+  const salesInv = normInvoiceNo(sales.invoiceNumber);
+  if (pdfInv && salesInv && pdfInv !== salesInv) {
+    notes.push(`Invoice # PDF ${pdf.invoiceNumber} ≠ sales ${sales.invoiceNumber}`);
+  }
+  const pdfGrade = normText(pdf.grade);
+  const salesGrade = normText(sales.grade);
+  if (pdfGrade && salesGrade && pdfGrade !== salesGrade) {
+    notes.push(`Grade PDF ${pdf.grade} ≠ sales ${sales.grade}`);
+  }
+  const pdfMark = normText(pdf.sellingMark);
+  const salesMark = normText(sales.sellingMark || sales.gardenMark);
+  if (pdfMark && salesMark && pdfMark !== salesMark && !pdfMark.includes(salesMark) && !salesMark.includes(pdfMark)) {
+    notes.push(`Mark PDF ${pdf.sellingMark} ≠ sales ${sales.sellingMark || sales.gardenMark}`);
+  }
+  return notes;
+}
+
 export function comparePurchaseToSales(
   pdfLots: PurchasedInvoiceLot[],
   salesLots: Lot[],
@@ -108,18 +152,13 @@ export function comparePurchaseToSales(
 
     const salesPrice = sales.soldPricePerKg == null ? null : Number(sales.soldPricePerKg);
     const pdfPrice = Number(pdf.soldPricePerKg);
-    const priceDiff =
-      salesPrice != null && Number.isFinite(salesPrice) && !nearlyEqual(pdfPrice, salesPrice);
-    const kgDiff =
-      sales.netWeightKg != null &&
-      Number.isFinite(Number(sales.netWeightKg)) &&
-      !nearlyEqual(Number(pdf.netWeightKg), Number(sales.netWeightKg), 0.05);
+    const diffNotes = collectDiffNotes(pdf, sales);
 
     rows.push({
       key: `both-${pdf.id}`,
       broker,
       lotNumber: pdf.lotNumber,
-      mark: priceDiff || kgDiff ? "priceDiff" : "match",
+      mark: diffNotes.length > 0 ? "priceDiff" : "match",
       sellingMark: pdf.sellingMark || sales.sellingMark || "",
       grade: pdf.grade || sales.grade || "",
       invoiceNumber: pdf.invoiceNumber || sales.invoiceNumber || "",
@@ -129,11 +168,7 @@ export function comparePurchaseToSales(
       salesPrice,
       proceeds: pdf.proceeds,
       salesBuyer: String(sales.buyerCode || ""),
-      notes: priceDiff
-        ? `Price PDF ${pdfPrice.toFixed(2)} vs sales ${salesPrice!.toFixed(2)}`
-        : kgDiff
-          ? `Kg PDF ${Number(pdf.netWeightKg).toFixed(2)} vs sales ${Number(sales.netWeightKg).toFixed(2)}`
-          : "Matched",
+      notes: diffNotes.length > 0 ? diffNotes.join(" · ") : "Matched on lot + invoice values",
     });
   }
 

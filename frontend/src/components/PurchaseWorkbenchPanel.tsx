@@ -198,8 +198,8 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
       <Stack direction={{ xs: "column", md: "row" }} spacing={2} sx={{ justifyContent: "space-between" }}>
         <div>
           <Typography color="text.secondary">
-            Quick check: each broker PDF against the after-sales file for this sale. Marks stay distinct in the lot
-            list.
+            Quick check: broker PDF invoice vs after-sales file for this buyer. Same lot number is paired; price,
+            kg, bags, invoice #, grade and mark from the invoice are checked.
           </Typography>
         </div>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
@@ -209,6 +209,23 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
           <Chip size="small" color="error" label={`Sales only ${overall.salesOnly}`} />
         </Stack>
       </Stack>
+
+      <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "rgba(26, 95, 122, 0.04)" }}>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ flexWrap: "wrap" }}>
+          <LegendItem color="#1f4d3a" title="Match" text="Lot is on both PDF and sales, and invoice values agree." />
+          <LegendItem
+            color="#b47814"
+            title="Differs"
+            text="Same lot on both sides, but price / kg / bags / invoice # / grade / mark disagree."
+          />
+          <LegendItem color="#1a5f7a" title="PDF only" text="On the broker invoice PDF, missing from the sales file." />
+          <LegendItem
+            color="#8c3f2a"
+            title="Sales only"
+            text="On the sales file for this buyer, missing from the PDF invoice."
+          />
+        </Stack>
+      </Paper>
 
       {!salesReady && !saleBook.isPending ? (
         <Alert severity="warning">
@@ -492,8 +509,16 @@ function BrokerCompareCard({
           />
         </Box>
 
+        <Typography variant="caption" color="text.secondary">
+          Invoice {invoice.lotCount} lots · {formatKg(invoice.netWeightKg)} kg · proceeds {formatMoney(invoice.proceeds)}
+        </Typography>
         <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5 }}>
           <Chip size="small" variant="outlined" label={`PDF ${invoice.lotCount}`} />
+          <Chip
+            size="small"
+            variant="outlined"
+            label={`Sales ${summary.match + summary.priceDiff + summary.salesOnly}`}
+          />
           <Chip size="small" color="success" variant="outlined" label={`✓ ${summary.match}`} />
           {summary.priceDiff ? <Chip size="small" color="warning" label={`Δ ${summary.priceDiff}`} /> : null}
           {summary.pdfOnly ? <Chip size="small" color="info" label={`PDF+ ${summary.pdfOnly}`} /> : null}
@@ -525,5 +550,21 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
         {value}
       </Typography>
     </Paper>
+  );
+}
+
+function LegendItem({ color, title, text }: { color: string; title: string; text: string }) {
+  return (
+    <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 220, alignItems: "flex-start" }}>
+      <Box sx={{ width: 10, height: 10, borderRadius: 1, bgcolor: color, mt: 0.7, flexShrink: 0 }} />
+      <div>
+        <Typography variant="subtitle2" sx={{ lineHeight: 1.2 }}>
+          {title}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {text}
+        </Typography>
+      </div>
+    </Stack>
   );
 }
