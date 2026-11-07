@@ -53,23 +53,30 @@ public sealed class UploadProcessingService(
             ? csvParser.Parse(stream)
             : brokerParser.Parse(batch.Broker, stream);
 
-        if (parsed.Errors.Count > 0)
-        {
-            await FailAsync(batch, string.Join(" ", parsed.Errors), cancellationToken);
-            return;
-        }
-
-        var rowErrors = new List<string>();
+        // Keep good rows even when some dense lines fail — do not reject the whole broker file.
+        var warnings = parsed.Errors.Take(20).ToList();
+        var accepted = new List<LotCsvRow>();
         foreach (var row in parsed.Rows)
         {
             var validation = await rowValidator.ValidateAsync(row, cancellationToken);
+            if (validation.IsValid)
+            {
+                accepted.Add(row);
+                continue;
+            }
+
             foreach (var error in validation.Errors)
-                rowErrors.Add($"Line {row.LineNumber}: {error.ErrorMessage}");
+                warnings.Add($"Line {row.LineNumber}: {error.ErrorMessage}");
         }
 
-        if (rowErrors.Count > 0)
+        if (accepted.Count == 0)
         {
-            await FailAsync(batch, string.Join(" ", rowErrors.Take(20)), cancellationToken);
+            await FailAsync(
+                batch,
+                warnings.Count > 0
+                    ? string.Join(" ", warnings)
+                    : "The file has no lot rows.",
+                cancellationToken);
             return;
         }
 
@@ -77,52 +84,64 @@ public sealed class UploadProcessingService(
         if (sale is null)
             return;
 
-        var numbers = parsed.Rows.Select(row => row.LotNumber).ToArray();
-        var existing = await sales.FindExistingLotNumbersAsync(sale.Id, batch.Broker, numbers, cancellationToken);
-        if (existing.Count > 0)
-        {
-            await FailAsync(
-                batch,
-                $"Lot numbers already on this sale for {batch.Broker}: {string.Join(", ", existing.Order().Take(20))}.",
-                cancellationToken);
-            return;
-        }
+        // Upsert so a repair re-upload fills catalogue fields onto sales-created shells.
+        var numbers = accepted.Select(row => row.LotNumber).Distinct().ToArray();
+        var tracked = await sales.FindTrackedLotsAsync(sale.Id, batch.Broker, numbers, cancellationToken);
+        var byNumber = tracked.ToDictionary(lot => lot.LotNumber);
 
-        foreach (var row in parsed.Rows)
+        var applied = 0;
+        foreach (var row in accepted)
         {
-            sales.AddLot(new Lot
+            if (!byNumber.TryGetValue(row.LotNumber, out var lot))
             {
-                Id = Guid.CreateVersion7(),
-                SaleId = sale.Id,
-                UploadBatchId = batch.Id,
-                Broker = batch.Broker,
-                LotNumber = row.LotNumber,
-                FactoryCode = row.FactoryCode.Trim(),
-                GardenMark = row.GardenMark.Trim(),
-                InvoiceNumber = row.InvoiceNumber.Trim(),
-                Grade = row.Grade.Trim(),
-                Bags = row.Bags,
-                PackageType = row.PackageType.Trim(),
-                NetPerBagKg = row.NetPerBagKg,
-                NetWeightKg = row.NetWeightKg,
-                SellingMark = row.SellingMark.Trim(),
-                WarehouseOrBasis = row.WarehouseOrBasis.Trim(),
-                Category = row.Category.Trim(),
-                ValuationPerKg = row.ValuationPerKg,
-                BuyerCode = "",
-                SourceLine = Truncate(row.SourceLine.Trim(), 400)
-            });
+                lot = new Lot
+                {
+                    Id = Guid.CreateVersion7(),
+                    SaleId = sale.Id,
+                    Broker = batch.Broker,
+                    LotNumber = row.LotNumber,
+                    BuyerCode = ""
+                };
+                sales.AddLot(lot);
+                byNumber[row.LotNumber] = lot;
+            }
+
+            ApplyCatalogueFields(lot, batch.Id, row);
+            applied++;
         }
 
-        await CompleteAsync(batch, sale.Id, parsed.Rows.Count, cancellationToken);
+        var note = warnings.Count == 0
+            ? null
+            : $"Imported {applied} lots; skipped {warnings.Count}+ dense/invalid lines. " + string.Join(" ", warnings.Take(10));
+        await CompleteAsync(batch, sale.Id, applied, cancellationToken, note);
         logger.LogInformation(
-            "Accepted {LotCount} {Broker} catalogue lots for {Centre} sale {SaleNumber}/{Year} from upload {UploadId}",
+            "Accepted {LotCount} {Broker} catalogue lots for {Centre} sale {SaleNumber}/{Year} from upload {UploadId} ({WarningCount} warnings)",
             batch.LotCount,
             batch.Broker,
             batch.Centre,
             batch.SaleNumber,
             batch.Year,
-            batch.Id);
+            batch.Id,
+            warnings.Count);
+    }
+
+    private static void ApplyCatalogueFields(Lot lot, Guid uploadBatchId, LotCsvRow row)
+    {
+        lot.UploadBatchId = uploadBatchId;
+        lot.FactoryCode = row.FactoryCode.Trim();
+        lot.GardenMark = row.GardenMark.Trim();
+        lot.InvoiceNumber = row.InvoiceNumber.Trim();
+        lot.Grade = row.Grade.Trim();
+        lot.Bags = row.Bags;
+        lot.PackageType = row.PackageType.Trim();
+        lot.NetPerBagKg = row.NetPerBagKg;
+        lot.NetWeightKg = row.NetWeightKg;
+        lot.SellingMark = row.SellingMark.Trim();
+        lot.WarehouseOrBasis = row.WarehouseOrBasis.Trim();
+        lot.Category = row.Category.Trim();
+        lot.ValuationPerKg = row.ValuationPerKg;
+        lot.SourceLine = Truncate(row.SourceLine.Trim(), 400);
+        // Preserve SoldPricePerKg / BuyerCode / SalesUploadBatchId from after-sales.
     }
 
     private async Task ImportSalesAsync(UploadBatch batch, CancellationToken cancellationToken)
@@ -249,13 +268,18 @@ public sealed class UploadProcessingService(
         return sale;
     }
 
-    private async Task CompleteAsync(UploadBatch batch, Guid saleId, int lotCount, CancellationToken cancellationToken)
+    private async Task CompleteAsync(
+        UploadBatch batch,
+        Guid saleId,
+        int lotCount,
+        CancellationToken cancellationToken,
+        string? warning = null)
     {
         batch.SaleId = saleId;
         batch.LotCount = lotCount;
         batch.Status = UploadStatus.Completed;
         batch.ProcessedAt = DateTimeOffset.UtcNow;
-        batch.Error = null;
+        batch.Error = warning is null ? null : Truncate(warning);
         await unitOfWork.SaveChangesAsync(cancellationToken);
         await TryEmailAsync(batch, cancellationToken);
     }

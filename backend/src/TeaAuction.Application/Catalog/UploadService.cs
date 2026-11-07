@@ -65,4 +65,23 @@ public sealed class UploadService(
 
         return OperationResult<UploadAcceptedDto>.Ok(new UploadAcceptedDto(batch.Id, batch.Status, batch.SaleId));
     }
+
+    /// <summary>
+    /// Re-queues a failed (or previously completed) catalogue/sales upload so repaired parsers
+    /// can fill missing lots without wiping the sale.
+    /// </summary>
+    public async Task<OperationResult<UploadAcceptedDto>> ReprocessAsync(Guid uploadBatchId, CancellationToken cancellationToken)
+    {
+        var batch = await uploads.GetTrackedAsync(uploadBatchId, cancellationToken);
+        if (batch is null)
+            return OperationResult<UploadAcceptedDto>.Fail(["Upload was not found."]);
+
+        batch.Status = UploadStatus.Pending;
+        batch.Error = null;
+        batch.ProcessedAt = null;
+        batch.LotCount = 0;
+        await unitOfWork.SaveChangesAsync(cancellationToken);
+        scheduler.EnqueueProcessUpload(batch.Id);
+        return OperationResult<UploadAcceptedDto>.Ok(new UploadAcceptedDto(batch.Id, batch.Status, batch.SaleId));
+    }
 }

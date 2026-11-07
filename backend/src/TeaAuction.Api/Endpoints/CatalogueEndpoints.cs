@@ -53,6 +53,22 @@ public static class CatalogueEndpoints
             .Produces<UploadDetailDto>()
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapPost("/uploads/{id:guid}/reprocess", async (
+                Guid id,
+                UploadService uploads,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await uploads.ReprocessAsync(id, cancellationToken);
+                if (!result.Succeeded || result.Value is null)
+                    return Results.BadRequest(new ErrorResponse(result.Errors));
+                return Results.Accepted($"/api/uploads/{result.Value.Id}", result.Value);
+            })
+            .WithName("ReprocessUpload")
+            .WithTags("Uploads")
+            .WithSummary("Re-queue an upload so repaired parsers can fill missing lots")
+            .Produces<UploadAcceptedDto>(StatusCodes.Status202Accepted)
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
         return group;
     }
 

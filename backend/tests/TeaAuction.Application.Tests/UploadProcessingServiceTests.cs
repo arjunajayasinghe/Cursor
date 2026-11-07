@@ -66,7 +66,7 @@ public class UploadProcessingServiceTests
     }
 
     [Fact]
-    public async Task Rejects_a_lot_number_already_on_the_sale_for_the_same_broker()
+    public async Task Upserts_catalogue_fields_onto_an_existing_lot_for_repair()
     {
         var store = new InMemoryCatalogue();
         var sale = ExistingSale();
@@ -81,7 +81,9 @@ public class UploadProcessingServiceTests
             InvoiceNumber = "PD-1",
             Grade = "BOP",
             Bags = 1,
-            NetWeightKg = 10
+            NetWeightKg = 10,
+            SoldPricePerKg = 1500m,
+            BuyerCode = "ACME"
         });
         var batch = Pending(store, $"""
             {Header}
@@ -90,9 +92,14 @@ public class UploadProcessingServiceTests
 
         await Service(store).ProcessAsync(batch.Id, CancellationToken.None);
 
-        Assert.Equal(UploadStatus.Failed, batch.Status);
-        Assert.Contains("already", batch.Error, StringComparison.OrdinalIgnoreCase);
-        Assert.Single(store.Lots);
+        Assert.Equal(UploadStatus.Completed, batch.Status);
+        var lot = Assert.Single(store.Lots);
+        Assert.Equal("Somerset", lot.GardenMark);
+        Assert.Equal("BOPF", lot.Grade);
+        Assert.Equal(8, lot.Bags);
+        Assert.Equal(160m, lot.NetWeightKg);
+        Assert.Equal(1500m, lot.SoldPricePerKg);
+        Assert.Equal("ACME", lot.BuyerCode);
     }
 
     [Fact]

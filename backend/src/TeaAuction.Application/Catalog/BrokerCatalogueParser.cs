@@ -217,38 +217,50 @@ public sealed class BrokerCatalogueParser : IBrokerCatalogueParser
     {
         var rows = new List<LotCsvRow>();
         var errors = new List<string>();
+        // Dense EB rows: factory + garden + bagsBnet + grade, then mark + lot + invoiceRtotal.
+        var bagsNet = new Regex(@"(\d+)B([\d.]+)", RegexOptions.CultureInvariant);
+        var markLotInv = new Regex(
+            @"(MWP|SPBS|SPB|MWPS|MW-P/S|H-SPBS)\s+(\d+)\s+(\S*?)\s*(\d+\.\d{2})",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+        var gradeToken = new Regex(@"\d([A-Za-z][A-Za-z0-9]*)", RegexOptions.CultureInvariant);
+
         for (var i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
             var lineNo = i + 1;
             try
             {
-                var factory = Slice(line, 0, 8);
-                var garden = Slice(line, 9, 34);
-                var qty = Regex.Match(line[34..48], @"(\d+)[A-Za-z]+([\d.]+)");
+                var qty = bagsNet.Match(line);
+                if (!qty.Success) throw new FormatException("qty");
                 var bags = int.Parse(qty.Groups[1].Value, CultureInfo.InvariantCulture);
                 var net = Dec(qty.Groups[2].Value)!.Value;
-                var gradeMatch = Regex.Match(line[48..84], @"\d*([A-Za-z][A-Za-z0-9]*)");
-                var sellingMark = Slice(line, 84, 90);
-                var invTot = line[96..Math.Min(112, line.Length)].Replace(" ", "");
-                var invMatch = Regex.Match(invTot, @"^(\S+?)(\d+\.\d{2})$");
-                var total = invMatch.Success ? Dec(invMatch.Groups[2].Value)!.Value : bags * net;
-                var invoice = invMatch.Success ? invMatch.Groups[1].Value : invTot;
-                if (total <= 0)
-                    throw new FormatException("weight");
+
+                var meta = markLotInv.Match(line);
+                if (!meta.Success) throw new FormatException("lot");
+                var lot = int.Parse(meta.Groups[2].Value, CultureInfo.InvariantCulture);
+                var invoice = meta.Groups[3].Value.Trim().TrimEnd('R', 'r');
+                var total = Dec(meta.Groups[4].Value)!.Value;
+                if (total <= 0) total = bags * net;
+
+                var beforeMark = line[..meta.Index];
+                var gradeMatch = gradeToken.Matches(beforeMark);
+                var grade = gradeMatch.Count > 0 ? gradeMatch[^1].Groups[1].Value : "UNK";
+                var factory = Slice(line, 0, 8);
+                var gardenEnd = qty.Index;
+                var garden = line[Math.Min(8, gardenEnd)..gardenEnd].Trim();
 
                 rows.Add(Row(
                     lineNo,
-                    int.Parse(Slice(line, 90, 95), CultureInfo.InvariantCulture),
+                    lot,
                     factory,
                     garden,
-                    invoice,
-                    gradeMatch.Success ? gradeMatch.Groups[1].Value : "UNK",
+                    string.IsNullOrWhiteSpace(invoice) ? lot.ToString(CultureInfo.InvariantCulture) : invoice,
+                    grade,
                     bags,
                     "B",
                     net,
                     total,
-                    sellingMark,
+                    meta.Groups[1].Value.ToUpperInvariant(),
                     "",
                     "",
                     null,
@@ -267,32 +279,41 @@ public sealed class BrokerCatalogueParser : IBrokerCatalogueParser
     {
         var rows = new List<LotCsvRow>();
         var errors = new List<string>();
+        // Grade may be glued to a warehouse address (…MUTHURAJAWELAOP1); take the last grade+bags pack.
+        var gradeBags = new Regex(
+            @"([A-Za-z][A-Za-z0-9]{0,11})\s+(\d+(?:\.\d+)?)B\s+([\d.]+)\s+([\d.]+)",
+            RegexOptions.CultureInvariant);
+
         for (var i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
             var lineNo = i + 1;
+            if (!Regex.IsMatch(line, @"BC\d+", RegexOptions.CultureInvariant))
+                continue;
+
             try
             {
                 var factoryMatch = Regex.Match(line, @"MF\d{3,5}");
                 var factory = factoryMatch.Success ? factoryMatch.Value : "";
                 var garden = Slice(line, 14, 52);
-                var sellingMarkMatch = Regex.Match(line, @"\b(MWPS|SPBS|MWP|SPB|MW-P/S)\b");
+                var sellingMarkMatch = Regex.Match(line, @"\b(MWPS|SPBS|MWP|SPB|MW-P/S|H-SPBS)\b");
                 var sellingMark = sellingMarkMatch.Success ? sellingMarkMatch.Value : "";
-                var warehouse = line.Contains("Ex-estate", StringComparison.OrdinalIgnoreCase) ? "Ex-estate Basis" : Slice(line, 80, 120);
-                var token = Regex.Matches(line, @"\b([A-Z][A-Z0-9]{1,12})\s+([\d.]+)B\b");
+                var warehouse = line.Contains("Ex-estate", StringComparison.OrdinalIgnoreCase)
+                    ? "Ex-estate Basis"
+                    : Slice(line, 80, 120);
+
+                var token = gradeBags.Matches(line);
                 if (token.Count == 0) throw new FormatException("grade");
                 var last = token[^1];
-                var grade = last.Groups[1].Value;
+                var grade = ExtractTrailingGrade(last.Groups[1].Value);
                 var bags = (int)decimal.Parse(last.Groups[2].Value, CultureInfo.InvariantCulture);
-                var after = line[last.Index..];
-                var nums = Regex.Match(after, @"B\s+([\d.]+)\s+([\d.]+)");
-                var netPerBag = Dec(nums.Groups[1].Value);
-                var totalText = nums.Groups[2].Value;
+                var netPerBag = Dec(last.Groups[3].Value);
+                var totalText = last.Groups[4].Value;
                 var glued = Regex.Match(totalText, @"^([\d.]+?)(20\d{2})$");
                 var total = glued.Success ? Dec(glued.Groups[1].Value)!.Value : Dec(totalText)!.Value;
                 var lotMatch = Regex.Match(line, @"BC(\d+)");
                 var lot = lotMatch.Success ? int.Parse(lotMatch.Groups[1].Value, CultureInfo.InvariantCulture) : lineNo;
-                var invoiceMatch = Regex.Match(line, @"20\d{2}\s+(\d+)");
+                var invoiceMatch = Regex.Match(line, @"20\d{2}\s*R?(\d+)");
                 var invoice = invoiceMatch.Success ? invoiceMatch.Groups[1].Value : lot.ToString(CultureInfo.InvariantCulture);
                 var valuationMatch = Regex.Match(line, @"BC\d+\s+([\d.]+)");
                 decimal? valuation = valuationMatch.Success ? Dec(valuationMatch.Groups[1].Value) : null;
@@ -312,34 +333,65 @@ public sealed class BrokerCatalogueParser : IBrokerCatalogueParser
     {
         var rows = new List<LotCsvRow>();
         var errors = new List<string>();
+        var header = new Regex(
+            @"^(\d{5})MF\s*(\d+)\s+(.*?)\s{2,}(\S+)\s+(\d{3})([A-Za-z][A-Za-z0-9]*)",
+            RegexOptions.CultureInvariant);
+        // Bags may be paper (B) or hessian (H).
+        var weights = new Regex(
+            @"(\d+\.\d{2})\s+(\d+)\s+(\d+\.\d{2})([BH])",
+            RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
+
         for (var i = 0; i < lines.Count; i++)
         {
             var line = lines[i];
             var lineNo = i + 1;
             try
             {
-                var factory = (Slice(line, 5, 8) + Slice(line, 8, 13)).Replace(" ", "", StringComparison.Ordinal);
-                var garden = Slice(line, 14, 38);
-                var invGrade = line[38..Math.Min(64, line.Length)];
-                var invMatch = Regex.Match(invGrade, @"^(\S+?)\s*(\d{3})([A-Za-z][A-Za-z0-9]*)");
+                var head = header.Match(line);
+                var pack = weights.Match(line);
+                if (!pack.Success) throw new FormatException("weights");
+
+                string factory;
+                string garden;
+                string invoice;
+                string grade;
+                int lot;
+                if (head.Success)
+                {
+                    lot = int.Parse(head.Groups[1].Value, CultureInfo.InvariantCulture);
+                    factory = "MF" + head.Groups[2].Value;
+                    garden = head.Groups[3].Value;
+                    invoice = head.Groups[4].Value;
+                    grade = head.Groups[6].Value;
+                }
+                else
+                {
+                    lot = int.Parse(line[..5], CultureInfo.InvariantCulture);
+                    factory = (Slice(line, 5, 8) + Slice(line, 8, 13)).Replace(" ", "", StringComparison.Ordinal);
+                    garden = Slice(line, 14, 38);
+                    var invGrade = line[38..Math.Min(64, line.Length)];
+                    var invMatch = Regex.Match(invGrade, @"^(\S+?)\s*(\d{3})([A-Za-z][A-Za-z0-9]*)");
+                    invoice = invMatch.Success ? invMatch.Groups[1].Value : Slice(line, 38, 44);
+                    grade = invMatch.Success ? invMatch.Groups[3].Value : Slice(line, 47, 64);
+                }
+
                 var warehouse = Slice(line, 64, 90);
                 var company = Slice(line, 91, 130);
                 var sellingMark = Slice(line, 133, 141);
-                var weights = Regex.Match(line, @"(\d+\.\d{2})\s+(\d+)\s+(\d+\.\d{2})B");
-                if (!weights.Success) throw new FormatException("weights");
                 var category = line.Contains("Ex-Estate", StringComparison.OrdinalIgnoreCase) ? "Ex-Estate" : "";
+                var packageType = pack.Groups[4].Value.ToUpperInvariant();
 
                 rows.Add(Row(
                     lineNo,
-                    int.Parse(line[..5], CultureInfo.InvariantCulture),
+                    lot,
                     factory,
                     garden,
-                    invMatch.Success ? invMatch.Groups[1].Value : Slice(line, 38, 44),
-                    invMatch.Success ? invMatch.Groups[3].Value : Slice(line, 47, 64),
-                    int.Parse(weights.Groups[2].Value, CultureInfo.InvariantCulture),
-                    "B",
-                    Dec(weights.Groups[3].Value),
-                    Dec(weights.Groups[1].Value)!.Value,
+                    invoice,
+                    grade,
+                    int.Parse(pack.Groups[2].Value, CultureInfo.InvariantCulture),
+                    packageType,
+                    Dec(pack.Groups[3].Value),
+                    Dec(pack.Groups[1].Value)!.Value,
                     sellingMark,
                     string.IsNullOrWhiteSpace(warehouse) ? company : warehouse,
                     category,
@@ -407,4 +459,15 @@ public sealed class BrokerCatalogueParser : IBrokerCatalogueParser
         "UST1" => "DUST1",
         var value => value
     };
+
+    // Address text is often glued onto the grade (…MUTHURAJAWELAOP1); keep the trailing grade token.
+    private static readonly Regex TrailingGrade = new(
+        @"(BOPFEXSP1|BOPFEXSP|FBOPFEXSP1|FBOPFEXSP|FBOPF1|FBOPFSP|FBOPF|FBOP|BOPF1|BOPA|BOPSP|BOP1|BOPF|BOP|PEK1|PEK|OPA|OP1|OP|PF1|BP1|DUST1|DUST|UST1|UST)$",
+        RegexOptions.CultureInvariant | RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private static string ExtractTrailingGrade(string raw)
+    {
+        var match = TrailingGrade.Match(raw.Trim());
+        return match.Success ? match.Value.ToUpperInvariant() : raw.Trim();
+    }
 }
