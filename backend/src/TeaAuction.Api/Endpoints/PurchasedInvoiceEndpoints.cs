@@ -43,6 +43,20 @@ public static class PurchasedInvoiceEndpoints
             .Produces<PurchasedInvoiceDetailDto>()
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/purchased-invoices/{id:guid}/pdf", async (
+                Guid id,
+                PurchasedInvoiceService service,
+                CancellationToken cancellationToken) =>
+            {
+                var file = await service.OpenPdfAsync(id, cancellationToken);
+                if (file is null) return Results.NotFound();
+                return Results.File(file.Value.Content, file.Value.ContentType, file.Value.FileName);
+            })
+            .WithName("GetPurchasedInvoicePdf")
+            .WithTags("PurchasedInvoices")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapPost("/purchased-invoices", Create)
             .WithName("CreatePurchasedInvoice")
             .WithTags("PurchasedInvoices")

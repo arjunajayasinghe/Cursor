@@ -178,10 +178,10 @@ export function InvoiceUploadPage() {
   return (
     <Stack spacing={3}>
       <div>
-        <Typography variant="h4">Upload purchased invoices</Typography>
+        <Typography variant="h4">Upload broker purchase invoices</Typography>
         <Typography color="text.secondary">
-          Drop buyer purchase invoice PDFs (Venture etc.) for each broker. They open together on the purchase
-          workbench. Broker tax invoices stay a separate upload and are not handled here.
+          Drop each broker’s purchase invoice PDF for the buyer (e.g. Venture). They open together on the
+          Purchases workbench so you can see every broker invoice for the sale.
         </Typography>
       </div>
 

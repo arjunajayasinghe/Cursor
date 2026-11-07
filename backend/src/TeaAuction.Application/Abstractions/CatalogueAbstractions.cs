@@ -97,6 +97,8 @@ public interface IPurchasedInvoiceRepository
         string? saleNumber,
         int? year,
         CancellationToken cancellationToken);
+
+    Task<PurchasedInvoice?> GetTrackedAsync(Guid id, CancellationToken cancellationToken);
 }
 
 public static class CatalogueFileKinds

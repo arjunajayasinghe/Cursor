@@ -27,6 +27,18 @@ public sealed class PurchasedInvoiceService(
         CancellationToken cancellationToken) =>
         invoices.GetWorkbenchAsync(saleNumber, year, cancellationToken);
 
+    public async Task<(Stream Content, string FileName, string ContentType)?> OpenPdfAsync(
+        Guid id,
+        CancellationToken cancellationToken)
+    {
+        var invoice = await invoices.GetTrackedAsync(id, cancellationToken);
+        if (invoice is null || string.IsNullOrWhiteSpace(invoice.StorageKey))
+            return null;
+
+        var stream = await files.OpenReadAsync(invoice.StorageKey, cancellationToken);
+        return (stream, invoice.OriginalFileName, invoice.ContentType);
+    }
+
     public async Task<OperationResult<UploadAcceptedDto>> CreateAsync(
         CreatePurchasedInvoiceCommand command,
         Stream content,

@@ -36,7 +36,7 @@ const navItems = [
   },
   {
     to: "/purchases",
-    label: "Purchases",
+    label: "Broker invoices",
     match: (path: string) => path.startsWith("/purchases"),
   },
 ] as const;

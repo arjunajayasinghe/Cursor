@@ -1,8 +1,7 @@
 namespace TeaAuction.Domain;
 
 /// <summary>
-/// One broker PDF of a buyer's purchased lots (e.g. Venture Tea final buyer account).
-/// Broker-issued invoices are intentionally out of scope.
+/// One broker purchase-invoice PDF for a buyer's account (e.g. Venture Tea).
 /// </summary>
 public sealed class PurchasedInvoice
 {

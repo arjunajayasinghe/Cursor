@@ -186,3 +186,16 @@ export async function listPurchasedInvoices() {
   if (!response.ok) throw new Error(`The request failed (${response.status}).`);
   return (await response.json()) as PurchasedInvoiceSummary[];
 }
+
+export async function openPurchasedInvoicePdf(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/purchased-invoices/${id}/pdf`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  window.open(url, "_blank", "noopener,noreferrer");
+  // Revoke later so the new tab can still load the blob.
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

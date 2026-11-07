@@ -18,7 +18,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
-import { getPurchasedInvoiceWorkbench, listPurchasedInvoices } from "../api/client";
+import { getPurchasedInvoiceWorkbench, listPurchasedInvoices, openPurchasedInvoicePdf } from "../api/client";
 import { brokerName } from "../catalogue";
 
 function formatMoney(value: number) {
@@ -86,11 +86,11 @@ export function PurchaseWorkbenchPage() {
         <div>
           <Typography variant="h4">Purchase workbench</Typography>
           <Typography color="text.secondary">
-            See purchased lots from every broker invoice together for one sale.
+            Broker purchase invoices for one sale, side by side. Open any PDF from the broker cards below.
           </Typography>
         </div>
         <Button component={RouterLink} to="/upload-invoices" variant="outlined">
-          Upload invoices
+          Upload broker invoices
         </Button>
       </Stack>
 
@@ -156,7 +156,7 @@ export function PurchaseWorkbenchPage() {
             {board.invoices.map((invoice) => (
               <Paper key={invoice.id} variant="outlined" sx={{ p: 2.5 }}>
                 <Typography variant="overline" color="text.secondary">
-                  {invoice.broker} · {brokerName(invoice.broker)}
+                  {invoice.broker} · {brokerName(invoice.broker)} invoice
                 </Typography>
                 <Typography variant="subtitle1" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
                   {invoice.buyerName || invoice.buyerCode || "Buyer"}
@@ -168,9 +168,16 @@ export function PurchaseWorkbenchPage() {
                   {invoice.lotCount} lots · {formatKg(invoice.netWeightKg)} kg
                 </Typography>
                 <Typography variant="body2">Proceeds {formatMoney(invoice.proceeds)}</Typography>
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
                   Payable {formatMoney(invoice.payable)}
                 </Typography>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => void openPurchasedInvoicePdf(invoice.id)}
+                >
+                  View PDF
+                </Button>
               </Paper>
             ))}
           </Box>

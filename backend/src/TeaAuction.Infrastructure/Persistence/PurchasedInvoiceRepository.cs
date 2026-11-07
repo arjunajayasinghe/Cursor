@@ -10,6 +10,9 @@ public sealed class PurchasedInvoiceRepository(TeaAuctionDbContext db) : IPurcha
     public async Task AddAsync(PurchasedInvoice invoice, CancellationToken cancellationToken) =>
         await db.PurchasedInvoices.AddAsync(invoice, cancellationToken);
 
+    public Task<PurchasedInvoice?> GetTrackedAsync(Guid id, CancellationToken cancellationToken) =>
+        db.PurchasedInvoices.FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
+
     public async Task<IReadOnlyList<PurchasedInvoiceSummaryDto>> ListAsync(CancellationToken cancellationToken)
     {
         var rows = await db.PurchasedInvoices.AsNoTracking()
