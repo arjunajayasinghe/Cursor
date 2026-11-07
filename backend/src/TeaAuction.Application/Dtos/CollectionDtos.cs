@@ -39,7 +39,9 @@ public sealed record CollectionLotDto(
     string BuyerCode,
     string BuyerName,
     string GardenMark,
-    DateTimeOffset SelectedAt);
+    DateTimeOffset SelectedAt,
+    Guid? SampleBoxId,
+    string? BoxNumber);
 
 public sealed record CollectionBatchDetailDto(
     Guid Id,

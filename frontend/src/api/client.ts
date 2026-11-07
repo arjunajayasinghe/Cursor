@@ -163,10 +163,58 @@ export type CollectionLot = {
   buyerName: string;
   gardenMark: string;
   selectedAt: string;
+  sampleBoxId?: string | null;
+  boxNumber?: string | null;
 };
 
 export type CollectionBatchDetail = CollectionBatchSummary & {
   lots: CollectionLot[];
+};
+
+export type SampleBoxSummary = {
+  id: string;
+  collectionBatchId: string;
+  boxNumber: string;
+  status: string;
+  lotCount: number;
+  bagCount: number;
+  netWeightKg: number;
+  warehouseOrBasis: string;
+  collectorName?: string | null;
+  createdAt: string;
+  printedAt?: string | null;
+  printCount: number;
+  receivedAt?: string | null;
+  receivedBy?: string | null;
+};
+
+export type SampleBoxLot = {
+  collectionLotId: string;
+  broker: string;
+  lotNumber: number;
+  sellingMark: string;
+  sellerName: string;
+  invoiceNumber: string;
+  grade: string;
+  bags: number;
+  netWeightKg: number;
+  warehouseOrBasis: string;
+  buyerCode: string;
+  buyerName: string;
+};
+
+export type SampleBoxDetail = SampleBoxSummary & {
+  remarks?: string | null;
+  saleNumber: string;
+  year: number;
+  saleDate: string;
+  centre: string;
+  lots: SampleBoxLot[];
+};
+
+export type SampleBoxesResponse = {
+  readyForBlending: boolean;
+  boxes: SampleBoxSummary[];
 };
 
 export type PurchasedInvoiceWorkbench = {
@@ -304,4 +352,96 @@ export async function selectCollectionLots(input: {
     throw new Error(message);
   }
   return (await response.json()) as CollectionBatchDetail;
+}
+
+async function readApiError(response: Response) {
+  let message = `The request failed (${response.status}).`;
+  try {
+    const payload = (await response.json()) as { errors?: string[] };
+    if (payload.errors?.length) message = payload.errors.join(" ");
+  } catch {
+    /* ignore */
+  }
+  return message;
+}
+
+export async function listSampleBoxes(batchId: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/${batchId}/boxes`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as SampleBoxesResponse;
+}
+
+export async function getSampleBox(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/${id}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as SampleBoxDetail;
+}
+
+export async function generateSampleBoxes(input: {
+  collectionBatchId: string;
+  collectionLotIds: string[];
+  mode: "shared" | "perLot";
+  collectorName?: string;
+  remarks?: string;
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/generate`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as SampleBoxDetail[];
+}
+
+export async function recordSampleBoxPrint(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/${id}/print`,
+    { method: "POST", headers: headers() },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as SampleBoxDetail;
+}
+
+export async function markSampleBoxesReceived(input: {
+  sampleBoxIds: string[];
+  receivedBy?: string;
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/received`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as SampleBoxSummary[];
+}
+
+export async function reverseSampleBoxes(input: {
+  sampleBoxIds?: string[];
+  collectionBatchId?: string;
+  reverseAll?: boolean;
+  includeReceived?: boolean;
+  reason?: string;
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/reverse`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as SampleBoxSummary[];
 }

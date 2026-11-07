@@ -35,6 +35,8 @@ public sealed class CollectionBatch
     public DateTimeOffset? UpdatedAt { get; set; }
 
     public ICollection<CollectionLot> Lots { get; set; } = new List<CollectionLot>();
+
+    public ICollection<SampleBox> SampleBoxes { get; set; } = new List<SampleBox>();
 }
 
 /// <summary>
@@ -92,4 +94,9 @@ public sealed class CollectionLot
     public string GardenMark { get; set; } = "";
 
     public DateTimeOffset SelectedAt { get; set; }
+
+    /// <summary>Active sample collection box for this lot (null until box numbers are generated).</summary>
+    public Guid? SampleBoxId { get; set; }
+
+    public SampleBox? SampleBox { get; set; }
 }

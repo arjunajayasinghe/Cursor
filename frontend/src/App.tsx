@@ -7,10 +7,12 @@ import { AuctionDataExplorerPage } from "./pages/AuctionDataExplorerPage";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
+import { BlendingPage } from "./pages/BlendingPage";
 import { CollectionDetailPage } from "./pages/CollectionDetailPage";
 import { CollectionsPage } from "./pages/CollectionsPage";
 import { PurchaseWorkbenchPage } from "./pages/PurchaseWorkbenchPage";
 import { SalesUploadPage } from "./pages/SalesUploadPage";
+import { SampleBoxPrintPage } from "./pages/SampleBoxPrintPage";
 import { UploadDetailPage } from "./pages/UploadDetailPage";
 import { UploadPage } from "./pages/UploadPage";
 import { UploadsPage } from "./pages/UploadsPage";
@@ -39,6 +41,8 @@ export function App() {
         <Route path="purchases" element={<PurchaseWorkbenchPage />} />
         <Route path="collections" element={<CollectionsPage />} />
         <Route path="collections/:batchId" element={<CollectionDetailPage />} />
+        <Route path="collections/boxes/:boxId/print" element={<SampleBoxPrintPage />} />
+        <Route path="blending" element={<BlendingPage />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Route>
     </Routes>

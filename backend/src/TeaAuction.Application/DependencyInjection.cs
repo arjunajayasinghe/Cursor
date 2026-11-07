@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<UploadProcessingService>();
         services.AddScoped<PurchasedInvoiceService>();
         services.AddScoped<CollectionService>();
+        services.AddScoped<SampleBoxService>();
         return services;
     }
 }
