@@ -2,6 +2,10 @@
 
 Admin workbench for APQC process mapping. Python 3, Flask, and SQLite on your machine. Set `DATABASE_URL` to a Postgres URL when you host it.
 
+## Live database (do not delete / do not re-seed)
+
+Shared local data lives at **`data/aetria.db`** (override with env `AETRIA_DB`). That folder is gitignored, so `git pull` does not replace it. `python app.py` only runs `init_db()` (create-if-missing schema) and **never** wipes the file. **Do not** run `python seed.py` on this machine while users share the DB — seed resets all data. If you must re-seed a throwaway copy, use `python seed.py --force` (it writes a dated backup under `~/aetria-db-backups/` first).
+
 ## Run
 
 ```bash
@@ -14,11 +18,13 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-python seed.py
+# First-time empty machine only (wipes DB — skip when data/aetria.db already has users):
+# python seed.py
+
 python app.py
 ```
 
-`python app.py` starts the site in the background and opens **http://localhost:8765/login**. You can close the Terminal window. The site stays up.
+`python app.py` starts the site in the background and opens **http://localhost:8765/login**. You can close the Terminal window. The site stays up. Restart is safe for the live DB.
 
 Stop it with:
 
