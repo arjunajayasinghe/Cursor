@@ -3,7 +3,8 @@ import type { Lot, PurchasedInvoiceLot, PurchasedInvoiceSummary } from "../api/c
 export type CompareMark = "match" | "priceDiff" | "otherBuyer" | "pdfOnly" | "salesOnly";
 
 export type SideValues = {
-  buyer: string;
+  buyerCode: string;
+  buyerName: string;
   sellingMark: string;
   grade: string;
   invoiceNumber: string;
@@ -34,6 +35,29 @@ export const ventureSalesBuyerCodes: Record<string, string[]> = {
   LC: ["VT"],
   MB: ["V06"],
 };
+
+/** Fallback display names when sales files only store the short code. */
+export const knownSalesBuyerNames: Record<string, string> = {
+  VL01: "Venture Tea Pvt. Ltd.",
+  VEN: "VENTURE TEA (PVT) LTD",
+  VE1: "VENTURE TEA PVT LTD",
+  VE04: "VENTURE TEA",
+  VT: "VENTURE TEA (PVT) LTD",
+  V06: "VENTURE TEA (PVT) LTD",
+};
+
+export function formatBuyer(side: Pick<SideValues, "buyerCode" | "buyerName"> | null | undefined) {
+  if (!side) return "";
+  const code = (side.buyerCode || "").trim();
+  const name = (side.buyerName || "").trim();
+  if (code && name) return `${code} · ${name}`;
+  return code || name;
+}
+
+export function buyerSearchText(side: SideValues | null | undefined) {
+  if (!side) return "";
+  return `${side.buyerCode} ${side.buyerName}`.trim().toLowerCase();
+}
 
 export function isVentureSalesBuyer(broker: string, buyerCode: string | null | undefined) {
   const code = (buyerCode || "").trim();
@@ -68,9 +92,53 @@ function normInvoiceNo(value: string | null | undefined) {
   return normText(value).replace(/^0+/, "");
 }
 
-function fromPdf(pdf: PurchasedInvoiceLot, invoiceBuyer: string): SideValues {
+function looksLikeBuyerName(value: string) {
+  const raw = value.trim();
+  if (!raw) return false;
+  if (/\s/.test(raw) || raw.includes("(") || raw.includes("LTD") || raw.includes("LIMITED")) return true;
+  return raw.length > 8;
+}
+
+function buildBuyerNameLookup(invoices: PurchasedInvoiceSummary[]) {
+  const map = new Map<string, string>(Object.entries(knownSalesBuyerNames));
+  for (const invoice of invoices) {
+    const code = (invoice.buyerCode || "").trim().toUpperCase();
+    const name = (invoice.buyerName || "").trim();
+    if (code && name) map.set(code, name);
+    for (const known of ventureSalesBuyerCodes[String(invoice.broker)] ?? []) {
+      if (name) map.set(known.toUpperCase(), name);
+    }
+  }
+  return map;
+}
+
+export function splitSalesBuyer(
+  broker: string,
+  rawBuyer: string | null | undefined,
+  nameByCode: Map<string, string>,
+  invoice?: PurchasedInvoiceSummary,
+): { buyerCode: string; buyerName: string } {
+  const raw = (rawBuyer || "").trim();
+  if (!raw) return { buyerCode: "", buyerName: "" };
+
+  if (looksLikeBuyerName(raw)) {
+    const code =
+      (invoice?.buyerCode || "").trim().toUpperCase() ||
+      (isVentureSalesBuyer(broker, raw) ? (ventureSalesBuyerCodes[broker]?.[0] ?? "") : "");
+    return { buyerCode: code, buyerName: raw };
+  }
+
+  const code = raw.toUpperCase();
+  const fromMap = nameByCode.get(code) || "";
+  const fromInvoice =
+    (invoice?.buyerCode || "").trim().toUpperCase() === code ? (invoice?.buyerName || "").trim() : "";
+  return { buyerCode: code, buyerName: fromMap || fromInvoice };
+}
+
+function fromPdf(pdf: PurchasedInvoiceLot, invoice: PurchasedInvoiceSummary | undefined): SideValues {
   return {
-    buyer: invoiceBuyer,
+    buyerCode: (invoice?.buyerCode || "").trim(),
+    buyerName: (invoice?.buyerName || "").trim(),
     sellingMark: pdf.sellingMark || "",
     grade: pdf.grade || "",
     invoiceNumber: pdf.invoiceNumber || "",
@@ -81,9 +149,16 @@ function fromPdf(pdf: PurchasedInvoiceLot, invoiceBuyer: string): SideValues {
   };
 }
 
-function fromSales(lot: Lot): SideValues {
+function fromSales(
+  lot: Lot,
+  broker: string,
+  nameByCode: Map<string, string>,
+  invoice: PurchasedInvoiceSummary | undefined,
+): SideValues {
+  const buyer = splitSalesBuyer(broker, lot.buyerCode, nameByCode, invoice);
   return {
-    buyer: String(lot.buyerCode || "").trim(),
+    buyerCode: buyer.buyerCode,
+    buyerName: buyer.buyerName,
     sellingMark: lot.sellingMark || lot.gardenMark || "",
     grade: lot.grade || "",
     invoiceNumber: lot.invoiceNumber || "",
@@ -128,9 +203,8 @@ export function comparePurchaseToSales(
   salesLots: Lot[],
   invoices: PurchasedInvoiceSummary[],
 ): ComparedLot[] {
-  const invoiceBuyerByBroker = new Map(
-    invoices.map((invoice) => [String(invoice.broker), invoice.buyerCode || invoice.buyerName || ""] as const),
-  );
+  const invoiceByBroker = new Map(invoices.map((invoice) => [String(invoice.broker), invoice] as const));
+  const nameByCode = buildBuyerNameLookup(invoices);
 
   // Any sales row for broker+lot (prefer a priced row).
   const salesAnyByKey = new Map<string, Lot>();
@@ -149,8 +223,8 @@ export function comparePurchaseToSales(
     const broker = String(pdf.broker);
     const key = `${broker}|${pdf.lotNumber}`;
     seen.add(key);
-    const invoiceBuyer = invoiceBuyerByBroker.get(broker) || "";
-    const pdfSide = fromPdf(pdf, invoiceBuyer);
+    const invoice = invoiceByBroker.get(broker);
+    const pdfSide = fromPdf(pdf, invoice);
     const salesLot = salesAnyByKey.get(key);
 
     if (!salesLot) {
@@ -166,11 +240,12 @@ export function comparePurchaseToSales(
       continue;
     }
 
-    const salesSide = fromSales(salesLot);
-    const sameBuyer = matchesInvoiceBuyer(broker, salesSide.buyer, invoiceBuyerByBroker.get(broker));
+    const salesSide = fromSales(salesLot, broker, nameByCode, invoice);
+    const salesBuyerKey = salesSide.buyerCode || salesSide.buyerName;
+    const sameBuyer = matchesInvoiceBuyer(broker, salesBuyerKey, invoice?.buyerCode || invoice?.buyerName);
 
     if (!sameBuyer) {
-      const blank = !salesSide.buyer && salesSide.price == null;
+      const blank = !salesBuyerKey && salesSide.price == null;
       rows.push({
         key: `both-${pdf.id}`,
         broker,
@@ -179,8 +254,8 @@ export function comparePurchaseToSales(
         pdf: pdfSide,
         sales: salesSide,
         notes: blank
-          ? `PDF buyer ${invoiceBuyer || "Venture"} · sales unsold/blank`
-          : `PDF buyer ${invoiceBuyer || "Venture"} · sales buyer ${salesSide.buyer || "—"}`,
+          ? `PDF ${formatBuyer(pdfSide) || "Venture"} · sales unsold/blank`
+          : `PDF ${formatBuyer(pdfSide) || "Venture"} · sales ${formatBuyer(salesSide) || "—"}`,
       });
       continue;
     }
@@ -201,14 +276,17 @@ export function comparePurchaseToSales(
   for (const [key, salesLot] of salesAnyByKey) {
     if (seen.has(key)) continue;
     const broker = String(salesLot.broker);
-    if (!matchesInvoiceBuyer(broker, salesLot.buyerCode, invoiceBuyerByBroker.get(broker))) continue;
+    const invoice = invoiceByBroker.get(broker);
+    const salesSide = fromSales(salesLot, broker, nameByCode, invoice);
+    const salesBuyerKey = salesSide.buyerCode || salesSide.buyerName;
+    if (!matchesInvoiceBuyer(broker, salesBuyerKey, invoice?.buyerCode || invoice?.buyerName)) continue;
     rows.push({
       key: `sales-${salesLot.id}`,
       broker,
       lotNumber: Number(salesLot.lotNumber),
       mark: "salesOnly",
       pdf: null,
-      sales: fromSales(salesLot),
+      sales: salesSide,
       notes: "On sales file for this buyer — missing from PDF",
     });
   }
@@ -237,7 +315,7 @@ export const compareMarkStyle: Record<
   CompareMark,
   { label: string; chip: "success" | "warning" | "info" | "error" | "default"; rowBg: string; bar: string }
 > = {
-  match: { label: "Match", chip: "success", rowBg: "rgba(31, 77, 58, 0.06)", bar: "#1f4d3a" },
+  match: { label: "Match", chip: "success", rowBg: "rgba(46, 125, 50, 0.18)", bar: "#2e7d32" },
   priceDiff: { label: "Differs", chip: "warning", rowBg: "rgba(180, 120, 20, 0.12)", bar: "#b47814" },
   otherBuyer: { label: "Other buyer", chip: "default", rowBg: "rgba(90, 70, 40, 0.10)", bar: "#6b4f2a" },
   pdfOnly: { label: "PDF only", chip: "info", rowBg: "rgba(26, 95, 122, 0.12)", bar: "#1a5f7a" },

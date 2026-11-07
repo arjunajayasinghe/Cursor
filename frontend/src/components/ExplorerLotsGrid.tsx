@@ -21,6 +21,9 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { Lot } from "../api/client";
 import { brokers, formatQuantity } from "../catalogue";
+import { knownSalesBuyerNames, splitSalesBuyer } from "../lib/purchaseCompare";
+
+const salesBuyerNameLookup = new Map(Object.entries(knownSalesBuyerNames));
 
 export type ExplorerMode = "preAuction" | "afterSales";
 
@@ -365,7 +368,7 @@ export function ExplorerLotsGrid({
                       label={`Sold / kg${currency ? ` (${currency})` : ""}`}
                       align="right"
                     />
-                    <SortHeader id="buyerCode" label="Buyer" />
+                    <SortHeader id="buyerCode" label="Buyer code / name" />
                     <TableCell>Result</TableCell>
                   </>
                 ) : null}
@@ -375,6 +378,9 @@ export function ExplorerLotsGrid({
             <TableBody>
               {pageRows.map((lot) => {
                 const sold = isSold(lot);
+                const buyer = sold
+                  ? splitSalesBuyer(String(lot.broker), lot.buyerCode, salesBuyerNameLookup)
+                  : { buyerCode: "", buyerName: "" };
                 return (
                 <TableRow key={lot.id} hover selected={mode === "afterSales" && sold}>
                   <TableCell>{String(lot.broker)}</TableCell>
@@ -398,7 +404,24 @@ export function ExplorerLotsGrid({
                       <TableCell align="right" sx={{ fontWeight: 600 }}>
                         {sold ? formatQuantity(lot.soldPricePerKg, 2) : "—"}
                       </TableCell>
-                      <TableCell>{sold ? blank(lot.buyerCode) : "—"}</TableCell>
+                      <TableCell sx={{ minWidth: 140 }}>
+                        {!sold || (!buyer.buyerCode && !buyer.buyerName) ? (
+                          "—"
+                        ) : (
+                          <Stack spacing={0.25}>
+                            {buyer.buyerCode ? (
+                              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                                {buyer.buyerCode}
+                              </Typography>
+                            ) : null}
+                            {buyer.buyerName ? (
+                              <Typography variant="caption" color="text.secondary" sx={{ lineHeight: 1.2 }}>
+                                {buyer.buyerName}
+                              </Typography>
+                            ) : null}
+                          </Stack>
+                        )}
+                      </TableCell>
                       <TableCell>
                         <Chip size="small" color={sold ? "success" : "default"} label={sold ? "Sold" : "Unsold"} />
                       </TableCell>
