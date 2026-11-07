@@ -71,7 +71,7 @@ const DEFAULT_LEFT_COLS: Record<ColKey, number> = {
   sellingMark: 118,
   gardenMark: 108,
   grade: 68,
-  avail: 70,
+  avail: 82,
   cost: 64,
   alloc: 0,
   pct: 0,
@@ -133,6 +133,7 @@ export function BlendWorkbenchPage() {
   const [lotSortDir, setLotSortDir] = useState<"asc" | "desc">("asc");
   const [leftCols, setLeftCols] = useState(DEFAULT_LEFT_COLS);
   const [rightCols, setRightCols] = useState(DEFAULT_RIGHT_COLS);
+  const [allocHint, setAllocHint] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(!routeBlendId);
 
   const sheets = useQuery({
@@ -360,15 +361,38 @@ export function BlendWorkbenchPage() {
 
   function addLot(lot: BlendInventoryLot) {
     if (locked) return;
-    setAlloc((current) => {
-      const already = current[lot.collectionLotId] || 0;
-      const lotRemain = Math.max(0, Number(lot.availableQtyKg) - already);
-      if (lotRemain <= 0.0005) return current;
-      const used = Object.values(current).reduce((a, b) => a + b, 0);
-      const remainTarget = Math.max(0, (Number(targetQty) || 0) - used);
-      const chunk = remainTarget > 0 ? Math.min(lotRemain, remainTarget) : lotRemain;
-      return { ...current, [lot.collectionLotId]: Number((already + chunk).toFixed(3)) };
-    });
+    const est = Number(targetQty) || 0;
+    if (est <= 0) {
+      setAllocHint("Set Est. Qty first — we only pull what the blend still needs from each lot.");
+      return;
+    }
+
+    const already = alloc[lot.collectionLotId] || 0;
+    const lotRemain = Math.max(0, Number(lot.availableQtyKg) - already);
+    if (lotRemain <= 0.0005) {
+      setAllocHint("No remaining kg on this lot.");
+      return;
+    }
+
+    const used = Object.values(alloc).reduce((a, b) => a + b, 0);
+    const need = Math.max(0, est - used);
+    if (need <= 0.0005) {
+      setAllocHint("Est. Qty already covered — raise Est. Qty or reduce Alloc kg to take more.");
+      return;
+    }
+
+    // Required < lot size → take only the need; leftover stays on the left.
+    const chunk = Math.min(lotRemain, need);
+    const leftover = Number((lotRemain - chunk).toFixed(3));
+    setAlloc((current) => ({
+      ...current,
+      [lot.collectionLotId]: Number(((current[lot.collectionLotId] || 0) + chunk).toFixed(3)),
+    }));
+    setAllocHint(
+      leftover > 0.0005
+        ? `Took ${chunk.toFixed(2)} kg of ${lotRemain.toFixed(2)} kg from lot ${lot.lotNumber} (to Est. Qty). ${leftover.toFixed(2)} kg stays available.`
+        : `Took ${chunk.toFixed(2)} kg from lot ${lot.lotNumber} (full remainder used).`,
+    );
   }
 
   function removeLot(id: string) {
@@ -643,6 +667,11 @@ export function BlendWorkbenchPage() {
               value={String(composition.length)}
             />
           </Stack>
+          {allocHint && (
+            <Alert severity="info" onClose={() => setAllocHint(null)} sx={{ py: 0 }}>
+              {allocHint}
+            </Alert>
+          )}
 
           {/* Split workbench */}
           <Box
@@ -662,7 +691,7 @@ export function BlendWorkbenchPage() {
                   Available lots
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                  Drag edge of headers to resize · partial use leaves remainder here
+                  Drag / + takes only what’s still needed for Est. Qty · leftover Remain kg stays here
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                   <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 84 }} />
@@ -849,7 +878,7 @@ export function BlendWorkbenchPage() {
                   Blend box {dropActive ? "· drop to add" : ""}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Same columns · edit Alloc kg · leftover qty stays on the left
+                  Same columns · edit Alloc kg up to lot max · unused kg stays on the left
                 </Typography>
               </Box>
               <Box sx={{ overflow: "auto", flex: 1 }}>
