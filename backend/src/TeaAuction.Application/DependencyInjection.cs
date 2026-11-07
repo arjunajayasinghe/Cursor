@@ -21,6 +21,7 @@ public static class DependencyInjection
         services.AddScoped<PurchasedInvoiceService>();
         services.AddScoped<CollectionService>();
         services.AddScoped<SampleBoxService>();
+        services.AddScoped<BlendService>();
         return services;
     }
 }

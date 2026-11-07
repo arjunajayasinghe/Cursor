@@ -23,6 +23,12 @@ public sealed class TeaAuctionDbContext(DbContextOptions<TeaAuctionDbContext> op
 
     public DbSet<NumberSeries> NumberSeries => Set<NumberSeries>();
 
+    public DbSet<BlendSheet> BlendSheets => Set<BlendSheet>();
+
+    public DbSet<BlendSheetLine> BlendSheetLines => Set<BlendSheetLine>();
+
+    public DbSet<InventoryReservation> InventoryReservations => Set<InventoryReservation>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TeaAuctionDbContext).Assembly);

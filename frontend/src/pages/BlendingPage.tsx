@@ -1,6 +1,15 @@
 import { Alert, Button, Paper, Stack, Typography } from "@mui/material";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
+const links = [
+  { to: "/blending/sheets", label: "Blend Sheet List", hint: "All blend sheets" },
+  { to: "/blending/new", label: "Create Blend Sheet", hint: "Allocate collected lots" },
+  { to: "/blending/sheets?status=TempAllocated", label: "Pending Blend Approvals", hint: "Temp allocated — await confirm" },
+  { to: "/blending/sheets?status=Confirmed", label: "Approved Blend Sheets", hint: "Confirmed compositions" },
+  { to: "/blending/new", label: "Blend Inventory Allocation", hint: "Same as create — pick lots & qty" },
+  { to: "/blending/sheets", label: "Blend History", hint: "Full register" },
+] as const;
+
 export function BlendingPage() {
   const [params] = useSearchParams();
   const fromBatch = params.get("fromBatch");
@@ -8,35 +17,47 @@ export function BlendingPage() {
   return (
     <Stack spacing={3}>
       <div>
+        <Typography variant="overline" color="text.secondary">
+          Tea Operations → Blending Management
+        </Typography>
         <Typography variant="h4">Blending</Typography>
         <Typography color="text.secondary">
-          Samples received from collection unlock blend-sheet work. Full blend sheet creation comes next.
+          Use collected sample boxes/lots (whole collection batch need not be finished). Temp allocate qty, then confirm
+          when allocated qty equals estimated qty.
         </Typography>
       </div>
 
-      <Alert severity="info">
-        Gate is live: only collection batches with all sample boxes <strong>Received</strong> may enter blending.
-        Blend sheet list, inventory allocation, and Pre-Approval reservations are the next build.
-      </Alert>
+      {fromBatch ? (
+        <Alert severity="info">
+          Opened from collection batch <code>{fromBatch}</code>. Collected lots from that sale are in the inventory
+          picker when you create a blend sheet.
+        </Alert>
+      ) : null}
 
-      <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" sx={{ mb: 1 }}>
-          Ready to start
-        </Typography>
-        {fromBatch ? (
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Opened from collection batch <code>{fromBatch}</code>. Received sample lots for this sale are eligible for
-            blend composition.
-          </Typography>
-        ) : (
-          <Typography color="text.secondary" sx={{ mb: 2 }}>
-            Open a collection batch, generate box numbers, print labels, mark boxes received, then continue here.
-          </Typography>
-        )}
-        <Button component={RouterLink} to={fromBatch ? `/collections/${fromBatch}` : "/collections"} variant="outlined">
-          {fromBatch ? "Back to collection" : "Open collections"}
-        </Button>
-      </Paper>
+      <Stack
+        direction={{ xs: "column", sm: "row" }}
+        spacing={2}
+        useFlexGap
+        sx={{ flexWrap: "wrap" }}
+      >
+        {links.map((link) => (
+          <Paper key={link.label} sx={{ p: 2, minWidth: 220, flex: "1 1 220px" }}>
+            <Typography variant="h6" sx={{ mb: 0.5 }}>
+              {link.label}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+              {link.hint}
+            </Typography>
+            <Button component={RouterLink} to={link.to} variant="contained" size="small">
+              Open
+            </Button>
+          </Paper>
+        ))}
+      </Stack>
+
+      <Button component={RouterLink} to="/collections" variant="outlined" sx={{ alignSelf: "flex-start" }}>
+        Back to collection
+      </Button>
     </Stack>
   );
 }

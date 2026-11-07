@@ -7,6 +7,8 @@ import { AuctionDataExplorerPage } from "./pages/AuctionDataExplorerPage";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
+import { BlendSheetCreatePage } from "./pages/BlendSheetCreatePage";
+import { BlendSheetListPage } from "./pages/BlendSheetListPage";
 import { BlendingPage } from "./pages/BlendingPage";
 import { CollectionDetailPage } from "./pages/CollectionDetailPage";
 import { CollectionsPage } from "./pages/CollectionsPage";
@@ -43,6 +45,9 @@ export function App() {
         <Route path="collections/:batchId" element={<CollectionDetailPage />} />
         <Route path="collections/boxes/:boxId/print" element={<SampleBoxPrintPage />} />
         <Route path="blending" element={<BlendingPage />} />
+        <Route path="blending/new" element={<BlendSheetCreatePage />} />
+        <Route path="blending/sheets" element={<BlendSheetListPage />} />
+        <Route path="blending/sheets/:blendId" element={<BlendSheetCreatePage />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Route>
     </Routes>

@@ -445,3 +445,151 @@ export async function reverseSampleBoxes(input: {
   if (!response.ok) throw new Error(await readApiError(response));
   return (await response.json()) as SampleBoxSummary[];
 }
+
+export type BlendInventoryLot = {
+  collectionLotId: string;
+  sampleBoxId?: string | null;
+  boxNumber?: string | null;
+  saleNumber: string;
+  year: number;
+  broker: string;
+  lotNumber: number;
+  estate: string;
+  grade: string;
+  warehouseOrBasis: string;
+  purchasedQtyKg: number;
+  physicalStockKg: number;
+  reservedQtyKg: number;
+  availableQtyKg: number;
+  unitCostPerKg: number;
+  qualityStatus: string;
+  costVerified: boolean;
+};
+
+export type BlendSheetLine = {
+  id: string;
+  collectionLotId: string;
+  sampleBoxId?: string | null;
+  saleNumber: string;
+  year: number;
+  broker: string;
+  lotNumber: number;
+  estate: string;
+  grade: string;
+  warehouseOrBasis: string;
+  purchasedQtyKg: number;
+  physicalStockKg: number;
+  allocatedQtyKg: number;
+  unitCostPerKg: number;
+  qualityStatus: string;
+  lineCost: number;
+  percentage: number;
+};
+
+export type BlendSheetSummary = {
+  id: string;
+  blendNumber: string;
+  blendDate: string;
+  salesOrderRef?: string | null;
+  customerName?: string | null;
+  productName: string;
+  targetQuantityKg: number;
+  targetPricePerKg?: number | null;
+  currency: string;
+  targetTeaCostPerKg?: number | null;
+  preparedBy: string;
+  status: string;
+  allocatedQuantityKg: number;
+  totalRawTeaCost: number;
+  weightedAverageCostPerKg?: number | null;
+  createdAt: string;
+  confirmedAt?: string | null;
+};
+
+export type BlendSheetDetail = BlendSheetSummary & {
+  remarks?: string | null;
+  remainingTargetQtyKg: number;
+  targetSellingValue?: number | null;
+  estimatedGrossSpread?: number | null;
+  version: number;
+  updatedAt?: string | null;
+  lines: BlendSheetLine[];
+  warnings: string[];
+};
+
+export async function listBlendSheets(status?: string) {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const q = params.toString();
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends${q ? `?${q}` : ""}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as BlendSheetSummary[];
+}
+
+export async function listBlendInventory(input?: {
+  excludeBlendSheetId?: string;
+  saleNumber?: string;
+  broker?: string;
+  grade?: string;
+  estate?: string;
+}) {
+  const params = new URLSearchParams();
+  if (input?.excludeBlendSheetId) params.set("excludeBlendSheetId", input.excludeBlendSheetId);
+  if (input?.saleNumber) params.set("saleNumber", input.saleNumber);
+  if (input?.broker) params.set("broker", input.broker);
+  if (input?.grade) params.set("grade", input.grade);
+  if (input?.estate) params.set("estate", input.estate);
+  const q = params.toString();
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/inventory${q ? `?${q}` : ""}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as BlendInventoryLot[];
+}
+
+export async function getBlendSheet(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/${id}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as BlendSheetDetail;
+}
+
+export async function saveBlendSheet(input: {
+  id?: string;
+  salesOrderRef?: string;
+  customerName?: string;
+  productName: string;
+  targetQuantityKg: number;
+  targetPricePerKg?: number | null;
+  currency?: string;
+  targetTeaCostPerKg?: number | null;
+  preparedBy?: string;
+  remarks?: string;
+  lines: { collectionLotId: string; allocatedQtyKg: number }[];
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as BlendSheetDetail;
+}
+
+export async function confirmBlendSheet(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/${id}/confirm`,
+    { method: "POST", headers: headers() },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as BlendSheetDetail;
+}

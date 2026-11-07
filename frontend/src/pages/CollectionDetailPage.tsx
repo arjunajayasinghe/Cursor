@@ -230,11 +230,14 @@ export function CollectionDetailPage() {
       </Stack>
 
       {readyForBlending ? (
-        <Alert severity="success">All lots boxed and collected. Continue to blending when ready.</Alert>
+        <Alert severity="success">
+          Collected boxes are ready for blending (whole batch need not be finished). Open Blending → Create Blend Sheet
+          to temp-allocate those lots.
+        </Alert>
       ) : (
         <Alert severity="info">
           Tabs: <strong>Lots</strong> → generate box numbers · <strong>Boxes</strong> → print, reverse, or mark as
-          collected. Sale {saleKey} + lot number identifies each purchase.
+          collected. Blending uses collected boxes only — Sale {saleKey} + lot number identifies each purchase.
         </Alert>
       )}
 

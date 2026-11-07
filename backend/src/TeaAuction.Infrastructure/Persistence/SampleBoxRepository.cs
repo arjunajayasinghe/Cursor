@@ -149,21 +149,13 @@ public sealed class SampleBoxRepository(TeaAuctionDbContext db) : ISampleBoxRepo
 
     public async Task<bool> BatchReadyForBlendingAsync(Guid batchId, CancellationToken cancellationToken)
     {
-        var lotCount = await db.CollectionLots.CountAsync(x => x.CollectionBatchId == batchId, cancellationToken);
-        if (lotCount == 0) return false;
-
-        var unboxed = await db.CollectionLots.CountAsync(
-            x => x.CollectionBatchId == batchId && x.SampleBoxId == null,
-            cancellationToken);
-        if (unboxed > 0) return false;
-
-        var boxes = await db.SampleBoxes
+        // Blending uses collected boxes/lots — whole batch need not be finished.
+        return await db.SampleBoxes
             .AsNoTracking()
-            .Where(x => x.CollectionBatchId == batchId && x.Status != SampleBoxStatus.Cancelled)
-            .Select(x => x.Status)
-            .ToListAsync(cancellationToken);
-        return boxes.Count > 0
-            && boxes.All(s => s is SampleBoxStatus.Received or SampleBoxStatus.Completed);
+            .AnyAsync(
+                x => x.CollectionBatchId == batchId
+                     && (x.Status == SampleBoxStatus.Received || x.Status == SampleBoxStatus.Completed),
+                cancellationToken);
     }
 
     private static SampleBoxSummaryDto MapSummary(SampleBox box) =>
