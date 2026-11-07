@@ -7,9 +7,7 @@ import { AuctionDataExplorerPage } from "./pages/AuctionDataExplorerPage";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
-import { BlendSheetCreatePage } from "./pages/BlendSheetCreatePage";
-import { BlendSheetListPage } from "./pages/BlendSheetListPage";
-import { BlendingPage } from "./pages/BlendingPage";
+import { BlendWorkbenchPage } from "./pages/BlendWorkbenchPage";
 import { CollectionDetailPage } from "./pages/CollectionDetailPage";
 import { CollectionsPage } from "./pages/CollectionsPage";
 import { PurchaseWorkbenchPage } from "./pages/PurchaseWorkbenchPage";
@@ -44,10 +42,10 @@ export function App() {
         <Route path="collections" element={<CollectionsPage />} />
         <Route path="collections/:batchId" element={<CollectionDetailPage />} />
         <Route path="collections/boxes/:boxId/print" element={<SampleBoxPrintPage />} />
-        <Route path="blending" element={<BlendingPage />} />
-        <Route path="blending/new" element={<BlendSheetCreatePage />} />
-        <Route path="blending/sheets" element={<BlendSheetListPage />} />
-        <Route path="blending/sheets/:blendId" element={<BlendSheetCreatePage />} />
+        <Route path="blending" element={<BlendWorkbenchPage />} />
+        <Route path="blending/new" element={<Navigate to="/blending" replace />} />
+        <Route path="blending/sheets" element={<BlendWorkbenchPage />} />
+        <Route path="blending/sheets/:blendId" element={<BlendWorkbenchPage />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Route>
     </Routes>

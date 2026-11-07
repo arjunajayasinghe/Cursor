@@ -100,7 +100,10 @@ export function AppLayout() {
           </Stack>
         </Toolbar>
       </AppBar>
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container
+        maxWidth={location.pathname.startsWith("/blending") ? false : "lg"}
+        sx={{ py: 4, px: location.pathname.startsWith("/blending") ? { xs: 2, md: 3 } : undefined }}
+      >
         <Outlet />
       </Container>
       <Stack component="footer" sx={{ px: 3, pb: 3, color: "text.secondary" }}>
