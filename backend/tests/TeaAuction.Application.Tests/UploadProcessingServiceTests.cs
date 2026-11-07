@@ -132,7 +132,7 @@ public class UploadProcessingServiceTests
     }
 
     [Fact]
-    public async Task Rejects_a_different_sale_date()
+    public async Task Updates_sale_date_when_upload_date_differs()
     {
         var store = new InMemoryCatalogue();
         var sale = ExistingSale();
@@ -145,9 +145,9 @@ public class UploadProcessingServiceTests
 
         await Service(store).ProcessAsync(batch.Id, CancellationToken.None);
 
-        Assert.Equal(UploadStatus.Failed, batch.Status);
-        Assert.Contains("2026-04-28", batch.Error, StringComparison.Ordinal);
-        Assert.Empty(store.Lots);
+        Assert.Equal(UploadStatus.Completed, batch.Status);
+        Assert.Equal(new DateOnly(2026, 5, 5), sale.SaleDate);
+        Assert.Single(store.Lots);
     }
 
     [Fact]

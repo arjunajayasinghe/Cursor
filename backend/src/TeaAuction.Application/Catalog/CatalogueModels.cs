@@ -31,7 +31,9 @@ public sealed record SalesResultRow(
 
 public sealed record SalesResultParseResult(
     IReadOnlyList<SalesResultRow> Rows,
-    IReadOnlyList<string> Errors);
+    IReadOnlyList<string> Errors,
+    DateOnly? SaleDate = null,
+    string? SaleNumber = null);
 
 public sealed record LotCsvRow(
     int LineNumber,
