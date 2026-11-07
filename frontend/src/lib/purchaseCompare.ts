@@ -1,21 +1,25 @@
 import type { Lot, PurchasedInvoiceLot, PurchasedInvoiceSummary } from "../api/client";
 
-export type CompareMark = "match" | "priceDiff" | "pdfOnly" | "salesOnly";
+export type CompareMark = "match" | "priceDiff" | "otherBuyer" | "pdfOnly" | "salesOnly";
+
+export type SideValues = {
+  buyer: string;
+  sellingMark: string;
+  grade: string;
+  invoiceNumber: string;
+  bags: number | null;
+  netWeightKg: number | null;
+  price: number | null;
+  proceeds: number | null;
+};
 
 export type ComparedLot = {
   key: string;
   broker: string;
   lotNumber: number;
   mark: CompareMark;
-  sellingMark: string;
-  grade: string;
-  invoiceNumber: string;
-  bags: number | null;
-  netWeightKg: number | null;
-  pdfPrice: number | null;
-  salesPrice: number | null;
-  proceeds: number | null;
-  salesBuyer: string;
+  pdf: SideValues | null;
+  sales: SideValues | null;
   notes: string;
 };
 
@@ -61,41 +65,60 @@ function normText(value: string | null | undefined) {
 }
 
 function normInvoiceNo(value: string | null | undefined) {
-  const raw = normText(value).replace(/^0+/, "");
-  return raw;
+  return normText(value).replace(/^0+/, "");
 }
 
-function collectDiffNotes(pdf: PurchasedInvoiceLot, sales: Lot): string[] {
+function fromPdf(pdf: PurchasedInvoiceLot, invoiceBuyer: string): SideValues {
+  return {
+    buyer: invoiceBuyer,
+    sellingMark: pdf.sellingMark || "",
+    grade: pdf.grade || "",
+    invoiceNumber: pdf.invoiceNumber || "",
+    bags: pdf.bags || null,
+    netWeightKg: pdf.netWeightKg,
+    price: pdf.soldPricePerKg,
+    proceeds: pdf.proceeds,
+  };
+}
+
+function fromSales(lot: Lot): SideValues {
+  return {
+    buyer: String(lot.buyerCode || "").trim(),
+    sellingMark: lot.sellingMark || lot.gardenMark || "",
+    grade: lot.grade || "",
+    invoiceNumber: lot.invoiceNumber || "",
+    bags: lot.bags == null ? null : Number(lot.bags),
+    netWeightKg: lot.netWeightKg == null ? null : Number(lot.netWeightKg),
+    price: lot.soldPricePerKg == null ? null : Number(lot.soldPricePerKg),
+    proceeds: null,
+  };
+}
+
+function collectDiffNotes(pdf: SideValues, sales: SideValues): string[] {
   const notes: string[] = [];
-  const salesPrice = sales.soldPricePerKg == null ? null : Number(sales.soldPricePerKg);
-  const pdfPrice = Number(pdf.soldPricePerKg);
-  if (salesPrice != null && Number.isFinite(salesPrice) && !nearlyEqual(pdfPrice, salesPrice)) {
-    notes.push(`Price PDF ${pdfPrice.toFixed(2)} ≠ sales ${salesPrice.toFixed(2)}`);
+  if (sales.price != null && pdf.price != null && !nearlyEqual(pdf.price, sales.price)) {
+    notes.push(`Price PDF ${pdf.price.toFixed(2)} ≠ sales ${sales.price.toFixed(2)}`);
   }
   if (
     sales.netWeightKg != null &&
-    Number.isFinite(Number(sales.netWeightKg)) &&
-    !nearlyEqual(Number(pdf.netWeightKg), Number(sales.netWeightKg), 0.05)
+    pdf.netWeightKg != null &&
+    !nearlyEqual(pdf.netWeightKg, sales.netWeightKg, 0.05)
   ) {
-    notes.push(`Kg PDF ${Number(pdf.netWeightKg).toFixed(2)} ≠ sales ${Number(sales.netWeightKg).toFixed(2)}`);
+    notes.push(`Kg PDF ${pdf.netWeightKg.toFixed(2)} ≠ sales ${sales.netWeightKg.toFixed(2)}`);
   }
-  if (sales.bags != null && Number(sales.bags) > 0 && pdf.bags > 0 && Number(sales.bags) !== pdf.bags) {
+  if (sales.bags != null && pdf.bags != null && sales.bags > 0 && pdf.bags > 0 && sales.bags !== pdf.bags) {
     notes.push(`Bags PDF ${pdf.bags} ≠ sales ${sales.bags}`);
   }
-  const pdfInv = normInvoiceNo(pdf.invoiceNumber);
-  const salesInv = normInvoiceNo(sales.invoiceNumber);
-  if (pdfInv && salesInv && pdfInv !== salesInv) {
+  if (normInvoiceNo(pdf.invoiceNumber) && normInvoiceNo(sales.invoiceNumber) && normInvoiceNo(pdf.invoiceNumber) !== normInvoiceNo(sales.invoiceNumber)) {
     notes.push(`Invoice # PDF ${pdf.invoiceNumber} ≠ sales ${sales.invoiceNumber}`);
   }
-  const pdfGrade = normText(pdf.grade);
-  const salesGrade = normText(sales.grade);
-  if (pdfGrade && salesGrade && pdfGrade !== salesGrade) {
+  if (normText(pdf.grade) && normText(sales.grade) && normText(pdf.grade) !== normText(sales.grade)) {
     notes.push(`Grade PDF ${pdf.grade} ≠ sales ${sales.grade}`);
   }
   const pdfMark = normText(pdf.sellingMark);
-  const salesMark = normText(sales.sellingMark || sales.gardenMark);
+  const salesMark = normText(sales.sellingMark);
   if (pdfMark && salesMark && pdfMark !== salesMark && !pdfMark.includes(salesMark) && !salesMark.includes(pdfMark)) {
-    notes.push(`Mark PDF ${pdf.sellingMark} ≠ sales ${sales.sellingMark || sales.gardenMark}`);
+    notes.push(`Mark PDF ${pdf.sellingMark} ≠ sales ${sales.sellingMark}`);
   }
   return notes;
 }
@@ -106,19 +129,16 @@ export function comparePurchaseToSales(
   invoices: PurchasedInvoiceSummary[],
 ): ComparedLot[] {
   const invoiceBuyerByBroker = new Map(
-    invoices.map((invoice) => [String(invoice.broker), invoice.buyerCode] as const),
+    invoices.map((invoice) => [String(invoice.broker), invoice.buyerCode || invoice.buyerName || ""] as const),
   );
 
-  const salesByKey = new Map<string, Lot>();
+  // Any sales row for broker+lot (prefer a priced row).
+  const salesAnyByKey = new Map<string, Lot>();
   for (const lot of salesLots) {
-    const broker = String(lot.broker);
-    const buyer = lot.buyerCode;
-    if (!matchesInvoiceBuyer(broker, buyer, invoiceBuyerByBroker.get(broker))) continue;
-    const key = `${broker}|${lot.lotNumber}`;
-    // Prefer the row with a sold price if duplicates appear.
-    const existing = salesByKey.get(key);
+    const key = `${lot.broker}|${lot.lotNumber}`;
+    const existing = salesAnyByKey.get(key);
     if (!existing || (lot.soldPricePerKg != null && existing.soldPricePerKg == null)) {
-      salesByKey.set(key, lot);
+      salesAnyByKey.set(key, lot);
     }
   }
 
@@ -129,67 +149,67 @@ export function comparePurchaseToSales(
     const broker = String(pdf.broker);
     const key = `${broker}|${pdf.lotNumber}`;
     seen.add(key);
-    const sales = salesByKey.get(key);
-    if (!sales) {
+    const invoiceBuyer = invoiceBuyerByBroker.get(broker) || "";
+    const pdfSide = fromPdf(pdf, invoiceBuyer);
+    const salesLot = salesAnyByKey.get(key);
+
+    if (!salesLot) {
       rows.push({
         key: `pdf-${pdf.id}`,
         broker,
         lotNumber: pdf.lotNumber,
         mark: "pdfOnly",
-        sellingMark: pdf.sellingMark,
-        grade: pdf.grade,
-        invoiceNumber: pdf.invoiceNumber,
-        bags: pdf.bags,
-        netWeightKg: pdf.netWeightKg,
-        pdfPrice: pdf.soldPricePerKg,
-        salesPrice: null,
-        proceeds: pdf.proceeds,
-        salesBuyer: "",
-        notes: "On PDF invoice only",
+        pdf: pdfSide,
+        sales: null,
+        notes: "On PDF invoice only — not on sales file",
       });
       continue;
     }
 
-    const salesPrice = sales.soldPricePerKg == null ? null : Number(sales.soldPricePerKg);
-    const pdfPrice = Number(pdf.soldPricePerKg);
-    const diffNotes = collectDiffNotes(pdf, sales);
+    const salesSide = fromSales(salesLot);
+    const sameBuyer = matchesInvoiceBuyer(broker, salesSide.buyer, invoiceBuyerByBroker.get(broker));
 
+    if (!sameBuyer) {
+      const blank = !salesSide.buyer && salesSide.price == null;
+      rows.push({
+        key: `both-${pdf.id}`,
+        broker,
+        lotNumber: pdf.lotNumber,
+        mark: "otherBuyer",
+        pdf: pdfSide,
+        sales: salesSide,
+        notes: blank
+          ? `PDF buyer ${invoiceBuyer || "Venture"} · sales unsold/blank`
+          : `PDF buyer ${invoiceBuyer || "Venture"} · sales buyer ${salesSide.buyer || "—"}`,
+      });
+      continue;
+    }
+
+    const diffNotes = collectDiffNotes(pdfSide, salesSide);
     rows.push({
       key: `both-${pdf.id}`,
       broker,
       lotNumber: pdf.lotNumber,
       mark: diffNotes.length > 0 ? "priceDiff" : "match",
-      sellingMark: pdf.sellingMark || sales.sellingMark || "",
-      grade: pdf.grade || sales.grade || "",
-      invoiceNumber: pdf.invoiceNumber || sales.invoiceNumber || "",
-      bags: pdf.bags || Number(sales.bags) || null,
-      netWeightKg: pdf.netWeightKg,
-      pdfPrice,
-      salesPrice,
-      proceeds: pdf.proceeds,
-      salesBuyer: String(sales.buyerCode || ""),
+      pdf: pdfSide,
+      sales: salesSide,
       notes: diffNotes.length > 0 ? diffNotes.join(" · ") : "Matched on lot + invoice values",
     });
   }
 
-  for (const [key, sales] of salesByKey) {
+  // Venture purchases on sales that never appear on the PDF.
+  for (const [key, salesLot] of salesAnyByKey) {
     if (seen.has(key)) continue;
-    const broker = String(sales.broker);
+    const broker = String(salesLot.broker);
+    if (!matchesInvoiceBuyer(broker, salesLot.buyerCode, invoiceBuyerByBroker.get(broker))) continue;
     rows.push({
-      key: `sales-${sales.id}`,
+      key: `sales-${salesLot.id}`,
       broker,
-      lotNumber: Number(sales.lotNumber),
+      lotNumber: Number(salesLot.lotNumber),
       mark: "salesOnly",
-      sellingMark: sales.sellingMark || sales.gardenMark || "",
-      grade: sales.grade || "",
-      invoiceNumber: sales.invoiceNumber || "",
-      bags: sales.bags == null ? null : Number(sales.bags),
-      netWeightKg: sales.netWeightKg == null ? null : Number(sales.netWeightKg),
-      pdfPrice: null,
-      salesPrice: sales.soldPricePerKg == null ? null : Number(sales.soldPricePerKg),
-      proceeds: null,
-      salesBuyer: String(sales.buyerCode || ""),
-      notes: "On sales file only",
+      pdf: null,
+      sales: fromSales(salesLot),
+      notes: "On sales file for this buyer — missing from PDF",
     });
   }
 
@@ -199,17 +219,27 @@ export function comparePurchaseToSales(
 export function summarizeCompare(rows: ComparedLot[]) {
   const match = rows.filter((row) => row.mark === "match").length;
   const priceDiff = rows.filter((row) => row.mark === "priceDiff").length;
+  const otherBuyer = rows.filter((row) => row.mark === "otherBuyer").length;
   const pdfOnly = rows.filter((row) => row.mark === "pdfOnly").length;
   const salesOnly = rows.filter((row) => row.mark === "salesOnly").length;
-  return { match, priceDiff, pdfOnly, salesOnly, total: rows.length, issues: priceDiff + pdfOnly + salesOnly };
+  return {
+    match,
+    priceDiff,
+    otherBuyer,
+    pdfOnly,
+    salesOnly,
+    total: rows.length,
+    issues: priceDiff + otherBuyer + pdfOnly + salesOnly,
+  };
 }
 
 export const compareMarkStyle: Record<
   CompareMark,
-  { label: string; chip: "success" | "warning" | "info" | "error"; rowBg: string; bar: string }
+  { label: string; chip: "success" | "warning" | "info" | "error" | "default"; rowBg: string; bar: string }
 > = {
   match: { label: "Match", chip: "success", rowBg: "rgba(31, 77, 58, 0.06)", bar: "#1f4d3a" },
   priceDiff: { label: "Differs", chip: "warning", rowBg: "rgba(180, 120, 20, 0.12)", bar: "#b47814" },
+  otherBuyer: { label: "Other buyer", chip: "default", rowBg: "rgba(90, 70, 40, 0.10)", bar: "#6b4f2a" },
   pdfOnly: { label: "PDF only", chip: "info", rowBg: "rgba(26, 95, 122, 0.12)", bar: "#1a5f7a" },
   salesOnly: { label: "Sales only", chip: "error", rowBg: "rgba(140, 63, 42, 0.12)", bar: "#8c3f2a" },
 };
