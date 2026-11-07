@@ -11,12 +11,14 @@ import {
   Stack,
   Tab,
   Tabs,
+  MenuItem,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TablePagination,
   TableRow,
+  TableSortLabel,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -41,6 +43,84 @@ import {
   comparePurchaseToSales,
   summarizeCompare,
 } from "../lib/purchaseCompare";
+
+type SortKey =
+  | "result"
+  | "broker"
+  | "lotNumber"
+  | "pdfBuyer"
+  | "pdfMark"
+  | "pdfBags"
+  | "pdfKg"
+  | "pdfPrice"
+  | "salesBuyer"
+  | "salesMark"
+  | "salesBags"
+  | "salesKg"
+  | "salesPrice";
+
+const markOrder: Record<CompareMark, number> = {
+  otherBuyer: 0,
+  priceDiff: 1,
+  pdfOnly: 2,
+  salesOnly: 3,
+  match: 4,
+};
+
+const sortOptions: { value: SortKey; label: string }[] = [
+  { value: "result", label: "Result (issues first)" },
+  { value: "broker", label: "Broker" },
+  { value: "lotNumber", label: "Lot number" },
+  { value: "pdfBuyer", label: "PDF buyer" },
+  { value: "salesBuyer", label: "Sales buyer" },
+  { value: "pdfPrice", label: "PDF price" },
+  { value: "salesPrice", label: "Sales price" },
+  { value: "pdfKg", label: "PDF net kg" },
+  { value: "salesKg", label: "Sales net kg" },
+];
+
+function sortValue(row: ComparedLot, key: SortKey): string | number {
+  switch (key) {
+    case "result":
+      return markOrder[row.mark];
+    case "broker":
+      return row.broker;
+    case "lotNumber":
+      return row.lotNumber;
+    case "pdfBuyer":
+      return row.pdf?.buyer || "";
+    case "pdfMark":
+      return row.pdf?.sellingMark || "";
+    case "pdfBags":
+      return row.pdf?.bags ?? -1;
+    case "pdfKg":
+      return row.pdf?.netWeightKg ?? -1;
+    case "pdfPrice":
+      return row.pdf?.price ?? -1;
+    case "salesBuyer":
+      return row.sales?.buyer || "";
+    case "salesMark":
+      return row.sales?.sellingMark || "";
+    case "salesBags":
+      return row.sales?.bags ?? -1;
+    case "salesKg":
+      return row.sales?.netWeightKg ?? -1;
+    case "salesPrice":
+      return row.sales?.price ?? -1;
+  }
+}
+
+function compareRows(a: ComparedLot, b: ComparedLot, key: SortKey, dir: "asc" | "desc") {
+  const left = sortValue(a, key);
+  const right = sortValue(b, key);
+  let result = 0;
+  if (typeof left === "number" && typeof right === "number") result = left - right;
+  else result = String(left).localeCompare(String(right), undefined, { numeric: true, sensitivity: "base" });
+  if (result === 0 && key !== "lotNumber") {
+    result = a.broker.localeCompare(b.broker) || a.lotNumber - b.lotNumber;
+  }
+  return dir === "asc" ? result : -result;
+}
 
 function formatMoney(value: number | null | undefined) {
   if (value == null || Number.isNaN(value)) return "—";
@@ -91,6 +171,8 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
   const [brokerTab, setBrokerTab] = useState<string>("ALL");
   const [diffFilter, setDiffFilter] = useState<DiffFilter>("ALL");
   const [search, setSearch] = useState<SearchState>(emptySearch);
+  const [sortKey, setSortKey] = useState<SortKey>("result");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
   const deferred = useDeferredValue(search);
@@ -155,7 +237,13 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
     });
   }, [compared, brokerTab, diffFilter, deferred]);
 
-  const pageRows = filtered.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const sorted = useMemo(() => {
+    const copy = [...filtered];
+    copy.sort((a, b) => compareRows(a, b, sortKey, sortDir));
+    return copy;
+  }, [filtered, sortKey, sortDir]);
+
+  const pageRows = sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   const activeFilters =
     Object.values(search).filter((value) => value.trim()).length +
     (brokerTab === "ALL" ? 0 : 1) +
@@ -170,7 +258,38 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
     setSearch(emptySearch);
     setBrokerTab("ALL");
     setDiffFilter("ALL");
+    setSortKey("result");
+    setSortDir("asc");
     setPage(0);
+  }
+
+  function toggleSort(key: SortKey) {
+    if (sortKey === key) setSortDir((current) => (current === "asc" ? "desc" : "asc"));
+    else {
+      setSortKey(key);
+      setSortDir(key === "result" ? "asc" : "asc");
+    }
+    setPage(0);
+  }
+
+  function SortHead({
+    id,
+    label,
+    align,
+    tone,
+  }: {
+    id: SortKey;
+    label: string;
+    align?: "right";
+    tone?: string;
+  }) {
+    return (
+      <TableCell align={align} sortDirection={sortKey === id ? sortDir : false} sx={tone ? { bgcolor: tone } : undefined}>
+        <TableSortLabel active={sortKey === id} direction={sortKey === id ? sortDir : "asc"} onClick={() => toggleSort(id)}>
+          {label}
+        </TableSortLabel>
+      </TableCell>
+    );
   }
 
   if (workbench.isPending) return <CircularProgress aria-label="Loading purchase workbench" />;
@@ -306,6 +425,31 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
             <TextField size="small" label="Grade" value={search.grade} onChange={(e) => updateSearch("grade", e.target.value)} sx={{ minWidth: 120 }} />
             <TextField size="small" label="Invoice number" value={search.invoiceNumber} onChange={(e) => updateSearch("invoiceNumber", e.target.value)} sx={{ minWidth: 140 }} />
             <TextField size="small" label="Buyer" value={search.buyer} onChange={(e) => updateSearch("buyer", e.target.value)} sx={{ minWidth: 120 }} />
+            <TextField
+              select
+              size="small"
+              label="Sort reconciliation"
+              value={sortKey}
+              onChange={(event) => {
+                setSortKey(event.target.value as SortKey);
+                setSortDir("asc");
+                setPage(0);
+              }}
+              sx={{ minWidth: 200 }}
+            >
+              {sortOptions.map((option) => (
+                <MenuItem key={option.value} value={option.value}>
+                  {option.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => setSortDir((current) => (current === "asc" ? "desc" : "asc"))}
+            >
+              {sortDir === "asc" ? "Asc ↑" : "Desc ↓"}
+            </Button>
             <IconButton aria-label="Clear search" onClick={clearSearch} disabled={activeFilters === 0}>
               <ClearIcon />
             </IconButton>
@@ -314,7 +458,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
       </Paper>
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
-        <SummaryTile label="Shown" value={filtered.length.toLocaleString("en-GB")} />
+        <SummaryTile label="Shown" value={sorted.length.toLocaleString("en-GB")} />
         <SummaryTile label="Matched" value={filtered.filter((row) => row.mark === "match").length.toLocaleString("en-GB")} />
         <SummaryTile label="Other buyer" value={filtered.filter((row) => row.mark === "otherBuyer").length.toLocaleString("en-GB")} />
         <SummaryTile
@@ -329,18 +473,29 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
         />
       </Stack>
 
+      <Typography variant="body2" color="text.secondary">
+        Reconciliation sorted by {sortOptions.find((option) => option.value === sortKey)?.label ?? sortKey} (
+        {sortDir === "asc" ? "ascending" : "descending"}). Click column headers to re-sort.
+      </Typography>
+
       <Paper sx={{ overflow: "auto" }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
               <TableCell rowSpan={2} sx={{ verticalAlign: "bottom" }}>
-                Result
+                <TableSortLabel active={sortKey === "result"} direction={sortKey === "result" ? sortDir : "asc"} onClick={() => toggleSort("result")}>
+                  Result
+                </TableSortLabel>
               </TableCell>
               <TableCell rowSpan={2} sx={{ verticalAlign: "bottom" }}>
-                Broker
+                <TableSortLabel active={sortKey === "broker"} direction={sortKey === "broker" ? sortDir : "asc"} onClick={() => toggleSort("broker")}>
+                  Broker
+                </TableSortLabel>
               </TableCell>
               <TableCell rowSpan={2} align="right" sx={{ verticalAlign: "bottom" }}>
-                Lot
+                <TableSortLabel active={sortKey === "lotNumber"} direction={sortKey === "lotNumber" ? sortDir : "asc"} onClick={() => toggleSort("lotNumber")}>
+                  Lot
+                </TableSortLabel>
               </TableCell>
               <TableCell colSpan={6} align="center" sx={{ bgcolor: pdfCol, fontWeight: 700, color: "#1a5f7a" }}>
                 PDF invoice
@@ -353,30 +508,18 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
               </TableCell>
             </TableRow>
             <TableRow>
-              <TableCell sx={{ bgcolor: pdfCol }}>Buyer</TableCell>
-              <TableCell sx={{ bgcolor: pdfCol }}>Mark</TableCell>
+              <SortHead id="pdfBuyer" label="Buyer" tone={pdfCol} />
+              <SortHead id="pdfMark" label="Mark" tone={pdfCol} />
               <TableCell sx={{ bgcolor: pdfCol }}>Grade</TableCell>
-              <TableCell align="right" sx={{ bgcolor: pdfCol }}>
-                Bags
-              </TableCell>
-              <TableCell align="right" sx={{ bgcolor: pdfCol }}>
-                Net kg
-              </TableCell>
-              <TableCell align="right" sx={{ bgcolor: pdfCol }}>
-                Price
-              </TableCell>
-              <TableCell sx={{ bgcolor: salesCol }}>Buyer</TableCell>
-              <TableCell sx={{ bgcolor: salesCol }}>Mark</TableCell>
+              <SortHead id="pdfBags" label="Bags" align="right" tone={pdfCol} />
+              <SortHead id="pdfKg" label="Net kg" align="right" tone={pdfCol} />
+              <SortHead id="pdfPrice" label="Price" align="right" tone={pdfCol} />
+              <SortHead id="salesBuyer" label="Buyer" tone={salesCol} />
+              <SortHead id="salesMark" label="Mark" tone={salesCol} />
               <TableCell sx={{ bgcolor: salesCol }}>Grade</TableCell>
-              <TableCell align="right" sx={{ bgcolor: salesCol }}>
-                Bags
-              </TableCell>
-              <TableCell align="right" sx={{ bgcolor: salesCol }}>
-                Net kg
-              </TableCell>
-              <TableCell align="right" sx={{ bgcolor: salesCol }}>
-                Price
-              </TableCell>
+              <SortHead id="salesBags" label="Bags" align="right" tone={salesCol} />
+              <SortHead id="salesKg" label="Net kg" align="right" tone={salesCol} />
+              <SortHead id="salesPrice" label="Price" align="right" tone={salesCol} />
             </TableRow>
           </TableHead>
           <TableBody>
@@ -416,7 +559,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
         </Table>
         <TablePagination
           component="div"
-          count={filtered.length}
+          count={sorted.length}
           page={page}
           onPageChange={(_, next) => setPage(next)}
           rowsPerPage={rowsPerPage}
