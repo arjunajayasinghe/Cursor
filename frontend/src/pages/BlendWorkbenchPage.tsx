@@ -8,6 +8,12 @@ import {
   IconButton,
   Paper,
   Stack,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
+  TableSortLabel,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -15,6 +21,7 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
+import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -30,6 +37,15 @@ import {
 
 type AllocMap = Record<string, number>;
 type Shelf = "work" | "pending" | "approved" | "history";
+type LotSortKey =
+  | "sale"
+  | "broker"
+  | "lotNumber"
+  | "sellingMark"
+  | "gardenMark"
+  | "grade"
+  | "availableQtyKg"
+  | "unitCostPerKg";
 
 const DND_TYPE = "application/x-blend-lot";
 
@@ -66,6 +82,9 @@ export function BlendWorkbenchPage() {
   const [brokerFilter, setBrokerFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
   const [dropActive, setDropActive] = useState(false);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [lotSortKey, setLotSortKey] = useState<LotSortKey>("sale");
+  const [lotSortDir, setLotSortDir] = useState<"asc" | "desc">("asc");
   const [hydrated, setHydrated] = useState(!routeBlendId);
 
   const sheets = useQuery({
@@ -215,8 +234,51 @@ export function BlendWorkbenchPage() {
   }, [inventory.data]);
 
   const availableLots = useMemo(() => {
-    return (inventory.data ?? []).filter((lot) => !alloc[lot.collectionLotId]);
-  }, [inventory.data, alloc]);
+    const rows = (inventory.data ?? []).filter((lot) => !alloc[lot.collectionLotId]);
+    const dir = lotSortDir === "asc" ? 1 : -1;
+    const saleKey = (lot: BlendInventoryLot) =>
+      `${String(lot.year).padStart(4, "0")}-${String(lot.saleNumber).padStart(4, "0")}`;
+    rows.sort((a, b) => {
+      let cmp = 0;
+      switch (lotSortKey) {
+        case "sale":
+          cmp = saleKey(a).localeCompare(saleKey(b));
+          break;
+        case "broker":
+          cmp = String(a.broker).localeCompare(String(b.broker));
+          break;
+        case "lotNumber":
+          cmp = a.lotNumber - b.lotNumber;
+          break;
+        case "sellingMark":
+          cmp = (a.sellingMark || a.estate || "").localeCompare(b.sellingMark || b.estate || "");
+          break;
+        case "gardenMark":
+          cmp = (a.gardenMark || "").localeCompare(b.gardenMark || "");
+          break;
+        case "grade":
+          cmp = (a.grade || "").localeCompare(b.grade || "");
+          break;
+        case "availableQtyKg":
+          cmp = Number(a.availableQtyKg) - Number(b.availableQtyKg);
+          break;
+        case "unitCostPerKg":
+          cmp = Number(a.unitCostPerKg) - Number(b.unitCostPerKg);
+          break;
+      }
+      if (cmp === 0) cmp = a.lotNumber - b.lotNumber;
+      return cmp * dir;
+    });
+    return rows;
+  }, [inventory.data, alloc, lotSortKey, lotSortDir]);
+
+  function toggleLotSort(key: LotSortKey) {
+    if (lotSortKey === key) setLotSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    else {
+      setLotSortKey(key);
+      setLotSortDir("asc");
+    }
+  }
 
   const composition = useMemo(() => {
     return Object.entries(alloc)
@@ -502,73 +564,136 @@ export function BlendWorkbenchPage() {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.45fr) minmax(0, 1fr)" },
               gap: 2,
               alignItems: "stretch",
-              minHeight: 480,
+              minHeight: 520,
             }}
           >
-            {/* Left: available */}
+            {/* Left: available grid */}
             <Paper sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
               <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                   Available lots
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Collected samples with remaining qty — drag into the blend box
+                  Sort columns to find lots · drag the handle into the blend box
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                   <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 90 }} />
                   <TextField size="small" label="Broker" value={brokerFilter} onChange={(e) => setBrokerFilter(e.target.value)} sx={{ width: 90 }} />
-                  <TextField size="small" label="Grade" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} sx={{ width: 90 }} />
+                  <TextField size="small" label="Type / grade" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} sx={{ width: 120 }} />
                 </Stack>
               </Box>
-              <Box sx={{ overflow: "auto", flex: 1, p: 1 }}>
+              <Box sx={{ overflow: "auto", flex: 1 }}>
                 {inventory.isPending ? (
                   <Box sx={{ p: 2 }}>
                     <CircularProgress size={24} />
                   </Box>
                 ) : inventory.isError ? (
-                  <Alert severity="error">{inventory.error.message}</Alert>
+                  <Alert severity="error" sx={{ m: 1 }}>
+                    {inventory.error.message}
+                  </Alert>
                 ) : availableLots.length === 0 ? (
                   <Typography sx={{ p: 2 }} color="text.secondary" variant="body2">
                     No available collected lots. Mark boxes collected first, or clear filters.
                   </Typography>
                 ) : (
-                  <Stack spacing={0.75}>
-                    {availableLots.map((lot) => (
-                      <Paper
-                        key={lot.collectionLotId}
-                        variant="outlined"
-                        draggable={!locked}
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData(DND_TYPE, lot.collectionLotId);
-                          e.dataTransfer.effectAllowed = "copy";
-                        }}
-                        sx={{
-                          p: 1.25,
-                          cursor: locked ? "default" : "grab",
-                          bgcolor: "background.paper",
-                          "&:hover": { borderColor: "primary.main" },
-                        }}
-                      >
-                        <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-                          <Box>
-                            <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                              {lot.saleNumber}/{lot.year} · {lot.broker} · Lot {lot.lotNumber}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                              {lot.estate || "—"} · {lot.grade || "—"} · avail {Number(lot.availableQtyKg).toFixed(2)} kg
-                              {lot.boxNumber ? ` · ${lot.boxNumber}` : ""}
-                            </Typography>
-                          </Box>
-                          <IconButton size="small" disabled={locked} aria-label="Add lot" onClick={() => addLot(lot)}>
-                            <AddIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
-                      </Paper>
-                    ))}
-                  </Stack>
+                  <Table size="small" stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell padding="checkbox" />
+                        <TableCell>
+                          <TableSortLabel active={lotSortKey === "sale"} direction={lotSortKey === "sale" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sale")}>
+                            Sale
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel active={lotSortKey === "broker"} direction={lotSortKey === "broker" ? lotSortDir : "asc"} onClick={() => toggleLotSort("broker")}>
+                            Broker
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="right">
+                          <TableSortLabel active={lotSortKey === "lotNumber"} direction={lotSortKey === "lotNumber" ? lotSortDir : "asc"} onClick={() => toggleLotSort("lotNumber")}>
+                            Lot
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel active={lotSortKey === "sellingMark"} direction={lotSortKey === "sellingMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sellingMark")}>
+                            Estate marking
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel active={lotSortKey === "gardenMark"} direction={lotSortKey === "gardenMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("gardenMark")}>
+                            Garden
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell>
+                          <TableSortLabel active={lotSortKey === "grade"} direction={lotSortKey === "grade" ? lotSortDir : "asc"} onClick={() => toggleLotSort("grade")}>
+                            Type of tea
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="right">
+                          <TableSortLabel active={lotSortKey === "availableQtyKg"} direction={lotSortKey === "availableQtyKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("availableQtyKg")}>
+                            Avail kg
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell align="right">
+                          <TableSortLabel active={lotSortKey === "unitCostPerKg"} direction={lotSortKey === "unitCostPerKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("unitCostPerKg")}>
+                            Cost/kg
+                          </TableSortLabel>
+                        </TableCell>
+                        <TableCell padding="checkbox" />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {availableLots.map((lot) => {
+                        const dragging = draggingId === lot.collectionLotId;
+                        return (
+                          <TableRow
+                            key={lot.collectionLotId}
+                            hover
+                            draggable={!locked}
+                            onDragStart={(e) => {
+                              e.dataTransfer.setData(DND_TYPE, lot.collectionLotId);
+                              e.dataTransfer.effectAllowed = "copy";
+                              setDraggingId(lot.collectionLotId);
+                            }}
+                            onDragEnd={() => setDraggingId(null)}
+                            sx={{
+                              cursor: locked ? "default" : "grab",
+                              opacity: dragging ? 0.45 : 1,
+                              bgcolor: dragging ? "action.selected" : undefined,
+                              "&:active": { cursor: locked ? "default" : "grabbing" },
+                            }}
+                          >
+                            <TableCell padding="checkbox" sx={{ color: "text.secondary" }}>
+                              <DragIndicatorIcon fontSize="small" />
+                            </TableCell>
+                            <TableCell sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                              {lot.saleNumber}/{lot.year}
+                            </TableCell>
+                            <TableCell>{lot.broker}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 700 }}>
+                              {lot.lotNumber}
+                            </TableCell>
+                            <TableCell sx={{ minWidth: 110 }}>{lot.sellingMark || lot.estate || "—"}</TableCell>
+                            <TableCell sx={{ minWidth: 100 }}>{lot.gardenMark || "—"}</TableCell>
+                            <TableCell>{lot.grade || "—"}</TableCell>
+                            <TableCell align="right">{Number(lot.availableQtyKg).toFixed(2)}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600 }}>
+                              {Number(lot.unitCostPerKg).toFixed(2)}
+                            </TableCell>
+                            <TableCell padding="checkbox">
+                              <IconButton size="small" disabled={locked} aria-label="Add lot" onClick={() => addLot(lot)}>
+                                <AddIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
                 )}
               </Box>
             </Paper>
@@ -577,12 +702,21 @@ export function BlendWorkbenchPage() {
             <Paper
               onDragOver={(e) => {
                 e.preventDefault();
+                e.dataTransfer.dropEffect = "copy";
                 setDropActive(true);
               }}
-              onDragLeave={() => setDropActive(false)}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                setDropActive(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setDropActive(false);
+              }}
               onDrop={(e) => {
                 e.preventDefault();
                 setDropActive(false);
+                setDraggingId(null);
                 const id = e.dataTransfer.getData(DND_TYPE);
                 const lot = lotsById.get(id);
                 if (lot) addLot(lot);
@@ -591,17 +725,19 @@ export function BlendWorkbenchPage() {
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
-                outline: dropActive ? "2px solid" : "none",
-                outlineColor: "primary.main",
-                bgcolor: dropActive ? "rgba(26,95,122,0.04)" : "background.paper",
+                border: dropActive ? "2px solid" : "1px solid",
+                borderColor: dropActive ? "primary.main" : "divider",
+                boxShadow: dropActive ? "0 0 0 4px rgba(26,95,122,0.12)" : undefined,
+                bgcolor: dropActive ? "rgba(26,95,122,0.06)" : "background.paper",
+                transition: "border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
               }}
             >
               <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
-                  Blend box
+                  Blend box {dropActive ? "· drop to add" : ""}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Drop lots here · edit allocated kg · remaining stays available for other blends
+                  Drop lots here · edit allocated kg · remainder stays available for other blends
                 </Typography>
               </Box>
               <Box sx={{ overflow: "auto", flex: 1, p: 1 }}>
@@ -609,15 +745,24 @@ export function BlendWorkbenchPage() {
                   <Box
                     sx={{
                       m: 1,
+                      minHeight: 220,
                       p: 4,
-                      border: "1.5px dashed",
-                      borderColor: "divider",
+                      border: "2px dashed",
+                      borderColor: dropActive ? "primary.main" : "divider",
                       borderRadius: 2,
                       textAlign: "center",
                       color: "text.secondary",
+                      display: "grid",
+                      placeContent: "center",
+                      gap: 0.5,
+                      bgcolor: dropActive ? "rgba(26,95,122,0.04)" : "transparent",
                     }}
                   >
-                    <Typography variant="body2">Drag available lots into this box</Typography>
+                    <DragIndicatorIcon sx={{ mx: "auto", opacity: 0.5 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {dropActive ? "Release to add lot" : "Drag lots from the left grid"}
+                    </Typography>
+                    <Typography variant="caption">Or use the + button on a row</Typography>
                   </Box>
                 ) : (
                   <Stack spacing={0.75}>
@@ -631,9 +776,10 @@ export function BlendWorkbenchPage() {
                                 : row.id}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              {row.lot?.estate || "—"} · {row.lot?.grade || "—"} ·{" "}
-                              {totalAllocated > 0 ? ((row.qty / totalAllocated) * 100).toFixed(1) : "0"}% · cost{" "}
-                              {row.unit.toFixed(2)}
+                              {row.lot?.sellingMark || row.lot?.estate || "—"} · {row.lot?.gardenMark || "—"} ·{" "}
+                              {row.lot?.grade || "—"} ·{" "}
+                              {totalAllocated > 0 ? ((row.qty / totalAllocated) * 100).toFixed(1) : "0"}% ·{" "}
+                              {row.unit.toFixed(2)}/kg
                             </Typography>
                           </Box>
                           <TextField

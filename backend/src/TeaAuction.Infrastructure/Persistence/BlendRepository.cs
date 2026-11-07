@@ -164,6 +164,8 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
                 l.CollectionBatch?.Year ?? 0,
                 l.Broker,
                 l.LotNumber,
+                l.SellingMark,
+                l.GardenMark,
                 string.IsNullOrWhiteSpace(l.SellerName) ? l.GardenMark : l.SellerName,
                 l.Grade,
                 l.WarehouseOrBasis,

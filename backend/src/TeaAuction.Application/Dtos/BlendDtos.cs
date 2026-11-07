@@ -10,7 +10,13 @@ public sealed record BlendInventoryLotDto(
     int Year,
     BrokerCode Broker,
     int LotNumber,
+    /// <summary>Estate / selling mark from invoice or catalogue.</summary>
+    string SellingMark,
+    /// <summary>Garden mark.</summary>
+    string GardenMark,
+    /// <summary>Seller / estate name when available.</summary>
     string Estate,
+    /// <summary>Tea type / grade.</summary>
     string Grade,
     string WarehouseOrBasis,
     decimal PurchasedQtyKg,

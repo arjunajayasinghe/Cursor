@@ -454,6 +454,8 @@ export type BlendInventoryLot = {
   year: number;
   broker: string;
   lotNumber: number;
+  sellingMark: string;
+  gardenMark: string;
   estate: string;
   grade: string;
   warehouseOrBasis: string;
