@@ -21,7 +21,8 @@ import ClearIcon from "@mui/icons-material/Clear";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { Lot } from "../api/client";
 import { brokers, formatQuantity } from "../catalogue";
-import { knownSalesBuyerNames, splitSalesBuyer } from "../lib/purchaseCompare";
+import { knownSalesBuyerNames } from "../lib/ventureBuyers";
+import { splitSalesBuyer } from "../lib/purchaseCompare";
 
 const salesBuyerNameLookup = new Map(Object.entries(knownSalesBuyerNames));
 

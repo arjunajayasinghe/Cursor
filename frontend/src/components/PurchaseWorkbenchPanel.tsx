@@ -42,8 +42,9 @@ import {
   compareMarkStyle,
   comparePurchaseToSales,
   formatBuyer,
+  formatVentureChip,
   summarizeCompare,
-  ventureSalesBuyerCodes,
+  ventureBuyerMaster,
 } from "../lib/purchaseCompare";
 
 type SortKey =
@@ -333,34 +334,29 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
 
       <Paper variant="outlined" sx={{ p: 1.5 }}>
         <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
-          Venture Tea buyer codes (same company, different code per broker)
+          Venture Tea master codes (edit in one place if a broker changes theirs)
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, mb: 1 }}>
-          {board.invoices.map((invoice) => {
-            const code =
-              (invoice.buyerCode || "").trim() ||
-              ventureSalesBuyerCodes[String(invoice.broker)]?.[0] ||
-              "—";
-            const name = (invoice.buyerName || "").trim() || "VENTURE TEA (PVT) LTD";
+          {ventureBuyerMaster.map((entry) => {
+            const invoice = board.invoices.find((row) => String(row.broker) === entry.broker);
             return (
               <Chip
-                key={String(invoice.broker)}
+                key={entry.broker}
                 size="small"
-                variant={brokerTab === String(invoice.broker) ? "filled" : "outlined"}
-                color={brokerTab === String(invoice.broker) ? "primary" : "default"}
+                variant={brokerTab === entry.broker ? "filled" : "outlined"}
+                color={brokerTab === entry.broker ? "primary" : "default"}
                 onClick={() => {
-                  setBrokerTab(String(invoice.broker));
+                  setBrokerTab(entry.broker);
                   setPage(0);
                 }}
-                label={`${invoice.broker}: ${code} | ${name}`}
+                label={formatVentureChip(entry.broker, invoice?.buyerCode || entry.codes[0], invoice?.buyerName || entry.name)}
               />
             );
           })}
         </Stack>
         <Typography variant="caption" color="text.secondary">
-          LC invoice prints <strong>VT | VENTURE TEA (PVT) LTD</strong>; the LC sales book stores the company name
-          only (no short code). Lookalikes like AS <strong>VT01</strong>, BC <strong>VTC/VTE</strong>, or CT{" "}
-          <strong>VT</strong> are other buyers — not these Venture invoices.
+          LC prints <strong>VT | VENTURE TEA (PVT) LTD</strong>; LC/EB sales often store the name only. Lookalikes
+          AS <strong>VT01</strong>, BC <strong>VTC/VTE</strong>, CT <strong>VT</strong> are other buyers.
         </Typography>
       </Paper>
 
