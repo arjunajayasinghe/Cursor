@@ -22,7 +22,7 @@ import {
 import AddIcon from "@mui/icons-material/Add";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -47,7 +47,53 @@ type LotSortKey =
   | "availableQtyKg"
   | "unitCostPerKg";
 
+type ColKey =
+  | "drag"
+  | "sale"
+  | "broker"
+  | "lot"
+  | "sellingMark"
+  | "gardenMark"
+  | "grade"
+  | "avail"
+  | "cost"
+  | "alloc"
+  | "pct"
+  | "action";
+
 const DND_TYPE = "application/x-blend-lot";
+
+const DEFAULT_LEFT_COLS: Record<ColKey, number> = {
+  drag: 28,
+  sale: 62,
+  broker: 46,
+  lot: 44,
+  sellingMark: 118,
+  gardenMark: 108,
+  grade: 68,
+  avail: 70,
+  cost: 64,
+  alloc: 0,
+  pct: 0,
+  action: 34,
+};
+
+const DEFAULT_RIGHT_COLS: Record<ColKey, number> = {
+  drag: 0,
+  sale: 58,
+  broker: 42,
+  lot: 42,
+  sellingMark: 100,
+  gardenMark: 90,
+  grade: 58,
+  avail: 0,
+  cost: 58,
+  alloc: 78,
+  pct: 48,
+  action: 34,
+};
+
+const RESIZE_COLS: ColKey[] = ["sale", "broker", "lot", "sellingMark", "gardenMark", "grade", "avail", "cost", "alloc", "pct"];
 
 export function BlendWorkbenchPage() {
   const { blendId: routeBlendId } = useParams();
@@ -85,6 +131,8 @@ export function BlendWorkbenchPage() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [lotSortKey, setLotSortKey] = useState<LotSortKey>("sale");
   const [lotSortDir, setLotSortDir] = useState<"asc" | "desc">("asc");
+  const [leftCols, setLeftCols] = useState(DEFAULT_LEFT_COLS);
+  const [rightCols, setRightCols] = useState(DEFAULT_RIGHT_COLS);
   const [hydrated, setHydrated] = useState(!routeBlendId);
 
   const sheets = useQuery({
@@ -233,8 +281,17 @@ export function BlendWorkbenchPage() {
     return map;
   }, [inventory.data]);
 
+  const remainingOf = useCallback(
+    (lot: BlendInventoryLot) => Math.max(0, Number(lot.availableQtyKg) - (alloc[lot.collectionLotId] || 0)),
+    [alloc],
+  );
+
   const availableLots = useMemo(() => {
-    const rows = (inventory.data ?? []).filter((lot) => !alloc[lot.collectionLotId]);
+    // Keep lots with remainder on the left when only part is in the blend box.
+    const rows = (inventory.data ?? [])
+      .map((lot) => ({ lot, remain: remainingOf(lot) }))
+      .filter((x) => x.remain > 0.0005)
+      .map((x) => x.lot);
     const dir = lotSortDir === "asc" ? 1 : -1;
     const saleKey = (lot: BlendInventoryLot) =>
       `${String(lot.year).padStart(4, "0")}-${String(lot.saleNumber).padStart(4, "0")}`;
@@ -260,7 +317,7 @@ export function BlendWorkbenchPage() {
           cmp = (a.grade || "").localeCompare(b.grade || "");
           break;
         case "availableQtyKg":
-          cmp = Number(a.availableQtyKg) - Number(b.availableQtyKg);
+          cmp = remainingOf(a) - remainingOf(b);
           break;
         case "unitCostPerKg":
           cmp = Number(a.unitCostPerKg) - Number(b.unitCostPerKg);
@@ -270,7 +327,7 @@ export function BlendWorkbenchPage() {
       return cmp * dir;
     });
     return rows;
-  }, [inventory.data, alloc, lotSortKey, lotSortDir]);
+  }, [inventory.data, remainingOf, lotSortKey, lotSortDir]);
 
   function toggleLotSort(key: LotSortKey) {
     if (lotSortKey === key) setLotSortDir((d) => (d === "asc" ? "desc" : "asc"));
@@ -286,7 +343,8 @@ export function BlendWorkbenchPage() {
       .map(([id, qty]) => {
         const lot = lotsById.get(id);
         const unit = lot?.unitCostPerKg ?? 0;
-        return { id, lot, qty, unit, cost: qty * unit };
+        const max = lot ? Number(lot.availableQtyKg) : qty;
+        return { id, lot, qty, unit, cost: qty * unit, max };
       });
   }, [alloc, lotsById]);
 
@@ -303,11 +361,13 @@ export function BlendWorkbenchPage() {
   function addLot(lot: BlendInventoryLot) {
     if (locked) return;
     setAlloc((current) => {
-      if (current[lot.collectionLotId]) return current;
-      const remain = Math.max(0, (Number(targetQty) || 0) - Object.values(current).reduce((a, b) => a + b, 0));
-      const qty =
-        remain > 0 ? Math.min(lot.availableQtyKg, remain) : Math.min(lot.availableQtyKg, lot.availableQtyKg);
-      return { ...current, [lot.collectionLotId]: qty > 0 ? Number(qty.toFixed(3)) : Number(lot.availableQtyKg.toFixed(3)) };
+      const already = current[lot.collectionLotId] || 0;
+      const lotRemain = Math.max(0, Number(lot.availableQtyKg) - already);
+      if (lotRemain <= 0.0005) return current;
+      const used = Object.values(current).reduce((a, b) => a + b, 0);
+      const remainTarget = Math.max(0, (Number(targetQty) || 0) - used);
+      const chunk = remainTarget > 0 ? Math.min(lotRemain, remainTarget) : lotRemain;
+      return { ...current, [lot.collectionLotId]: Number((already + chunk).toFixed(3)) };
     });
   }
 
@@ -323,12 +383,36 @@ export function BlendWorkbenchPage() {
   function setQty(id: string, raw: string) {
     if (locked) return;
     const n = Number(raw);
+    const max = lotsById.get(id)?.availableQtyKg ?? n;
     setAlloc((current) => {
       const next = { ...current };
       if (!raw || Number.isNaN(n) || n <= 0) delete next[id];
-      else next[id] = n;
+      else next[id] = Number(Math.min(n, Number(max)).toFixed(3));
       return next;
     });
+  }
+
+  function startColResize(
+    side: "left" | "right",
+    key: ColKey,
+    event: ReactMouseEvent,
+  ) {
+    if (!RESIZE_COLS.includes(key)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startX = event.clientX;
+    const startW = side === "left" ? leftCols[key] : rightCols[key];
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.max(36, Math.min(280, startW + (ev.clientX - startX)));
+      if (side === "left") setLeftCols((c) => ({ ...c, [key]: next }));
+      else setRightCols((c) => ({ ...c, [key]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
   }
 
   const shelfRows =
@@ -564,25 +648,26 @@ export function BlendWorkbenchPage() {
           <Box
             sx={{
               display: "grid",
-              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.45fr) minmax(0, 1fr)" },
-              gap: 2,
+              gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.85fr) minmax(320px, 1fr)" },
+              gap: 1.5,
               alignItems: "stretch",
-              minHeight: 520,
+              minHeight: 580,
+              flex: 1,
             }}
           >
             {/* Left: available grid */}
-            <Paper sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
-              <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+            <Paper sx={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 520 }}>
+              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
                   Available lots
                 </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Sort columns to find lots · drag the handle into the blend box
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  Drag edge of headers to resize · partial use leaves remainder here
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
-                  <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 90 }} />
-                  <TextField size="small" label="Broker" value={brokerFilter} onChange={(e) => setBrokerFilter(e.target.value)} sx={{ width: 90 }} />
-                  <TextField size="small" label="Type / grade" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} sx={{ width: 120 }} />
+                  <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 84 }} />
+                  <TextField size="small" label="Broker" value={brokerFilter} onChange={(e) => setBrokerFilter(e.target.value)} sx={{ width: 84 }} />
+                  <TextField size="small" label="Type / grade" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} sx={{ width: 110 }} />
                 </Stack>
               </Box>
               <Box sx={{ overflow: "auto", flex: 1 }}>
@@ -599,56 +684,76 @@ export function BlendWorkbenchPage() {
                     No available collected lots. Mark boxes collected first, or clear filters.
                   </Typography>
                 ) : (
-                  <Table size="small" stickyHeader>
+                  <Table
+                    size="small"
+                    stickyHeader
+                    sx={{
+                      tableLayout: "fixed",
+                      width: Object.values(leftCols).reduce((a, b) => a + b, 0),
+                      minWidth: "100%",
+                      "& .MuiTableCell-root": {
+                        fontSize: "0.72rem",
+                        py: 0.35,
+                        px: 0.6,
+                        lineHeight: 1.25,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      },
+                      "& .MuiTableSortLabel-root": { fontSize: "0.68rem" },
+                    }}
+                  >
                     <TableHead>
                       <TableRow>
-                        <TableCell padding="checkbox" />
-                        <TableCell>
+                        <ResizeHead width={leftCols.drag} />
+                        <ResizeHead width={leftCols.sale} colKey="sale" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "sale"} direction={lotSortKey === "sale" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sale")}>
                             Sale
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.broker} colKey="broker" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "broker"} direction={lotSortKey === "broker" ? lotSortDir : "asc"} onClick={() => toggleLotSort("broker")}>
                             Broker
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="right">
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.lot} align="right" colKey="lot" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "lotNumber"} direction={lotSortKey === "lotNumber" ? lotSortDir : "asc"} onClick={() => toggleLotSort("lotNumber")}>
                             Lot
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.sellingMark} colKey="sellingMark" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "sellingMark"} direction={lotSortKey === "sellingMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sellingMark")}>
                             Estate marking
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.gardenMark} colKey="gardenMark" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "gardenMark"} direction={lotSortKey === "gardenMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("gardenMark")}>
                             Garden
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell>
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.grade} colKey="grade" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "grade"} direction={lotSortKey === "grade" ? lotSortDir : "asc"} onClick={() => toggleLotSort("grade")}>
                             Type of tea
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="right">
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.avail} align="right" colKey="avail" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "availableQtyKg"} direction={lotSortKey === "availableQtyKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("availableQtyKg")}>
-                            Avail kg
+                            Remain kg
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell align="right">
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.cost} align="right" colKey="cost" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "unitCostPerKg"} direction={lotSortKey === "unitCostPerKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("unitCostPerKg")}>
                             Cost/kg
                           </TableSortLabel>
-                        </TableCell>
-                        <TableCell padding="checkbox" />
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.action} />
                       </TableRow>
                     </TableHead>
                     <TableBody>
                       {availableLots.map((lot) => {
                         const dragging = draggingId === lot.collectionLotId;
+                        const remain = remainingOf(lot);
+                        const inBlend = (alloc[lot.collectionLotId] || 0) > 0;
                         return (
                           <TableRow
                             key={lot.collectionLotId}
@@ -663,30 +768,36 @@ export function BlendWorkbenchPage() {
                             sx={{
                               cursor: locked ? "default" : "grab",
                               opacity: dragging ? 0.45 : 1,
-                              bgcolor: dragging ? "action.selected" : undefined,
+                              bgcolor: dragging ? "action.selected" : inBlend ? "rgba(26,95,122,0.04)" : undefined,
                               "&:active": { cursor: locked ? "default" : "grabbing" },
                             }}
                           >
-                            <TableCell padding="checkbox" sx={{ color: "text.secondary" }}>
-                              <DragIndicatorIcon fontSize="small" />
+                            <TableCell sx={{ width: leftCols.drag, color: "text.secondary" }}>
+                              <DragIndicatorIcon sx={{ fontSize: 16 }} />
                             </TableCell>
-                            <TableCell sx={{ fontWeight: 700, whiteSpace: "nowrap" }}>
+                            <TableCell sx={{ width: leftCols.sale, fontWeight: 700 }}>
                               {lot.saleNumber}/{lot.year}
                             </TableCell>
-                            <TableCell>{lot.broker}</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 700 }}>
+                            <TableCell sx={{ width: leftCols.broker }}>{lot.broker}</TableCell>
+                            <TableCell align="right" sx={{ width: leftCols.lot, fontWeight: 700 }}>
                               {lot.lotNumber}
                             </TableCell>
-                            <TableCell sx={{ minWidth: 110 }}>{lot.sellingMark || lot.estate || "—"}</TableCell>
-                            <TableCell sx={{ minWidth: 100 }}>{lot.gardenMark || "—"}</TableCell>
-                            <TableCell>{lot.grade || "—"}</TableCell>
-                            <TableCell align="right">{Number(lot.availableQtyKg).toFixed(2)}</TableCell>
-                            <TableCell align="right" sx={{ fontWeight: 600 }}>
+                            <TableCell sx={{ width: leftCols.sellingMark }} title={lot.sellingMark || lot.estate || ""}>
+                              {lot.sellingMark || lot.estate || "—"}
+                            </TableCell>
+                            <TableCell sx={{ width: leftCols.gardenMark }} title={lot.gardenMark || ""}>
+                              {lot.gardenMark || "—"}
+                            </TableCell>
+                            <TableCell sx={{ width: leftCols.grade }}>{lot.grade || "—"}</TableCell>
+                            <TableCell align="right" sx={{ width: leftCols.avail, fontWeight: inBlend ? 700 : 400 }}>
+                              {remain.toFixed(2)}
+                            </TableCell>
+                            <TableCell align="right" sx={{ width: leftCols.cost, fontWeight: 600 }}>
                               {Number(lot.unitCostPerKg).toFixed(2)}
                             </TableCell>
-                            <TableCell padding="checkbox">
+                            <TableCell sx={{ width: leftCols.action }}>
                               <IconButton size="small" disabled={locked} aria-label="Add lot" onClick={() => addLot(lot)}>
-                                <AddIcon fontSize="small" />
+                                <AddIcon sx={{ fontSize: 16 }} />
                               </IconButton>
                             </TableCell>
                           </TableRow>
@@ -698,7 +809,7 @@ export function BlendWorkbenchPage() {
               </Box>
             </Paper>
 
-            {/* Right: composition drop zone */}
+            {/* Right: composition grid */}
             <Paper
               onDragOver={(e) => {
                 e.preventDefault();
@@ -725,6 +836,7 @@ export function BlendWorkbenchPage() {
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
+                minHeight: 520,
                 border: dropActive ? "2px solid" : "1px solid",
                 borderColor: dropActive ? "primary.main" : "divider",
                 boxShadow: dropActive ? "0 0 0 4px rgba(26,95,122,0.12)" : undefined,
@@ -732,21 +844,21 @@ export function BlendWorkbenchPage() {
                 transition: "border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
               }}
             >
-              <Box sx={{ px: 2, py: 1.25, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
                   Blend box {dropActive ? "· drop to add" : ""}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
-                  Drop lots here · edit allocated kg · remainder stays available for other blends
+                  Same columns · edit Alloc kg · leftover qty stays on the left
                 </Typography>
               </Box>
-              <Box sx={{ overflow: "auto", flex: 1, p: 1 }}>
+              <Box sx={{ overflow: "auto", flex: 1 }}>
                 {composition.length === 0 ? (
                   <Box
                     sx={{
-                      m: 1,
-                      minHeight: 220,
-                      p: 4,
+                      m: 1.25,
+                      minHeight: 260,
+                      p: 3,
                       border: "2px dashed",
                       borderColor: dropActive ? "primary.main" : "divider",
                       borderRadius: 2,
@@ -765,40 +877,102 @@ export function BlendWorkbenchPage() {
                     <Typography variant="caption">Or use the + button on a row</Typography>
                   </Box>
                 ) : (
-                  <Stack spacing={0.75}>
-                    {composition.map((row) => (
-                      <Paper key={row.id} variant="outlined" sx={{ p: 1.25 }}>
-                        <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "center" }}>
-                          <Box sx={{ minWidth: 0, flex: 1 }}>
-                            <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                              {row.lot
-                                ? `${row.lot.saleNumber}/${row.lot.year} · ${row.lot.broker} · Lot ${row.lot.lotNumber}`
-                                : row.id}
-                            </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              {row.lot?.sellingMark || row.lot?.estate || "—"} · {row.lot?.gardenMark || "—"} ·{" "}
-                              {row.lot?.grade || "—"} ·{" "}
-                              {totalAllocated > 0 ? ((row.qty / totalAllocated) * 100).toFixed(1) : "0"}% ·{" "}
-                              {row.unit.toFixed(2)}/kg
-                            </Typography>
-                          </Box>
-                          <TextField
-                            size="small"
-                            type="number"
-                            label="kg"
-                            value={row.qty}
-                            disabled={locked}
-                            onChange={(e) => setQty(row.id, e.target.value)}
-                            sx={{ width: 100 }}
-                            slotProps={{ htmlInput: { min: 0, step: "0.001" } }}
-                          />
-                          <IconButton size="small" disabled={locked} aria-label="Remove lot" onClick={() => removeLot(row.id)}>
-                            <DeleteOutlineIcon fontSize="small" />
-                          </IconButton>
-                        </Stack>
-                      </Paper>
-                    ))}
-                  </Stack>
+                  <Table
+                    size="small"
+                    stickyHeader
+                    sx={{
+                      tableLayout: "fixed",
+                      width: Object.values(rightCols).reduce((a, b) => a + b, 0),
+                      minWidth: "100%",
+                      "& .MuiTableCell-root": {
+                        fontSize: "0.72rem",
+                        py: 0.4,
+                        px: 0.55,
+                        lineHeight: 1.25,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                      },
+                    }}
+                  >
+                    <TableHead>
+                      <TableRow>
+                        <ResizeHead width={rightCols.sale} colKey="sale" onResize={(e, k) => startColResize("right", k, e)}>
+                          Sale
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.broker} colKey="broker" onResize={(e, k) => startColResize("right", k, e)}>
+                          Broker
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.lot} align="right" colKey="lot" onResize={(e, k) => startColResize("right", k, e)}>
+                          Lot
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.sellingMark} colKey="sellingMark" onResize={(e, k) => startColResize("right", k, e)}>
+                          Estate marking
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.gardenMark} colKey="gardenMark" onResize={(e, k) => startColResize("right", k, e)}>
+                          Garden
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.grade} colKey="grade" onResize={(e, k) => startColResize("right", k, e)}>
+                          Type of tea
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.alloc} align="right" colKey="alloc" onResize={(e, k) => startColResize("right", k, e)}>
+                          Alloc kg
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.pct} align="right" colKey="pct" onResize={(e, k) => startColResize("right", k, e)}>
+                          %
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.cost} align="right" colKey="cost" onResize={(e, k) => startColResize("right", k, e)}>
+                          Cost/kg
+                        </ResizeHead>
+                        <ResizeHead width={rightCols.action} />
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {composition.map((row) => (
+                        <TableRow key={row.id} hover>
+                          <TableCell sx={{ width: rightCols.sale, fontWeight: 700 }}>
+                            {row.lot ? `${row.lot.saleNumber}/${row.lot.year}` : "—"}
+                          </TableCell>
+                          <TableCell sx={{ width: rightCols.broker }}>{row.lot?.broker || "—"}</TableCell>
+                          <TableCell align="right" sx={{ width: rightCols.lot, fontWeight: 700 }}>
+                            {row.lot?.lotNumber ?? "—"}
+                          </TableCell>
+                          <TableCell sx={{ width: rightCols.sellingMark }} title={row.lot?.sellingMark || row.lot?.estate || ""}>
+                            {row.lot?.sellingMark || row.lot?.estate || "—"}
+                          </TableCell>
+                          <TableCell sx={{ width: rightCols.gardenMark }} title={row.lot?.gardenMark || ""}>
+                            {row.lot?.gardenMark || "—"}
+                          </TableCell>
+                          <TableCell sx={{ width: rightCols.grade }}>{row.lot?.grade || "—"}</TableCell>
+                          <TableCell align="right" sx={{ width: rightCols.alloc }}>
+                            <TextField
+                              size="small"
+                              type="number"
+                              value={row.qty}
+                              disabled={locked}
+                              onChange={(e) => setQty(row.id, e.target.value)}
+                              sx={{
+                                width: Math.max(64, rightCols.alloc - 8),
+                                "& .MuiInputBase-input": { fontSize: "0.72rem", py: 0.4, px: 0.6, textAlign: "right" },
+                              }}
+                              slotProps={{ htmlInput: { min: 0, max: row.max, step: "0.001" } }}
+                            />
+                          </TableCell>
+                          <TableCell align="right" sx={{ width: rightCols.pct }}>
+                            {totalAllocated > 0 ? ((row.qty / totalAllocated) * 100).toFixed(1) : "0"}
+                          </TableCell>
+                          <TableCell align="right" sx={{ width: rightCols.cost, fontWeight: 600 }}>
+                            {row.unit.toFixed(2)}
+                          </TableCell>
+                          <TableCell sx={{ width: rightCols.action }}>
+                            <IconButton size="small" disabled={locked} aria-label="Remove lot" onClick={() => removeLot(row.id)}>
+                              <DeleteOutlineIcon sx={{ fontSize: 16 }} />
+                            </IconButton>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 )}
               </Box>
             </Paper>
@@ -810,6 +984,48 @@ export function BlendWorkbenchPage() {
         </>
       )}
     </Stack>
+  );
+}
+
+function ResizeHead({
+  width,
+  children,
+  align,
+  colKey,
+  onResize,
+}: {
+  width: number;
+  children?: ReactNode;
+  align?: "right" | "left" | "center";
+  colKey?: ColKey;
+  onResize?: (event: ReactMouseEvent, key: ColKey) => void;
+}) {
+  return (
+    <TableCell
+      align={align}
+      sx={{
+        width,
+        position: "relative",
+        userSelect: "none",
+        bgcolor: "background.paper",
+      }}
+    >
+      {children}
+      {colKey && onResize ? (
+        <Box
+          onMouseDown={(e) => onResize(e, colKey)}
+          sx={{
+            position: "absolute",
+            top: 0,
+            right: 0,
+            width: 6,
+            height: "100%",
+            cursor: "col-resize",
+            "&:hover": { bgcolor: "primary.light", opacity: 0.45 },
+          }}
+        />
+      ) : null}
+    </TableCell>
   );
 }
 
