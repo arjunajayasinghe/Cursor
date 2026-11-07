@@ -78,7 +78,23 @@ public static class SampleBoxEndpoints
             })
             .WithName("MarkSampleBoxesReceived")
             .WithTags("SampleBoxes")
-            .WithSummary("Mark sample boxes as received — unlocks blending when all boxes are received")
+            .WithSummary("Mark sample boxes as collected/received — same step after box numbers are generated")
+            .Produces<IReadOnlyList<SampleBoxSummaryDto>>()
+            .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
+
+        group.MapPost("/collections/boxes/reverse", async (
+                [FromBody] ReverseSampleBoxesRequest body,
+                SampleBoxService service,
+                CancellationToken cancellationToken) =>
+            {
+                var result = await service.ReverseAsync(body, cancellationToken);
+                if (!result.Succeeded)
+                    return Results.BadRequest(new ErrorResponse(result.Errors));
+                return Results.Ok(result.Value);
+            })
+            .WithName("ReverseSampleBoxes")
+            .WithTags("SampleBoxes")
+            .WithSummary("Reverse box generation (Open/Printed only) — unlinks lots so numbers can be regenerated")
             .Produces<IReadOnlyList<SampleBoxSummaryDto>>()
             .Produces<ErrorResponse>(StatusCodes.Status400BadRequest);
 

@@ -426,3 +426,19 @@ export async function markSampleBoxesReceived(input: {
   if (!response.ok) throw new Error(await readApiError(response));
   return (await response.json()) as SampleBoxSummary[];
 }
+
+export async function reverseSampleBoxes(input: {
+  sampleBoxIds: string[];
+  reason?: string;
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/boxes/reverse`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) throw new Error(await readApiError(response));
+  return (await response.json()) as SampleBoxSummary[];
+}

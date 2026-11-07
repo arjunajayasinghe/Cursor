@@ -125,6 +125,18 @@ public sealed class SampleBoxRepository(TeaAuctionDbContext db) : ISampleBoxRepo
             .ToListAsync(cancellationToken);
     }
 
+    public async Task ClearLotBoxLinksAsync(
+        IReadOnlyCollection<Guid> boxIds,
+        CancellationToken cancellationToken)
+    {
+        if (boxIds.Count == 0) return;
+        var lots = await db.CollectionLots
+            .Where(x => x.SampleBoxId != null && boxIds.Contains(x.SampleBoxId.Value))
+            .ToListAsync(cancellationToken);
+        foreach (var lot in lots)
+            lot.SampleBoxId = null;
+    }
+
     public async Task<bool> BatchReadyForBlendingAsync(Guid batchId, CancellationToken cancellationToken)
     {
         var lotCount = await db.CollectionLots.CountAsync(x => x.CollectionBatchId == batchId, cancellationToken);

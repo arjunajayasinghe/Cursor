@@ -66,5 +66,9 @@ public sealed record MarkSampleBoxesReceivedRequest(
     IReadOnlyList<Guid> SampleBoxIds,
     string? ReceivedBy);
 
+public sealed record ReverseSampleBoxesRequest(
+    IReadOnlyList<Guid> SampleBoxIds,
+    string? Reason);
+
 public sealed record RecordSampleBoxPrintRequest(
     Guid SampleBoxId);

@@ -96,8 +96,12 @@ export function SampleBoxPrintPage() {
         <Typography variant="h4" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
           {detail.boxNumber}
         </Typography>
-        <Typography color="text.secondary" sx={{ mb: 2 }}>
-          Sale {detail.saleNumber}/{detail.year} · {formatSaleDate(detail.saleDate)} · {detail.centre}
+        <Typography color="text.secondary" sx={{ mb: 1 }}>
+          Auction / sale <strong>{detail.saleNumber}/{detail.year}</strong> · {formatSaleDate(detail.saleDate)} ·{" "}
+          {detail.centre}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+          Unique lot key = Sale {detail.saleNumber}/{detail.year} + Lot number
         </Typography>
 
         <Stack direction={{ xs: "column", sm: "row" }} spacing={3} sx={{ mb: 3, alignItems: "center" }}>
@@ -116,7 +120,7 @@ export function SampleBoxPrintPage() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
           <thead>
             <tr>
-              {["Broker", "Lot", "Estate / seller", "Inv.No", "Grade", "Bags", "Net kg", "WH"].map((h) => (
+              {["Sale", "Broker", "Lot", "Estate / seller", "Inv.No", "Grade", "Bags", "Net kg", "WH"].map((h) => (
                 <th
                   key={h}
                   style={{
@@ -133,6 +137,9 @@ export function SampleBoxPrintPage() {
           <tbody>
             {detail.lots.map((lot) => (
               <tr key={lot.collectionLotId}>
+                <td style={{ padding: "6px 4px", borderBottom: "1px solid #eee", fontWeight: 700 }}>
+                  {detail.saleNumber}/{detail.year}
+                </td>
                 <td style={{ padding: "6px 4px", borderBottom: "1px solid #eee" }}>{lot.broker}</td>
                 <td style={{ padding: "6px 4px", borderBottom: "1px solid #eee", textAlign: "right", fontWeight: 700 }}>
                   {lot.lotNumber}
