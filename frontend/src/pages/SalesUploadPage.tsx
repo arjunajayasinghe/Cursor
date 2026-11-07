@@ -52,10 +52,10 @@ const emptySlots = (): Record<BrokerCode, StagedFile | null> =>
 export function SalesUploadPage() {
   const queryClient = useQueryClient();
   const [header, setHeader] = useState<SaleHeader>({
-    saleNumber: "03",
+    saleNumber: "04",
     year: 2026,
     centre: "Colombo",
-    saleDate: "2026-01-21",
+    saleDate: "2026-01-28",
   });
   const [slots, setSlots] = useState<Record<BrokerCode, StagedFile | null>>(emptySlots);
   const [bulkActive, setBulkActive] = useState(false);
@@ -208,7 +208,8 @@ export function SalesUploadPage() {
         <Typography variant="h4">Upload post-auction sales</Typography>
         <Typography color="text.secondary">
           After the auction, set the sale once and drop all eight broker sales files (ASC, BP, CTB, EB, FW, JK, LCB,
-          MPB). Sold price and buyer are matched onto the existing catalogue lots.
+          MPB). Sold price and buyer are matched onto the existing catalogue lots. When the file prints a sale date
+          (e.g. ASC 03022026, FW 03-02-2026), that date overrides the form.
         </Typography>
       </div>
 
@@ -218,7 +219,7 @@ export function SalesUploadPage() {
             label="Sale number"
             value={header.saleNumber}
             onChange={(event) => setHeader((current) => ({ ...current, saleNumber: event.target.value }))}
-            helperText="For Auction 03 use 03"
+            helperText="Must match the sale printed in the file"
             sx={{ flex: 1 }}
           />
           <TextField
@@ -246,6 +247,7 @@ export function SalesUploadPage() {
             type="date"
             value={header.saleDate}
             onChange={(event) => setHeader((current) => ({ ...current, saleDate: event.target.value }))}
+            helperText="Overridden when the sales file has a date"
             slotProps={{ inputLabel: { shrink: true } }}
             sx={{ flex: 1 }}
           />
