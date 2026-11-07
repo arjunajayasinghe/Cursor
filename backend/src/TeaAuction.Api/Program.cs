@@ -98,6 +98,7 @@ try
 
     app.MapGroup("/api").MapCatalogueEndpoints();
     app.MapGroup("/api").MapPurchasedInvoiceEndpoints();
+    app.MapGroup("/api").MapCollectionEndpoints();
 
     // Schema updates run as an explicit `dotnet ef database update` step.
     // The API does not call Database.Migrate() on startup.

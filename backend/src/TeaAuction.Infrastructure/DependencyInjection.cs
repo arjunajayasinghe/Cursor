@@ -26,6 +26,7 @@ public static class DependencyInjection
         services.AddScoped<ISaleRepository, SaleRepository>();
         services.AddScoped<IUploadBatchRepository, UploadBatchRepository>();
         services.AddScoped<IPurchasedInvoiceRepository, PurchasedInvoiceRepository>();
+        services.AddScoped<ICollectionRepository, CollectionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
         services.AddScoped<SampleDataSeeder>();
 

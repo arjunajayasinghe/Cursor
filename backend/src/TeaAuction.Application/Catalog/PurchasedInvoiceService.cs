@@ -136,6 +136,8 @@ public sealed class PurchasedInvoiceService(
                 Broker = broker,
                 LotNumber = row.LotNumber,
                 SellingMark = row.SellingMark,
+                SellerName = row.SellerName,
+                SellerVatNo = row.SellerVatNo,
                 InvoiceNumber = row.InvoiceNumber,
                 Grade = row.Grade,
                 Bags = row.Bags,

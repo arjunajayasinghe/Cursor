@@ -19,6 +19,7 @@ public static class DependencyInjection
         services.AddScoped<UploadService>();
         services.AddScoped<UploadProcessingService>();
         services.AddScoped<PurchasedInvoiceService>();
+        services.AddScoped<CollectionService>();
         return services;
     }
 }

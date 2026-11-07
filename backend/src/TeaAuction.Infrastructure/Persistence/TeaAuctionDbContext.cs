@@ -15,6 +15,10 @@ public sealed class TeaAuctionDbContext(DbContextOptions<TeaAuctionDbContext> op
 
     public DbSet<PurchasedInvoiceLot> PurchasedInvoiceLots => Set<PurchasedInvoiceLot>();
 
+    public DbSet<CollectionBatch> CollectionBatches => Set<CollectionBatch>();
+
+    public DbSet<CollectionLot> CollectionLots => Set<CollectionLot>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(TeaAuctionDbContext).Assembly);

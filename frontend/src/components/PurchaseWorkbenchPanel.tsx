@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Checkbox,
   Chip,
   CircularProgress,
   IconButton,
@@ -11,7 +12,6 @@ import {
   Stack,
   Tab,
   Tabs,
-  MenuItem,
   Table,
   TableBody,
   TableCell,
@@ -24,14 +24,16 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useDeferredValue, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link as RouterLink } from "react-router-dom";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   getPurchasedInvoiceWorkbench,
   getSale,
+  listCollectedInvoiceLotIds,
   listSales,
   openPurchasedInvoicePdf,
+  selectCollectionLots,
   type PurchasedInvoiceSummary,
 } from "../api/client";
 import { brokerName } from "../catalogue";
@@ -39,9 +41,13 @@ import {
   type ComparedLot,
   type CompareMark,
   type SideValues,
+  buyerSearchText,
   compareMarkStyle,
   comparePurchaseToSales,
+  formatBuyer,
+  formatVentureChip,
   summarizeCompare,
+  ventureBuyerMaster,
 } from "../lib/purchaseCompare";
 
 type SortKey =
@@ -67,18 +73,6 @@ const markOrder: Record<CompareMark, number> = {
   match: 4,
 };
 
-const sortOptions: { value: SortKey; label: string }[] = [
-  { value: "result", label: "Result (issues first)" },
-  { value: "broker", label: "Broker" },
-  { value: "lotNumber", label: "Lot number" },
-  { value: "pdfBuyer", label: "PDF buyer" },
-  { value: "salesBuyer", label: "Sales buyer" },
-  { value: "pdfPrice", label: "PDF price" },
-  { value: "salesPrice", label: "Sales price" },
-  { value: "pdfKg", label: "PDF net kg" },
-  { value: "salesKg", label: "Sales net kg" },
-];
-
 function sortValue(row: ComparedLot, key: SortKey): string | number {
   switch (key) {
     case "result":
@@ -88,7 +82,7 @@ function sortValue(row: ComparedLot, key: SortKey): string | number {
     case "lotNumber":
       return row.lotNumber;
     case "pdfBuyer":
-      return row.pdf?.buyer || "";
+      return formatBuyer(row.pdf);
     case "pdfMark":
       return row.pdf?.sellingMark || "";
     case "pdfBags":
@@ -98,7 +92,7 @@ function sortValue(row: ComparedLot, key: SortKey): string | number {
     case "pdfPrice":
       return row.pdf?.price ?? -1;
     case "salesBuyer":
-      return row.sales?.buyer || "";
+      return formatBuyer(row.sales);
     case "salesMark":
       return row.sales?.sellingMark || "";
     case "salesBags":
@@ -168,6 +162,8 @@ function saleNumbersMatch(left: string, right: string) {
 }
 
 export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [brokerTab, setBrokerTab] = useState<string>("ALL");
   const [diffFilter, setDiffFilter] = useState<DiffFilter>("ALL");
   const [search, setSearch] = useState<SearchState>(emptySearch);
@@ -175,6 +171,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(50);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const deferred = useDeferredValue(search);
 
   const workbench = useQuery({
@@ -182,6 +179,29 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
     queryFn: () => getPurchasedInvoiceWorkbench(saleNumber.trim() || undefined, year || undefined),
     enabled: Boolean(saleNumber.trim() && year),
   });
+
+  const collectedLots = useQuery({
+    queryKey: ["collected-invoice-lots", saleNumber, year],
+    queryFn: () => listCollectedInvoiceLotIds(saleNumber.trim(), year),
+    enabled: Boolean(saleNumber.trim() && year),
+  });
+  const collectedIds = useMemo(
+    () => new Set(collectedLots.data ?? []),
+    [collectedLots.data],
+  );
+
+  useEffect(() => {
+    if (collectedIds.size === 0) return;
+    setSelectedIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of current) {
+        if (collectedIds.has(id)) changed = true;
+        else next.add(id);
+      }
+      return changed ? next : current;
+    });
+  }, [collectedIds]);
 
   const salesIndex = useQuery({ queryKey: ["sales"], queryFn: listSales });
 
@@ -228,7 +248,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
       const markText = `${row.pdf?.sellingMark || ""} ${row.sales?.sellingMark || ""}`.toLowerCase();
       const gradeText = `${row.pdf?.grade || ""} ${row.sales?.grade || ""}`.toLowerCase();
       const invText = `${row.pdf?.invoiceNumber || ""} ${row.sales?.invoiceNumber || ""}`.toLowerCase();
-      const buyerText = `${row.pdf?.buyer || ""} ${row.sales?.buyer || ""}`.toLowerCase();
+      const buyerText = `${buyerSearchText(row.pdf)} ${buyerSearchText(row.sales)}`;
       if (deferred.mark && !markText.includes(deferred.mark.trim().toLowerCase())) return false;
       if (deferred.grade && !gradeText.includes(deferred.grade.trim().toLowerCase())) return false;
       if (deferred.invoiceNumber && !invText.includes(deferred.invoiceNumber.trim().toLowerCase())) return false;
@@ -244,10 +264,70 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
   }, [filtered, sortKey, sortDir]);
 
   const pageRows = sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+  const selectableRows = useMemo(
+    () =>
+      sorted.filter(
+        (row) =>
+          Boolean(row.purchasedInvoiceLotId) && !collectedIds.has(row.purchasedInvoiceLotId!),
+      ),
+    [sorted, collectedIds],
+  );
+  const selectedCount = selectedIds.size;
+  const pageSelectableIds = pageRows
+    .map((row) => row.purchasedInvoiceLotId)
+    .filter((id): id is string => typeof id === "string" && !collectedIds.has(id));
+  const allPageSelected =
+    pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selectedIds.has(id));
+  const somePageSelected = pageSelectableIds.some((id) => selectedIds.has(id));
+  const collectedCount = collectedIds.size;
+
+  const sendMutation = useMutation({
+    mutationFn: () => {
+      const ids = [...selectedIds].filter((id) => !collectedIds.has(id));
+      if (ids.length === 0) {
+        throw new Error("Selected lots are already in collection.");
+      }
+      return selectCollectionLots({
+        saleNumber,
+        year,
+        purchasedInvoiceLotIds: ids,
+      });
+    },
+    onSuccess: (batch) => {
+      setSelectedIds(new Set());
+      void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["collected-invoice-lots", saleNumber, year] });
+      navigate(`/collections/${batch.id}`);
+    },
+  });
+
   const activeFilters =
     Object.values(search).filter((value) => value.trim()).length +
     (brokerTab === "ALL" ? 0 : 1) +
     (diffFilter === "ALL" ? 0 : 1);
+
+  function toggleRow(id: string) {
+    if (collectedIds.has(id)) return;
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function togglePage() {
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (allPageSelected) pageSelectableIds.forEach((id) => next.delete(id));
+      else pageSelectableIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  function selectAllFiltered() {
+    setSelectedIds(new Set(selectableRows.map((row) => row.purchasedInvoiceLotId!).filter(Boolean)));
+  }
 
   function updateSearch(key: keyof SearchState, value: string) {
     setSearch((current) => ({ ...current, [key]: value }));
@@ -324,7 +404,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Chip size="small" color="success" label={`Match ${overall.match}`} />
-          <Chip size="small" color="warning" label={`Differs ${overall.priceDiff}`} />
+          {overall.priceDiff ? <Chip size="small" color="warning" label={`Differs ${overall.priceDiff}`} /> : null}
           <Chip size="small" label={`Other buyer ${overall.otherBuyer}`} />
           <Chip size="small" color="info" label={`PDF only ${overall.pdfOnly}`} />
           <Chip size="small" color="error" label={`Sales only ${overall.salesOnly}`} />
@@ -333,12 +413,40 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
 
       <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "rgba(26, 95, 122, 0.04)" }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ flexWrap: "wrap" }}>
-          <LegendItem color="#1f4d3a" title="Match" text="Same lot + same buyer family; values agree." />
-          <LegendItem color="#b47814" title="Differs" text="Same buyer family; price/kg/bags/invoice/grade/mark disagree." />
+          <LegendItem color="#2e7d32" title="Match" text="Same lot number + same buyer on PDF and sales — always green." />
+          <LegendItem color="#b47814" title="Differs" text="Reserved for hard value clashes (not used when lot+buyer match)." />
           <LegendItem color="#6b4f2a" title="Other buyer" text="Lot on both sides, but sales buyer ≠ PDF buyer." />
           <LegendItem color="#1a5f7a" title="PDF only" text="On broker PDF; missing from sales file." />
           <LegendItem color="#8c3f2a" title="Sales only" text="On sales for this buyer; missing from PDF." />
         </Stack>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
+          Venture Tea master codes (edit in one place if a broker changes theirs)
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, mb: 1 }}>
+          {ventureBuyerMaster.map((entry) => {
+            const invoice = board.invoices.find((row) => String(row.broker) === entry.broker);
+            return (
+              <Chip
+                key={entry.broker}
+                size="small"
+                variant={brokerTab === entry.broker ? "filled" : "outlined"}
+                color={brokerTab === entry.broker ? "primary" : "default"}
+                onClick={() => {
+                  setBrokerTab(entry.broker);
+                  setPage(0);
+                }}
+                label={formatVentureChip(entry.broker, invoice?.buyerCode || entry.codes[0], invoice?.buyerName || entry.name)}
+              />
+            );
+          })}
+        </Stack>
+        <Typography variant="caption" color="text.secondary">
+          LC prints <strong>VT | VENTURE TEA (PVT) LTD</strong>; LC/EB sales often store the name only. Lookalikes
+          AS <strong>VT01</strong>, BC <strong>VTC/VTE</strong>, CT <strong>VT</strong> are other buyers.
+        </Typography>
       </Paper>
 
       {!salesReady && !saleBook.isPending ? (
@@ -412,8 +520,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
           >
             <ToggleButton value="ALL">All marks</ToggleButton>
             <ToggleButton value="ISSUES">Issues only</ToggleButton>
-            <ToggleButton value="match">Match</ToggleButton>
-            <ToggleButton value="priceDiff">Differs</ToggleButton>
+            <ToggleButton value="match">Match (green)</ToggleButton>
             <ToggleButton value="otherBuyer">Other buyer</ToggleButton>
             <ToggleButton value="pdfOnly">PDF only</ToggleButton>
             <ToggleButton value="salesOnly">Sales only</ToggleButton>
@@ -425,31 +532,6 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
             <TextField size="small" label="Grade" value={search.grade} onChange={(e) => updateSearch("grade", e.target.value)} sx={{ minWidth: 120 }} />
             <TextField size="small" label="Invoice number" value={search.invoiceNumber} onChange={(e) => updateSearch("invoiceNumber", e.target.value)} sx={{ minWidth: 140 }} />
             <TextField size="small" label="Buyer" value={search.buyer} onChange={(e) => updateSearch("buyer", e.target.value)} sx={{ minWidth: 120 }} />
-            <TextField
-              select
-              size="small"
-              label="Sort reconciliation"
-              value={sortKey}
-              onChange={(event) => {
-                setSortKey(event.target.value as SortKey);
-                setSortDir("asc");
-                setPage(0);
-              }}
-              sx={{ minWidth: 200 }}
-            >
-              {sortOptions.map((option) => (
-                <MenuItem key={option.value} value={option.value}>
-                  {option.label}
-                </MenuItem>
-              ))}
-            </TextField>
-            <Button
-              size="small"
-              variant="outlined"
-              onClick={() => setSortDir((current) => (current === "asc" ? "desc" : "asc"))}
-            >
-              {sortDir === "asc" ? "Asc ↑" : "Desc ↓"}
-            </Button>
             <IconButton aria-label="Clear search" onClick={clearSearch} disabled={activeFilters === 0}>
               <ClearIcon />
             </IconButton>
@@ -474,14 +556,65 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
       </Stack>
 
       <Typography variant="body2" color="text.secondary">
-        Reconciliation sorted by {sortOptions.find((option) => option.value === sortKey)?.label ?? sortKey} (
-        {sortDir === "asc" ? "ascending" : "descending"}). Click column headers to re-sort.
+        Click any column heading to sort ({sortDir === "asc" ? "ascending" : "descending"}). Matching lots are
+        highlighted green so issues stand out. Select PDF lots to send into the collection stage (samples / bags /
+        blend).
       </Typography>
+
+      <Paper variant="outlined" sx={{ p: 1.5 }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { sm: "center" } }}>
+          <Typography variant="body2">
+            Selected <strong>{selectedCount}</strong> PDF lot{selectedCount === 1 ? "" : "s"} for next stage
+            {collectedCount > 0 ? (
+              <>
+                {" "}
+                · <strong>{collectedCount}</strong> already in collection (locked)
+              </>
+            ) : null}
+          </Typography>
+          <Button size="small" variant="outlined" onClick={selectAllFiltered} disabled={selectableRows.length === 0}>
+            Select filtered ({selectableRows.length})
+          </Button>
+          <Button size="small" variant="text" onClick={() => setSelectedIds(new Set())} disabled={selectedCount === 0}>
+            Clear
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <Button
+            component={RouterLink}
+            to="/collections"
+            size="small"
+            variant="text"
+            disabled={collectedCount === 0}
+          >
+            Open collection
+          </Button>
+          <Button
+            variant="contained"
+            disabled={selectedCount === 0 || sendMutation.isPending}
+            onClick={() => sendMutation.mutate()}
+          >
+            {sendMutation.isPending ? "Sending…" : `Send ${selectedCount || ""} to collection`}
+          </Button>
+        </Stack>
+        {sendMutation.isError ? (
+          <Alert severity="error" sx={{ mt: 1 }}>
+            {sendMutation.error.message}
+          </Alert>
+        ) : null}
+      </Paper>
 
       <Paper sx={{ overflow: "auto" }}>
         <Table size="small" stickyHeader>
           <TableHead>
             <TableRow>
+              <TableCell rowSpan={2} padding="checkbox" sx={{ verticalAlign: "bottom" }}>
+                <Checkbox
+                  indeterminate={somePageSelected && !allPageSelected}
+                  checked={allPageSelected}
+                  onChange={togglePage}
+                  slotProps={{ input: { "aria-label": "Select page PDF lots" } }}
+                />
+              </TableCell>
               <TableCell rowSpan={2} sx={{ verticalAlign: "bottom" }}>
                 <TableSortLabel active={sortKey === "result"} direction={sortKey === "result" ? sortDir : "asc"} onClick={() => toggleSort("result")}>
                   Result
@@ -500,7 +633,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
               <TableCell colSpan={6} align="center" sx={{ bgcolor: pdfCol, fontWeight: 700, color: "#1a5f7a" }}>
                 PDF invoice
               </TableCell>
-              <TableCell colSpan={6} align="center" sx={{ bgcolor: salesCol, fontWeight: 700, color: "#8c3f2a" }}>
+              <TableCell colSpan={7} align="center" sx={{ bgcolor: salesCol, fontWeight: 700, color: "#8c3f2a" }}>
                 Post-sales upload
               </TableCell>
               <TableCell rowSpan={2} sx={{ verticalAlign: "bottom" }}>
@@ -508,49 +641,80 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
               </TableCell>
             </TableRow>
             <TableRow>
-              <SortHead id="pdfBuyer" label="Buyer" tone={pdfCol} />
+              <SortHead id="pdfBuyer" label="Buyer code / name" tone={pdfCol} />
               <SortHead id="pdfMark" label="Mark" tone={pdfCol} />
               <TableCell sx={{ bgcolor: pdfCol }}>Grade</TableCell>
               <SortHead id="pdfBags" label="Bags" align="right" tone={pdfCol} />
               <SortHead id="pdfKg" label="Net kg" align="right" tone={pdfCol} />
               <SortHead id="pdfPrice" label="Price" align="right" tone={pdfCol} />
-              <SortHead id="salesBuyer" label="Buyer" tone={salesCol} />
+              <SortHead id="salesBuyer" label="Buyer code / name" tone={salesCol} />
               <SortHead id="salesMark" label="Mark" tone={salesCol} />
               <TableCell sx={{ bgcolor: salesCol }}>Grade</TableCell>
               <SortHead id="salesBags" label="Bags" align="right" tone={salesCol} />
               <SortHead id="salesKg" label="Net kg" align="right" tone={salesCol} />
               <SortHead id="salesPrice" label="Price" align="right" tone={salesCol} />
+              <TableCell sx={{ bgcolor: salesCol }}>WH</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {pageRows.map((row) => {
               const style = compareMarkStyle[row.mark];
               const buyerClash = row.mark === "otherBuyer";
+              const isMatch = row.mark === "match";
+              const lotId = row.purchasedInvoiceLotId;
+              const inCollection = Boolean(lotId && collectedIds.has(lotId));
+              const checked = Boolean(lotId && selectedIds.has(lotId));
               return (
                 <TableRow
                   key={row.key}
                   hover
+                  selected={checked}
                   sx={{
-                    bgcolor: style.rowBg,
-                    borderLeft: `4px solid ${style.bar}`,
+                    bgcolor: inCollection ? "rgba(0, 0, 0, 0.04)" : style.rowBg,
+                    borderLeft: `4px solid ${inCollection ? "#607d8b" : style.bar}`,
+                    opacity: inCollection ? 0.72 : 1,
+                    ...(isMatch && !inCollection
+                      ? {
+                          "& td": { color: "#1b5e20" },
+                          "& .MuiChip-root": { bgcolor: "#2e7d32", color: "#fff" },
+                        }
+                      : null),
                   }}
                 >
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      checked={inCollection || checked}
+                      disabled={!lotId || inCollection}
+                      onChange={() => lotId && toggleRow(lotId)}
+                      slotProps={{
+                        input: {
+                          "aria-label": inCollection
+                            ? `Lot ${row.broker} ${row.lotNumber} already in collection`
+                            : `Select lot ${row.broker} ${row.lotNumber}`,
+                        },
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>
-                    <Chip size="small" color={style.chip} label={style.label} />
+                    {inCollection ? (
+                      <Chip size="small" color="default" label="In collection" />
+                    ) : (
+                      <Chip size="small" color={style.chip} label={style.label} />
+                    )}
                   </TableCell>
                   <TableCell>{row.broker}</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>
                     {row.lotNumber}
                   </TableCell>
-                  <SideCells side={row.pdf} tone={pdfCol} emphasizeBuyer={buyerClash} />
-                  <SideCells side={row.sales} tone={salesCol} emphasizeBuyer={buyerClash} />
+                  <SideCells side={row.pdf} tone={pdfCol} emphasizeBuyer={buyerClash} matched={isMatch} />
+                  <SideCells side={row.sales} tone={salesCol} emphasizeBuyer={buyerClash} matched={isMatch} showWarehouse />
                   <TableCell sx={{ minWidth: 180, fontSize: "0.8rem" }}>{row.notes}</TableCell>
                 </TableRow>
               );
             })}
             {pageRows.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={16}>
+                <TableCell colSpan={18}>
                   <Typography color="text.secondary">No lots for the current filters.</Typography>
                 </TableCell>
               </TableRow>
@@ -578,33 +742,61 @@ function SideCells({
   side,
   tone,
   emphasizeBuyer,
+  matched,
+  showWarehouse,
 }: {
   side: SideValues | null;
   tone: string;
   emphasizeBuyer?: boolean;
+  matched?: boolean;
+  showWarehouse?: boolean;
 }) {
+  const code = side?.buyerCode?.trim() || "";
+  const name = side?.buyerName?.trim() || "";
+  const bg = matched ? "rgba(46, 125, 50, 0.12)" : tone;
   return (
     <>
       <TableCell
         sx={{
-          bgcolor: tone,
+          bgcolor: bg,
           fontWeight: emphasizeBuyer ? 700 : 500,
-          color: emphasizeBuyer ? "#6b4f2a" : "inherit",
+          color: emphasizeBuyer ? "#6b4f2a" : matched ? "#1b5e20" : "inherit",
+          minWidth: 140,
         }}
       >
-        {cell(side?.buyer)}
+        {!code && !name ? (
+          "—"
+        ) : (
+          <Stack spacing={0.25}>
+            {code ? (
+              <Typography variant="body2" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
+                {code}
+              </Typography>
+            ) : null}
+            {name ? (
+              <Typography variant="caption" color={matched ? "#2e7d32" : "text.secondary"} sx={{ lineHeight: 1.2 }}>
+                {name}
+              </Typography>
+            ) : null}
+          </Stack>
+        )}
       </TableCell>
-      <TableCell sx={{ bgcolor: tone }}>{cell(side?.sellingMark)}</TableCell>
-      <TableCell sx={{ bgcolor: tone }}>{cell(side?.grade)}</TableCell>
-      <TableCell align="right" sx={{ bgcolor: tone }}>
+      <TableCell sx={{ bgcolor: bg }}>{cell(side?.sellingMark)}</TableCell>
+      <TableCell sx={{ bgcolor: bg }}>{cell(side?.grade)}</TableCell>
+      <TableCell align="right" sx={{ bgcolor: bg }}>
         {side?.bags ?? "—"}
       </TableCell>
-      <TableCell align="right" sx={{ bgcolor: tone }}>
+      <TableCell align="right" sx={{ bgcolor: bg }}>
         {formatKg(side?.netWeightKg ?? null)}
       </TableCell>
-      <TableCell align="right" sx={{ bgcolor: tone, fontWeight: 600 }}>
+      <TableCell align="right" sx={{ bgcolor: bg, fontWeight: 600 }}>
         {formatMoney(side?.price ?? null)}
       </TableCell>
+      {showWarehouse ? (
+        <TableCell sx={{ bgcolor: bg, minWidth: 120, fontSize: "0.75rem" }}>
+          {cell(side?.warehouseOrBasis)}
+        </TableCell>
+      ) : null}
     </>
   );
 }
@@ -640,7 +832,9 @@ function BrokerCompareCard({
           {invoice.broker} · {brokerName(invoice.broker)}
         </Typography>
         <Typography variant="subtitle2" sx={{ fontFamily: '"Source Serif 4", Georgia, serif' }}>
-          {invoice.buyerName || invoice.buyerCode || "Buyer"}
+          {invoice.buyerCode && invoice.buyerName
+            ? `${invoice.buyerCode} · ${invoice.buyerName}`
+            : invoice.buyerName || invoice.buyerCode || "Buyer"}
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ wordBreak: "break-all" }}>
           {invoice.contractNo || invoice.originalFileName}

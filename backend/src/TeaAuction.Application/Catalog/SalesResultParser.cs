@@ -30,12 +30,12 @@ public sealed class SalesResultParser : ISalesResultParser
     public SalesResultParseResult Parse(BrokerCode broker, string fileName, Stream content)
     {
         if (CatalogueFileKinds.IsExcel(fileName) || CatalogueFileKinds.IsCsv(fileName))
-            return ParseTabular(fileName, content);
+            return ParseTabular(broker, fileName, content);
 
         return ParseTextDialect(broker, content);
     }
 
-    private static SalesResultParseResult ParseTabular(string fileName, Stream content)
+    private static SalesResultParseResult ParseTabular(BrokerCode broker, string fileName, Stream content)
     {
         using var buffer = new MemoryStream();
         content.CopyTo(buffer);
@@ -56,12 +56,21 @@ public sealed class SalesResultParser : ISalesResultParser
         if (table.Rows.Count == 0)
             return new SalesResultParseResult([], ["The sales file has no rows."]);
 
+        var metaText = BuildTablePreview(table);
+        TryDetectSaleMeta(broker, metaText, out var saleDate, out var saleNumber);
+
         var headerRowIndex = FindHeaderRow(table);
         if (headerRowIndex >= 0)
-            return ParseHeaderTable(table, headerRowIndex);
+        {
+            var parsed = ParseHeaderTable(table, headerRowIndex);
+            return parsed with { SaleDate = saleDate, SaleNumber = saleNumber };
+        }
 
         if (LooksLikeHeaderlessSales(table))
-            return ParseHeaderlessSales(table);
+        {
+            var parsed = ParseHeaderlessSales(table);
+            return parsed with { SaleDate = saleDate, SaleNumber = saleNumber };
+        }
 
         return new SalesResultParseResult([], ["Could not find a header row with Lot / Buyer / Price columns."]);
     }
@@ -230,10 +239,12 @@ public sealed class SalesResultParser : ISalesResultParser
     private static SalesResultParseResult ParseTextDialect(BrokerCode broker, Stream content)
     {
         using var reader = new StreamReader(content, Encoding.Latin1, detectEncodingFromByteOrderMarks: true, leaveOpen: true);
-        var lines = reader.ReadToEnd()
+        var text = reader.ReadToEnd()
             .Replace("\r\n", "\n")
-            .Replace('\r', '\n')
-            .Split('\n');
+            .Replace('\r', '\n');
+        var lines = text.Split('\n');
+
+        TryDetectSaleMeta(broker, text, out var saleDate, out var saleNumber);
 
         var rows = new Dictionary<int, SalesResultRow>();
         var errors = new List<string>();
@@ -260,7 +271,130 @@ public sealed class SalesResultParser : ISalesResultParser
         if (rows.Count == 0)
             errors.Add($"No post-auction sales rows could be read for {broker}.");
 
-        return new SalesResultParseResult(rows.Values.OrderBy(row => row.LotNumber).ToList(), errors);
+        return new SalesResultParseResult(
+            rows.Values.OrderBy(row => row.LotNumber).ToList(),
+            errors,
+            saleDate,
+            saleNumber);
+    }
+
+    /// <summary>
+    /// Pull sale date / sale number from broker sales-file dialects when present.
+    /// ASC: <c>081  28012026  4</c> · FW: <c>PRICED CATALOGUE OF  28-01-2026</c> ·
+    /// CTB/JK/MPB: packed <c>yyMMdd</c> (+ sale digits where available).
+    /// </summary>
+    internal static bool TryDetectSaleMeta(
+        BrokerCode broker,
+        string text,
+        out DateOnly? saleDate,
+        out string? saleNumber)
+    {
+        saleDate = null;
+        saleNumber = null;
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        // Forbes & Walker priced catalogue header.
+        var fw = Regex.Match(text, @"PRICED\s+CATALOGUE\s+OF\s+(\d{2})-(\d{2})-(\d{4})", RegexOptions.IgnoreCase);
+        if (fw.Success &&
+            TryDate(int.Parse(fw.Groups[3].Value, CultureInfo.InvariantCulture),
+                int.Parse(fw.Groups[2].Value, CultureInfo.InvariantCulture),
+                int.Parse(fw.Groups[1].Value, CultureInfo.InvariantCulture),
+                out var fwDate))
+        {
+            saleDate = fwDate;
+        }
+
+        // Asia Siyaka: centre  ddmmyyyy  sale  lot …
+        var asc = Regex.Match(text, @"^\s*\d{2,3}\s+(\d{8})\s+(\d{1,3})\s+\d+", RegexOptions.Multiline);
+        if (asc.Success && TryParseDdMmYyyy(asc.Groups[1].Value, out var ascDate))
+        {
+            saleDate ??= ascDate;
+            saleNumber ??= NormalizeSaleNumber(asc.Groups[2].Value);
+        }
+
+        // Mercantile trailing: … 26012804B  (yyMMdd + sale)
+        var mpb = Regex.Match(text, @"(\d{6})(\d{2})[A-Za-z]?\s*$", RegexOptions.Multiline);
+        if (broker == BrokerCode.MB && mpb.Success && TryParseYyMmDd(mpb.Groups[1].Value, out var mpbDate))
+        {
+            saleDate ??= mpbDate;
+            saleNumber ??= NormalizeSaleNumber(mpb.Groups[2].Value);
+        }
+
+        // Ceylon Tea Brokers: … B 260128 … or C 260203 …
+        var ctb = Regex.Match(text, @"\b[A-Z]\s+(2[5-9]\d{4})\b");
+        if (broker is BrokerCode.CT or BrokerCode.LC && ctb.Success && TryParseYyMmDd(ctb.Groups[1].Value, out var ctbDate))
+            saleDate ??= ctbDate;
+
+        // John Keells packed: …10004 260128 000704 MF… (sale + yyMMdd)
+        var jk = Regex.Match(text, @"(\d{2})(2[5-9]\d{4})\d{6}MF", RegexOptions.IgnoreCase);
+        if (broker == BrokerCode.JK && jk.Success && TryParseYyMmDd(jk.Groups[2].Value, out var jkDate))
+        {
+            saleDate ??= jkDate;
+            saleNumber ??= NormalizeSaleNumber(jk.Groups[1].Value);
+        }
+
+        // Generic yyMMdd near the top when nothing else matched (CTB/JK/MPB fallback).
+        if (saleDate is null)
+        {
+            var head = text.Length <= 800 ? text : text[..800];
+            var generic = Regex.Match(head, @"\b(2[5-9])(0[1-9]|1[0-2])(0[1-9]|[12]\d|3[01])\b");
+            if (generic.Success && TryParseYyMmDd(generic.Value, out var genericDate))
+                saleDate = genericDate;
+        }
+
+        return saleDate is not null || saleNumber is not null;
+    }
+
+    private static string BuildTablePreview(DataTable table)
+    {
+        var lines = new List<string>();
+        var max = Math.Min(table.Rows.Count, 40);
+        for (var r = 0; r < max; r++)
+        {
+            var cells = table.Rows[r].ItemArray.Select(value => value?.ToString()?.Trim() ?? "");
+            lines.Add(string.Join(" ", cells.Where(cell => cell.Length > 0)));
+        }
+
+        return string.Join('\n', lines);
+    }
+
+    private static string NormalizeSaleNumber(string raw)
+    {
+        if (!int.TryParse(raw.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var number) || number <= 0)
+            return raw.Trim();
+        return number < 10 ? number.ToString("00", CultureInfo.InvariantCulture) : number.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static bool TryParseDdMmYyyy(string raw, out DateOnly date)
+    {
+        date = default;
+        if (raw.Length != 8 || !TryInt(raw[..2], out var day) || !TryInt(raw[2..4], out var month) || !TryInt(raw[4..], out var year))
+            return false;
+        return TryDate(year, month, day, out date);
+    }
+
+    private static bool TryParseYyMmDd(string raw, out DateOnly date)
+    {
+        date = default;
+        if (raw.Length != 6 || !TryInt(raw[..2], out var yy) || !TryInt(raw[2..4], out var month) || !TryInt(raw[4..], out var day))
+            return false;
+        var year = yy >= 70 ? 1900 + yy : 2000 + yy;
+        return TryDate(year, month, day, out date);
+    }
+
+    private static bool TryDate(int year, int month, int day, out DateOnly date)
+    {
+        date = default;
+        try
+        {
+            date = new DateOnly(year, month, day);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static bool TryParseTextSalesLine(

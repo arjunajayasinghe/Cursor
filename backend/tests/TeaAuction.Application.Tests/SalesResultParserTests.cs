@@ -59,6 +59,34 @@ public class SalesResultParserTests
         Assert.Equal(1, result.Rows[0].LotNumber);
         Assert.Equal(1400.00m, result.Rows[0].SoldPricePerKg);
         Assert.Equal("SL18", result.Rows[0].BuyerCode);
+        Assert.Equal(new DateOnly(2026, 1, 28), result.SaleDate);
+        Assert.Equal("04", result.SaleNumber);
+    }
+
+    [Fact]
+    public void Detects_sale_date_from_fw_priced_catalogue_header()
+    {
+        const string text = """
+
+               FORBES & WALKER TEA BROKERS (PVT) LTD.                                                             PRICED CATALOGUE OF  03-02-2026
+            MF0670   GARTMORE                        327      BOPF           10  B      58.00     580.00       1  EX-ESTATE                                 10   1160  VE1
+            """;
+
+        var result = _parser.Parse(BrokerCode.FW, "FW.TXT", Stream(text));
+
+        Assert.Equal(new DateOnly(2026, 2, 3), result.SaleDate);
+    }
+
+    [Fact]
+    public void Detects_sale_05_date_from_asc_file()
+    {
+        const string line =
+            "081  03022026  5     1  0084  MF0062   KELANEIYA & BRAEMAR           BOPF            560.00    1100.00 10  HT01  HERITAGE TEAS (PVT) LTD.     ";
+
+        var result = _parser.Parse(BrokerCode.AS, "ASC.txt", Stream(line + "\n"));
+
+        Assert.Equal(new DateOnly(2026, 2, 3), result.SaleDate);
+        Assert.Equal("05", result.SaleNumber);
     }
 
     [Fact]

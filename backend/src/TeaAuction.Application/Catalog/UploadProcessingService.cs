@@ -159,7 +159,30 @@ public sealed class UploadProcessingService(
             return;
         }
 
-        var sale = await sales.FindByKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken);
+        // Prefer sale date / number printed in the sales file over the upload form.
+        if (parsed.SaleDate is { } fileDate && batch.SaleDate != fileDate)
+        {
+            logger.LogInformation(
+                "Sales file {File} date {FileDate:yyyy-MM-dd} overrides upload form date {FormDate:yyyy-MM-dd} for batch {UploadId}",
+                batch.OriginalFileName,
+                fileDate,
+                batch.SaleDate,
+                batch.Id);
+            batch.SaleDate = fileDate;
+        }
+
+        if (!string.IsNullOrWhiteSpace(parsed.SaleNumber) &&
+            !SaleNumbersMatch(parsed.SaleNumber, batch.SaleNumber))
+        {
+            await FailAsync(
+                batch,
+                $"Sales file looks like sale {parsed.SaleNumber} (date {parsed.SaleDate:yyyy-MM-dd}), but upload is for sale {batch.SaleNumber}/{batch.Year}.",
+                cancellationToken);
+            return;
+        }
+
+        var sale = await sales.FindByKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken)
+            ?? await sales.FindByNumericKeyAsync(batch.Centre, batch.Year, batch.SaleNumber, cancellationToken);
         if (sale is null)
         {
             await FailAsync(
@@ -171,11 +194,13 @@ public sealed class UploadProcessingService(
 
         if (sale.SaleDate != batch.SaleDate)
         {
-            await FailAsync(
-                batch,
-                $"Sale {batch.SaleNumber}/{batch.Year} at {batch.Centre} is on {sale.SaleDate:yyyy-MM-dd}, not {batch.SaleDate:yyyy-MM-dd}.",
-                cancellationToken);
-            return;
+            logger.LogInformation(
+                "Updating sale {SaleNumber}/{Year} date from {OldDate:yyyy-MM-dd} to file/upload date {NewDate:yyyy-MM-dd}",
+                sale.SaleNumber,
+                sale.Year,
+                sale.SaleDate,
+                batch.SaleDate);
+            sale.SaleDate = batch.SaleDate;
         }
 
         // Same lot may appear with different prices/values — last row already wins in the parser.
@@ -258,14 +283,26 @@ public sealed class UploadProcessingService(
 
         if (sale.SaleDate != batch.SaleDate)
         {
-            await FailAsync(
-                batch,
-                $"Sale {batch.SaleNumber}/{batch.Year} at {batch.Centre} already exists on {sale.SaleDate:yyyy-MM-dd}.",
-                cancellationToken);
-            return null;
+            // Catalogue/sales file date wins over a wrong earlier form date.
+            logger.LogInformation(
+                "Updating existing sale {SaleNumber}/{Year} date {OldDate:yyyy-MM-dd} → {NewDate:yyyy-MM-dd}",
+                sale.SaleNumber,
+                sale.Year,
+                sale.SaleDate,
+                batch.SaleDate);
+            sale.SaleDate = batch.SaleDate;
         }
 
         return sale;
+    }
+
+    private static bool SaleNumbersMatch(string left, string right)
+    {
+        if (string.Equals(left.Trim(), right.Trim(), StringComparison.OrdinalIgnoreCase))
+            return true;
+        return int.TryParse(left.Trim(), out var a)
+            && int.TryParse(right.Trim(), out var b)
+            && a == b;
     }
 
     private async Task CompleteAsync(

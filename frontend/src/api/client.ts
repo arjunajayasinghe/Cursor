@@ -111,14 +111,62 @@ export type PurchasedInvoiceLot = {
   broker: string;
   lotNumber: number;
   sellingMark: string;
+  sellerName?: string;
+  sellerVatNo?: string;
   invoiceNumber: string;
   grade: string;
   bags: number;
+  netPerBagKg?: number | null;
   netWeightKg: number;
   soldPricePerKg: number;
   proceeds: number;
   vatAmount: number;
   proceedsWithVat: number;
+};
+
+export type CollectionBatchSummary = {
+  id: string;
+  saleId?: string | null;
+  saleNumber: string;
+  year: number;
+  centre: string;
+  saleDate: string;
+  name: string;
+  status: string;
+  lotCount: number;
+  bagCount: number;
+  netWeightKg: number;
+  createdAt: string;
+  updatedAt?: string | null;
+};
+
+export type CollectionLot = {
+  id: string;
+  collectionBatchId: string;
+  purchasedInvoiceLotId?: string | null;
+  broker: string;
+  lotNumber: number;
+  sellingMark: string;
+  sellerName: string;
+  sellerVatNo: string;
+  invoiceNumber: string;
+  grade: string;
+  bags: number;
+  netPerBagKg?: number | null;
+  netWeightKg: number;
+  soldPricePerKg: number;
+  proceeds: number;
+  vatAmount: number;
+  proceedsWithVat: number;
+  warehouseOrBasis: string;
+  buyerCode: string;
+  buyerName: string;
+  gardenMark: string;
+  selectedAt: string;
+};
+
+export type CollectionBatchDetail = CollectionBatchSummary & {
+  lots: CollectionLot[];
 };
 
 export type PurchasedInvoiceWorkbench = {
@@ -198,4 +246,62 @@ export async function openPurchasedInvoicePdf(id: string) {
   window.open(url, "_blank", "noopener,noreferrer");
   // Revoke later so the new tab can still load the blob.
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+export async function listCollectionBatches() {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as CollectionBatchSummary[];
+}
+
+export async function listCollectedInvoiceLotIds(saleNumber: string, year: number) {
+  const params = new URLSearchParams({
+    saleNumber,
+    year: String(year),
+  });
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/selected-invoice-lots?${params}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as string[];
+}
+
+export async function getCollectionBatch(id: string) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/${id}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as CollectionBatchDetail;
+}
+
+export async function selectCollectionLots(input: {
+  saleNumber: string;
+  year: number;
+  name?: string;
+  purchasedInvoiceLotIds: string[];
+}) {
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/select`,
+    {
+      method: "POST",
+      headers: { ...headers(), "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    },
+  );
+  if (!response.ok) {
+    let message = `The request failed (${response.status}).`;
+    try {
+      const payload = (await response.json()) as { errors?: string[] };
+      if (payload.errors?.length) message = payload.errors.join(" ");
+    } catch {
+      /* ignore */
+    }
+    throw new Error(message);
+  }
+  return (await response.json()) as CollectionBatchDetail;
 }

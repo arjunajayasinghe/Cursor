@@ -201,13 +201,28 @@ public sealed class PurchasedInvoicePdfParser : IPurchasedInvoicePdfParser
             var bags = bagsMatch.Success ? int.Parse(bagsMatch.Groups[1].Value, CultureInfo.InvariantCulture) : 0;
             if (bags > 200) bags = 0;
 
+            // Seller name / VAT often sit between mark and invoice on the PDF row; capture when present.
+            var sellerName = "";
+            var sellerVat = "";
+            var sellerMatch = Regex.Match(
+                line,
+                @"^\s*\d{1,4}\s+\S(?:.*?\S)?\s{2,}([A-Z][A-Z0-9 &.'()/,\-]{3,80}?)\s+(\d{5,}-\d+)\s+",
+                RegexOptions.IgnoreCase);
+            if (sellerMatch.Success)
+            {
+                sellerName = CleanSpaces(sellerMatch.Groups[1].Value);
+                sellerVat = CleanSpaces(sellerMatch.Groups[2].Value);
+            }
+
             rows[lot] = new PurchasedInvoiceLotRow(
                 lot,
                 mark,
+                sellerName,
+                sellerVat,
                 invoice,
                 grade,
                 bags,
-                null,
+                bags > 0 && netKg > 0 ? Math.Round(netKg / bags, 2) : null,
                 netKg,
                 price,
                 proceeds,
