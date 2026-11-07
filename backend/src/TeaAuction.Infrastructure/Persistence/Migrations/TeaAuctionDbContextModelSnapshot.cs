@@ -28,6 +28,14 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<string>("ActiveOptionKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasDefaultValue("A")
+                        .HasColumnName("active_option_key");
+
                     b.Property<decimal>("AllocatedQuantityKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
@@ -174,6 +182,14 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("lot_number");
 
+                    b.Property<string>("OptionKey")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasDefaultValue("A")
+                        .HasColumnName("option_key");
+
                     b.Property<decimal>("PhysicalStockKg")
                         .HasPrecision(18, 3)
                         .HasColumnType("numeric(18,3)")
@@ -219,7 +235,7 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CollectionLotId");
 
-                    b.HasIndex("BlendSheetId", "CollectionLotId")
+                    b.HasIndex("BlendSheetId", "OptionKey", "CollectionLotId")
                         .IsUnique();
 
                     b.ToTable("blend_sheet_lines", (string)null);

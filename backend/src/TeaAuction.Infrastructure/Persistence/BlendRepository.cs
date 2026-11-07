@@ -218,37 +218,16 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
             s.AllocatedQuantityKg,
             s.TotalRawTeaCost,
             s.WeightedAverageCostPerKg,
+            string.IsNullOrWhiteSpace(s.ActiveOptionKey) ? "A" : s.ActiveOptionKey,
             s.CreatedAt,
             s.ConfirmedAt);
 
     internal static BlendSheetDetailDto MapDetail(BlendSheet s)
     {
-        var total = s.AllocatedQuantityKg;
-        var lines = s.Lines
-            .OrderBy(l => l.Year)
-            .ThenBy(l => l.SaleNumber)
-            .ThenBy(l => l.Broker)
-            .ThenBy(l => l.LotNumber)
-            .Select(l => new BlendSheetLineDto(
-                l.Id,
-                l.CollectionLotId,
-                l.SampleBoxId,
-                l.SaleNumber,
-                l.Year,
-                l.Broker,
-                l.LotNumber,
-                l.Estate,
-                l.Grade,
-                l.WarehouseOrBasis,
-                l.PurchasedQtyKg,
-                l.PhysicalStockKg,
-                l.AllocatedQtyKg,
-                l.UnitCostPerKg,
-                l.QualityStatus,
-                l.LineCost,
-                total > 0 ? Math.Round(l.AllocatedQtyKg / total * 100m, 2) : 0))
-            .ToList();
-
+        var activeKey = string.IsNullOrWhiteSpace(s.ActiveOptionKey) ? "A" : s.ActiveOptionKey.Trim().ToUpperInvariant();
+        var options = BuildOptions(s, activeKey);
+        var active = options.FirstOrDefault(o => o.Key == activeKey) ?? options.FirstOrDefault();
+        var lines = active?.Lines ?? Array.Empty<BlendSheetLineDto>();
         var remaining = s.TargetQuantityKg - s.AllocatedQuantityKg;
         var sellingValue = s.TargetPricePerKg is null ? (decimal?)null : s.TargetPricePerKg * s.AllocatedQuantityKg;
         var spread = sellingValue is null ? null : sellingValue - s.TotalRawTeaCost;
@@ -274,12 +253,75 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
             remaining,
             sellingValue,
             spread,
+            activeKey,
             s.Version,
             s.CreatedAt,
             s.UpdatedAt,
             s.ConfirmedAt,
             lines,
+            options,
             warnings);
+    }
+
+    private static IReadOnlyList<BlendOptionDto> BuildOptions(BlendSheet s, string activeKey)
+    {
+        var keys = s.Lines
+            .Select(l => string.IsNullOrWhiteSpace(l.OptionKey) ? "A" : l.OptionKey.Trim().ToUpperInvariant())
+            .Distinct()
+            .OrderBy(k => k)
+            .ToList();
+        if (keys.Count == 0)
+            keys.Add(activeKey);
+
+        if (!keys.Contains(activeKey))
+            keys.Insert(0, activeKey);
+
+        return keys.Select(key =>
+        {
+            var optionLines = s.Lines
+                .Where(l => (string.IsNullOrWhiteSpace(l.OptionKey) ? "A" : l.OptionKey.Trim().ToUpperInvariant()) == key)
+                .OrderBy(l => l.Year)
+                .ThenBy(l => l.SaleNumber)
+                .ThenBy(l => l.Broker)
+                .ThenBy(l => l.LotNumber)
+                .ToList();
+            var allocated = optionLines.Sum(l => l.AllocatedQtyKg);
+            var cost = optionLines.Sum(l => l.AllocatedQtyKg * l.UnitCostPerKg);
+            var wavg = allocated > 0 ? Math.Round(cost / allocated, 4) : (decimal?)null;
+            var remaining = s.TargetQuantityKg - allocated;
+            var selling = s.TargetPricePerKg is null ? (decimal?)null : s.TargetPricePerKg * allocated;
+            var spread = selling is null ? null : selling - cost;
+            var variance = s.TargetPricePerKg is null || wavg is null ? null : wavg - s.TargetPricePerKg;
+            var dtos = optionLines.Select(l => new BlendSheetLineDto(
+                l.Id,
+                l.CollectionLotId,
+                l.SampleBoxId,
+                l.SaleNumber,
+                l.Year,
+                l.Broker,
+                l.LotNumber,
+                l.Estate,
+                l.Grade,
+                l.WarehouseOrBasis,
+                l.PurchasedQtyKg,
+                l.PhysicalStockKg,
+                l.AllocatedQtyKg,
+                l.UnitCostPerKg,
+                l.QualityStatus,
+                l.LineCost,
+                allocated > 0 ? Math.Round(l.AllocatedQtyKg / allocated * 100m, 2) : 0,
+                key)).ToList();
+            return new BlendOptionDto(
+                key,
+                $"Option {key}",
+                allocated,
+                cost,
+                wavg,
+                remaining,
+                spread,
+                variance,
+                dtos);
+        }).ToList();
     }
 
     private static IReadOnlyList<string> BuildWarnings(BlendSheet s, IReadOnlyList<BlendSheetLineDto> lines)

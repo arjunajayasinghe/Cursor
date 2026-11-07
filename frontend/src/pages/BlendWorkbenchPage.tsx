@@ -4,6 +4,10 @@ import {
   Button,
   Chip,
   CircularProgress,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   IconButton,
   Paper,
@@ -20,6 +24,7 @@ import {
   Typography,
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
+import BalanceIcon from "@mui/icons-material/Balance";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
@@ -32,11 +37,43 @@ import {
   listBlendSheets,
   saveBlendSheet,
   type BlendInventoryLot,
+  type BlendSheetDetail,
   type BlendSheetSummary,
 } from "../api/client";
 
 type AllocMap = Record<string, number>;
+type LocalOption = { key: string; label: string; alloc: AllocMap };
 type Shelf = "work" | "pending" | "approved" | "history";
+
+function emptyOptions(): LocalOption[] {
+  return [{ key: "A", label: "Option A", alloc: {} }];
+}
+
+function nextOptionKey(existing: LocalOption[]) {
+  const used = new Set(existing.map((o) => o.key));
+  for (const letter of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    if (!used.has(letter)) return letter;
+  }
+  return `O${existing.length + 1}`;
+}
+
+function optionStats(alloc: AllocMap, lotsById: Map<string, BlendInventoryLot>, targetQty: number, targetPrice: number | "") {
+  const rows = Object.entries(alloc)
+    .filter(([, qty]) => qty > 0)
+    .map(([id, qty]) => {
+      const lot = lotsById.get(id);
+      const unit = lot?.unitCostPerKg ?? 0;
+      return { id, lot, qty, unit, cost: qty * unit };
+    });
+  const allocated = rows.reduce((s, r) => s + r.qty, 0);
+  const totalCost = rows.reduce((s, r) => s + r.cost, 0);
+  const wavg = allocated > 0 ? totalCost / allocated : 0;
+  const remaining = (Number(targetQty) || 0) - allocated;
+  const target = targetPrice === "" ? null : Number(targetPrice);
+  const variance = target == null ? null : wavg - target;
+  const spread = target == null ? null : target * allocated - totalCost;
+  return { rows, allocated, totalCost, wavg, remaining, variance, spread };
+}
 type LotSortKey =
   | "sale"
   | "broker"
@@ -123,7 +160,9 @@ export function BlendWorkbenchPage() {
   const [currency, setCurrency] = useState("LKR");
   const [remarks, setRemarks] = useState("");
   const [preparedBy, setPreparedBy] = useState("desk");
-  const [alloc, setAlloc] = useState<AllocMap>({});
+  const [options, setOptions] = useState<LocalOption[]>(emptyOptions);
+  const [activeOptionKey, setActiveOptionKey] = useState("A");
+  const [compareOpen, setCompareOpen] = useState(false);
   const [saleFilter, setSaleFilter] = useState("");
   const [brokerFilter, setBrokerFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
@@ -135,6 +174,15 @@ export function BlendWorkbenchPage() {
   const [rightCols, setRightCols] = useState(DEFAULT_RIGHT_COLS);
   const [allocHint, setAllocHint] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(!routeBlendId);
+
+  const activeOption = options.find((o) => o.key === activeOptionKey) ?? options[0];
+  const alloc = activeOption?.alloc ?? {};
+
+  function patchActiveAlloc(updater: (current: AllocMap) => AllocMap) {
+    setOptions((prev) =>
+      prev.map((o) => (o.key === activeOptionKey ? { ...o, alloc: updater(o.alloc) } : o)),
+    );
+  }
 
   const sheets = useQuery({
     queryKey: ["blends", "all"],
@@ -153,21 +201,7 @@ export function BlendWorkbenchPage() {
     setHydrated(true);
   }, [existing.data, hydrated]);
 
-  function applySheet(d: {
-    id: string;
-    blendNumber: string;
-    status: string;
-    productName: string;
-    salesOrderRef?: string | null;
-    customerName?: string | null;
-    targetQuantityKg: number;
-    targetPricePerKg?: number | null;
-    targetTeaCostPerKg?: number | null;
-    currency: string;
-    remarks?: string | null;
-    preparedBy: string;
-    lines: { collectionLotId: string; allocatedQtyKg: number }[];
-  }) {
+  function applySheet(d: BlendSheetDetail) {
     setSheetId(d.id);
     setBlendNumber(d.blendNumber);
     setStatus(d.status);
@@ -180,9 +214,22 @@ export function BlendWorkbenchPage() {
     setCurrency(d.currency || "LKR");
     setRemarks(d.remarks || "");
     setPreparedBy(d.preparedBy || "desk");
-    const map: AllocMap = {};
-    for (const line of d.lines) map[line.collectionLotId] = Number(line.allocatedQtyKg);
-    setAlloc(map);
+    const loaded: LocalOption[] =
+      d.options && d.options.length > 0
+        ? d.options.map((opt) => {
+            const map: AllocMap = {};
+            for (const line of opt.lines) map[line.collectionLotId] = Number(line.allocatedQtyKg);
+            return { key: opt.key, label: opt.label || `Option ${opt.key}`, alloc: map };
+          })
+        : [
+            (() => {
+              const map: AllocMap = {};
+              for (const line of d.lines) map[line.collectionLotId] = Number(line.allocatedQtyKg);
+              return { key: d.activeOptionKey || "A", label: `Option ${d.activeOptionKey || "A"}`, alloc: map };
+            })(),
+          ];
+    setOptions(loaded.length ? loaded : emptyOptions());
+    setActiveOptionKey(d.activeOptionKey || loaded[0]?.key || "A");
   }
 
   function resetNew() {
@@ -198,10 +245,40 @@ export function BlendWorkbenchPage() {
     setCurrency("LKR");
     setRemarks("");
     setPreparedBy("desk");
-    setAlloc({});
+    setOptions(emptyOptions());
+    setActiveOptionKey("A");
+    setCompareOpen(false);
+    setAllocHint(null);
     setHydrated(true);
     setShelf("work");
     navigate("/blending", { replace: true });
+  }
+
+  function buildSavePayload() {
+    return {
+      id: sheetId,
+      productName: productName.trim() || "Blend",
+      salesOrderRef: salesOrderRef || undefined,
+      customerName: customerName || undefined,
+      targetQuantityKg: Number(targetQty) || 0,
+      targetPricePerKg: targetPrice === "" ? null : Number(targetPrice),
+      targetTeaCostPerKg: targetTeaCost === "" ? null : Number(targetTeaCost),
+      currency,
+      preparedBy,
+      remarks: remarks || undefined,
+      activeOptionKey,
+      options: options.map((o) => ({
+        key: o.key,
+        label: o.label,
+        lines: Object.entries(o.alloc)
+          .filter(([, qty]) => qty > 0)
+          .map(([collectionLotId, allocatedQtyKg]) => ({
+            collectionLotId,
+            allocatedQtyKg,
+            optionKey: o.key,
+          })),
+      })),
+    };
   }
 
   function openSheet(row: BlendSheetSummary) {
@@ -224,22 +301,7 @@ export function BlendWorkbenchPage() {
   });
 
   const saveMutation = useMutation({
-    mutationFn: () =>
-      saveBlendSheet({
-        id: sheetId,
-        productName: productName.trim() || "Blend",
-        salesOrderRef: salesOrderRef || undefined,
-        customerName: customerName || undefined,
-        targetQuantityKg: Number(targetQty) || 0,
-        targetPricePerKg: targetPrice === "" ? null : Number(targetPrice),
-        targetTeaCostPerKg: targetTeaCost === "" ? null : Number(targetTeaCost),
-        currency,
-        preparedBy,
-        remarks: remarks || undefined,
-        lines: Object.entries(alloc)
-          .filter(([, qty]) => qty > 0)
-          .map(([collectionLotId, allocatedQtyKg]) => ({ collectionLotId, allocatedQtyKg })),
-      }),
+    mutationFn: () => saveBlendSheet(buildSavePayload()),
     onSuccess: (detail) => {
       applySheet(detail);
       setHydrated(true);
@@ -251,21 +313,7 @@ export function BlendWorkbenchPage() {
 
   const confirmMutation = useMutation({
     mutationFn: async () => {
-      const saved = await saveBlendSheet({
-        id: sheetId,
-        productName: productName.trim() || "Blend",
-        salesOrderRef: salesOrderRef || undefined,
-        customerName: customerName || undefined,
-        targetQuantityKg: Number(targetQty) || 0,
-        targetPricePerKg: targetPrice === "" ? null : Number(targetPrice),
-        targetTeaCostPerKg: targetTeaCost === "" ? null : Number(targetTeaCost),
-        currency,
-        preparedBy,
-        remarks: remarks || undefined,
-        lines: Object.entries(alloc)
-          .filter(([, qty]) => qty > 0)
-          .map(([collectionLotId, allocatedQtyKg]) => ({ collectionLotId, allocatedQtyKg })),
-      });
+      const saved = await saveBlendSheet(buildSavePayload());
       return confirmBlendSheet(saved.id);
     },
     onSuccess: (detail) => {
@@ -384,20 +432,20 @@ export function BlendWorkbenchPage() {
     // Required < lot size → take only the need; leftover stays on the left.
     const chunk = Math.min(lotRemain, need);
     const leftover = Number((lotRemain - chunk).toFixed(3));
-    setAlloc((current) => ({
+    patchActiveAlloc((current) => ({
       ...current,
       [lot.collectionLotId]: Number(((current[lot.collectionLotId] || 0) + chunk).toFixed(3)),
     }));
     setAllocHint(
       leftover > 0.0005
-        ? `Took ${chunk.toFixed(2)} kg of ${lotRemain.toFixed(2)} kg from lot ${lot.lotNumber} (to Est. Qty). ${leftover.toFixed(2)} kg stays available.`
-        : `Took ${chunk.toFixed(2)} kg from lot ${lot.lotNumber} (full remainder used).`,
+        ? `Option ${activeOptionKey}: took ${chunk.toFixed(2)} kg of ${lotRemain.toFixed(2)} kg from lot ${lot.lotNumber}. ${leftover.toFixed(2)} kg stays available.`
+        : `Option ${activeOptionKey}: took ${chunk.toFixed(2)} kg from lot ${lot.lotNumber} (full remainder used).`,
     );
   }
 
   function removeLot(id: string) {
     if (locked) return;
-    setAlloc((current) => {
+    patchActiveAlloc((current) => {
       const next = { ...current };
       delete next[id];
       return next;
@@ -408,7 +456,7 @@ export function BlendWorkbenchPage() {
     if (locked) return;
     const n = Number(raw);
     const max = lotsById.get(id)?.availableQtyKg ?? n;
-    setAlloc((current) => {
+    patchActiveAlloc((current) => {
       const next = { ...current };
       if (!raw || Number.isNaN(n) || n <= 0) delete next[id];
       else next[id] = Number(Math.min(n, Number(max)).toFixed(3));
@@ -416,6 +464,73 @@ export function BlendWorkbenchPage() {
     });
   }
 
+  function clearActiveOption() {
+    if (locked) return;
+    patchActiveAlloc(() => ({}));
+    setAllocHint(`Cleared Option ${activeOptionKey}.`);
+  }
+
+  function autoBalanceActive() {
+    if (locked) return;
+    const est = Number(targetQty) || 0;
+    if (est <= 0) {
+      setAllocHint("Set Est. Qty before Auto Balance.");
+      return;
+    }
+    const ids = Object.keys(alloc).filter((id) => (alloc[id] || 0) > 0 || lotsById.has(id));
+    const inBlend = Object.keys(alloc).filter((id) => (alloc[id] || 0) > 0);
+    if (inBlend.length === 0) {
+      setAllocHint("Add lots to the blend box first, then Auto Balance.");
+      return;
+    }
+    const caps = inBlend.map((id) => ({
+      id,
+      max: Number(lotsById.get(id)?.availableQtyKg ?? alloc[id] ?? 0),
+    }));
+    const totalCap = caps.reduce((s, c) => s + c.max, 0);
+    if (totalCap <= 0) return;
+    const need = Math.min(est, totalCap);
+    // Proportional to max available, then fix rounding on last row.
+    let remaining = need;
+    const next: AllocMap = {};
+    caps.forEach((c, idx) => {
+      if (idx === caps.length - 1) {
+        next[c.id] = Number(Math.min(c.max, remaining).toFixed(3));
+      } else {
+        const share = Number(((need * c.max) / totalCap).toFixed(3));
+        const qty = Math.min(c.max, share);
+        next[c.id] = qty;
+        remaining = Number((remaining - qty).toFixed(3));
+      }
+    });
+    patchActiveAlloc(() => next);
+    setAllocHint(`Option ${activeOptionKey}: auto-balanced to ${need.toFixed(2)} kg across ${caps.length} lots.`);
+    void ids;
+  }
+
+  function addOption() {
+    if (locked) return;
+    const key = nextOptionKey(options);
+    setOptions((prev) => [...prev, { key, label: `Option ${key}`, alloc: {} }]);
+    setActiveOptionKey(key);
+    setAllocHint(`Added Option ${key}. Build an alternate composition to compare.`);
+  }
+
+  function removeOption(key: string) {
+    if (locked || options.length <= 1) return;
+    const next = options.filter((o) => o.key !== key);
+    setOptions(next);
+    if (activeOptionKey === key) setActiveOptionKey(next[0].key);
+  }
+
+  function duplicateActiveOption() {
+    if (locked) return;
+    const key = nextOptionKey(options);
+    const source = activeOption;
+    setOptions((prev) => [...prev, { key, label: `Option ${key}`, alloc: { ...source.alloc } }]);
+    setActiveOptionKey(key);
+    setAllocHint(`Duplicated Option ${source.key} → Option ${key}.`);
+  }
   function startColResize(
     side: "left" | "right",
     key: ColKey,
@@ -656,9 +771,82 @@ export function BlendWorkbenchPage() {
             )}
           </Paper>
 
-          {/* Live totals */}
+          {/* Compare options */}
+          <Paper sx={{ p: 1.5 }}>
+            <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                Blend options · active holds inventory
+              </Typography>
+              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                <Button size="small" startIcon={<AddIcon />} disabled={locked || options.length >= 8} onClick={addOption}>
+                  Add option
+                </Button>
+                <Button size="small" disabled={locked} onClick={duplicateActiveOption}>
+                  Duplicate active
+                </Button>
+                <Button size="small" variant="outlined" startIcon={<BalanceIcon />} onClick={() => setCompareOpen(true)}>
+                  Compare options
+                </Button>
+              </Stack>
+            </Stack>
+            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap", mt: 1.25 }}>
+              {options.map((opt) => {
+                const stats = optionStats(opt.alloc, lotsById, targetQty, targetPrice);
+                const active = opt.key === activeOptionKey;
+                return (
+                  <Paper
+                    key={opt.key}
+                    variant="outlined"
+                    onClick={() => setActiveOptionKey(opt.key)}
+                    sx={{
+                      px: 1.25,
+                      py: 1,
+                      minWidth: 150,
+                      cursor: "pointer",
+                      borderWidth: active ? 2 : 1,
+                      borderColor: active ? "primary.main" : "divider",
+                      bgcolor: active ? "rgba(26,95,122,0.06)" : "background.paper",
+                    }}
+                  >
+                    <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                        {opt.label}
+                        {active ? " · Active" : ""}
+                      </Typography>
+                      {options.length > 1 && !locked ? (
+                        <IconButton
+                          size="small"
+                          aria-label={`Remove ${opt.label}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeOption(opt.key);
+                          }}
+                        >
+                          <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                        </IconButton>
+                      ) : null}
+                    </Stack>
+                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                      {stats.allocated.toFixed(1)} kg · WAVG {stats.wavg.toFixed(2)}
+                    </Typography>
+                    {stats.variance != null && (
+                      <Typography
+                        variant="caption"
+                        sx={{ color: stats.variance > 0 ? "error.main" : "success.main", fontWeight: 600 }}
+                      >
+                        {stats.variance >= 0 ? "+" : ""}
+                        {stats.variance.toFixed(2)} vs target
+                      </Typography>
+                    )}
+                  </Paper>
+                );
+              })}
+            </Stack>
+          </Paper>
+
+          {/* Live totals (active option) */}
           <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: "wrap" }}>
-            <MiniStat label="Allocated" value={`${totalAllocated.toFixed(2)} kg`} />
+            <MiniStat label={`Allocated (${activeOptionKey})`} value={`${totalAllocated.toFixed(2)} kg`} />
             <MiniStat label="To target" value={`${remainingTarget.toFixed(2)} kg`} tone={Math.abs(remainingTarget) < 0.001 ? "ok" : "warn"} />
             <MiniStat label="WAVG cost" value={wavg.toFixed(2)} />
             <MiniStat label="Raw tea cost" value={totalCost.toFixed(2)} />
@@ -666,6 +854,13 @@ export function BlendWorkbenchPage() {
               label="Lots in blend"
               value={String(composition.length)}
             />
+            {targetPrice !== "" && (
+              <MiniStat
+                label="Cost vs price"
+                value={`${wavg - Number(targetPrice) >= 0 ? "+" : ""}${(wavg - Number(targetPrice)).toFixed(2)}`}
+                tone={wavg - Number(targetPrice) <= 0 ? "ok" : "warn"}
+              />
+            )}
           </Stack>
           {allocHint && (
             <Alert severity="info" onClose={() => setAllocHint(null)} sx={{ py: 0 }}>
@@ -874,12 +1069,25 @@ export function BlendWorkbenchPage() {
               }}
             >
               <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                  Blend box {dropActive ? "· drop to add" : ""}
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                  Same columns · edit Alloc kg up to lot max · unused kg stays on the left
-                </Typography>
+                <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <Box>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
+                      Blend box · Option {activeOptionKey}
+                      {dropActive ? " · drop to add" : ""}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Same columns · edit Alloc kg · unused Remain kg stays on the left
+                    </Typography>
+                  </Box>
+                  <Stack direction="row" spacing={0.5}>
+                    <Button size="small" disabled={locked || composition.length === 0} onClick={autoBalanceActive}>
+                      Auto balance
+                    </Button>
+                    <Button size="small" disabled={locked || composition.length === 0} onClick={clearActiveOption}>
+                      Clear
+                    </Button>
+                  </Stack>
+                </Stack>
               </Box>
               <Box sx={{ overflow: "auto", flex: 1 }}>
                 {composition.length === 0 ? (
@@ -1010,6 +1218,79 @@ export function BlendWorkbenchPage() {
           <Button component={RouterLink} to="/collections" size="small" sx={{ alignSelf: "flex-start" }}>
             Back to collection
           </Button>
+
+          <Dialog open={compareOpen} onClose={() => setCompareOpen(false)} maxWidth="md" fullWidth>
+            <DialogTitle>Compare blend options</DialogTitle>
+            <DialogContent dividers>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5 }}>
+                Same Est. Qty / target price · only the active option reserves inventory on Save / Confirm.
+              </Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Option</TableCell>
+                    <TableCell align="right">Allocated</TableCell>
+                    <TableCell align="right">To target</TableCell>
+                    <TableCell align="right">WAVG cost</TableCell>
+                    <TableCell align="right">vs target price</TableCell>
+                    <TableCell align="right">Raw tea cost</TableCell>
+                    <TableCell align="right">Lots</TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {options.map((opt) => {
+                    const stats = optionStats(opt.alloc, lotsById, targetQty, targetPrice);
+                    const active = opt.key === activeOptionKey;
+                    return (
+                      <TableRow key={opt.key} selected={active}>
+                        <TableCell sx={{ fontWeight: 700 }}>
+                          {opt.label}
+                          {active ? " (active)" : ""}
+                        </TableCell>
+                        <TableCell align="right">{stats.allocated.toFixed(2)}</TableCell>
+                        <TableCell align="right">{stats.remaining.toFixed(2)}</TableCell>
+                        <TableCell align="right">{stats.wavg.toFixed(2)}</TableCell>
+                        <TableCell
+                          align="right"
+                          sx={{
+                            fontWeight: 700,
+                            color:
+                              stats.variance == null
+                                ? "text.secondary"
+                                : stats.variance > 0
+                                  ? "error.main"
+                                  : "success.main",
+                          }}
+                        >
+                          {stats.variance == null
+                            ? "—"
+                            : `${stats.variance >= 0 ? "+" : ""}${stats.variance.toFixed(2)}`}
+                        </TableCell>
+                        <TableCell align="right">{stats.totalCost.toFixed(2)}</TableCell>
+                        <TableCell align="right">{stats.rows.length}</TableCell>
+                        <TableCell align="right">
+                          <Button
+                            size="small"
+                            variant={active ? "contained" : "outlined"}
+                            onClick={() => {
+                              setActiveOptionKey(opt.key);
+                              setCompareOpen(false);
+                            }}
+                          >
+                            {active ? "Editing" : "Make active"}
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setCompareOpen(false)}>Close</Button>
+            </DialogActions>
+          </Dialog>
         </>
       )}
     </Stack>

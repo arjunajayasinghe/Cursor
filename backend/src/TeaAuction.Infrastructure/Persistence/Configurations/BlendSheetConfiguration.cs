@@ -26,6 +26,7 @@ public sealed class BlendSheetConfiguration : IEntityTypeConfiguration<BlendShee
         builder.Property(x => x.AllocatedQuantityKg).HasColumnName("allocated_quantity_kg").HasPrecision(18, 3);
         builder.Property(x => x.TotalRawTeaCost).HasColumnName("total_raw_tea_cost").HasPrecision(18, 2);
         builder.Property(x => x.WeightedAverageCostPerKg).HasColumnName("weighted_average_cost_per_kg").HasPrecision(18, 4);
+        builder.Property(x => x.ActiveOptionKey).HasColumnName("active_option_key").HasMaxLength(8).HasDefaultValue("A");
         builder.Property(x => x.Version).HasColumnName("version");
         builder.Property(x => x.CreatedAt).HasColumnName("created_at");
         builder.Property(x => x.UpdatedAt).HasColumnName("updated_at");
@@ -45,6 +46,7 @@ public sealed class BlendSheetLineConfiguration : IEntityTypeConfiguration<Blend
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.BlendSheetId).HasColumnName("blend_sheet_id");
+        builder.Property(x => x.OptionKey).HasColumnName("option_key").HasMaxLength(8).HasDefaultValue("A");
         builder.Property(x => x.CollectionLotId).HasColumnName("collection_lot_id");
         builder.Property(x => x.SampleBoxId).HasColumnName("sample_box_id");
         builder.Property(x => x.SaleNumber).HasColumnName("sale_number").HasMaxLength(20);
@@ -60,7 +62,7 @@ public sealed class BlendSheetLineConfiguration : IEntityTypeConfiguration<Blend
         builder.Property(x => x.UnitCostPerKg).HasColumnName("unit_cost_per_kg").HasPrecision(18, 2);
         builder.Property(x => x.QualityStatus).HasColumnName("quality_status").HasMaxLength(32);
         builder.Ignore(x => x.LineCost);
-        builder.HasIndex(x => new { x.BlendSheetId, x.CollectionLotId }).IsUnique();
+        builder.HasIndex(x => new { x.BlendSheetId, x.OptionKey, x.CollectionLotId }).IsUnique();
         builder.HasOne(x => x.CollectionLot).WithMany().HasForeignKey(x => x.CollectionLotId).OnDelete(DeleteBehavior.Restrict);
     }
 }

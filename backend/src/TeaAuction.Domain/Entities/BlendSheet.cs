@@ -34,6 +34,9 @@ public sealed class BlendSheet
 
     public decimal? WeightedAverageCostPerKg { get; set; }
 
+    /// <summary>Active compare option (A/B/C…). Inventory holds and confirm use this option only.</summary>
+    public string ActiveOptionKey { get; set; } = "A";
+
     public int Version { get; set; } = 1;
 
     public DateTimeOffset CreatedAt { get; set; }
@@ -54,6 +57,9 @@ public sealed class BlendSheetLine
     public Guid BlendSheetId { get; set; }
 
     public BlendSheet? BlendSheet { get; set; }
+
+    /// <summary>Compare option key this line belongs to (A/B/C…).</summary>
+    public string OptionKey { get; set; } = "A";
 
     public Guid CollectionLotId { get; set; }
 

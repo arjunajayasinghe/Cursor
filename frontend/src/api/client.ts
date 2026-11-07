@@ -486,6 +486,19 @@ export type BlendSheetLine = {
   qualityStatus: string;
   lineCost: number;
   percentage: number;
+  optionKey?: string;
+};
+
+export type BlendOption = {
+  key: string;
+  label: string;
+  allocatedQuantityKg: number;
+  totalRawTeaCost: number;
+  weightedAverageCostPerKg?: number | null;
+  remainingTargetQtyKg: number;
+  estimatedGrossSpread?: number | null;
+  costVarianceVsTarget?: number | null;
+  lines: BlendSheetLine[];
 };
 
 export type BlendSheetSummary = {
@@ -504,6 +517,7 @@ export type BlendSheetSummary = {
   allocatedQuantityKg: number;
   totalRawTeaCost: number;
   weightedAverageCostPerKg?: number | null;
+  activeOptionKey?: string;
   createdAt: string;
   confirmedAt?: string | null;
 };
@@ -516,6 +530,7 @@ export type BlendSheetDetail = BlendSheetSummary & {
   version: number;
   updatedAt?: string | null;
   lines: BlendSheetLine[];
+  options?: BlendOption[];
   warnings: string[];
 };
 
@@ -573,7 +588,13 @@ export async function saveBlendSheet(input: {
   targetTeaCostPerKg?: number | null;
   preparedBy?: string;
   remarks?: string;
-  lines: { collectionLotId: string; allocatedQtyKg: number }[];
+  activeOptionKey?: string;
+  options?: {
+    key: string;
+    label?: string;
+    lines: { collectionLotId: string; allocatedQtyKg: number; optionKey?: string }[];
+  }[];
+  lines?: { collectionLotId: string; allocatedQtyKg: number; optionKey?: string }[];
 }) {
   const response = await fetch(
     `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends`,

@@ -52,20 +52,30 @@ public sealed class BlendService(
                 : OperationResult<BlendSheetDetailDto>.Ok(already);
         }
 
-        if (existing.Lines.Count == 0)
-            return OperationResult<BlendSheetDetailDto>.Fail(["Add at least one lot allocation before confirm."]);
+        var activeKey = NormalizeOptionKey(existing.ActiveOptionKey);
+        var activeLines = existing.Lines.Where(l => NormalizeOptionKey(l.OptionKey) == activeKey).ToList();
+        if (activeLines.Count == 0)
+            return OperationResult<BlendSheetDetailDto>.Fail(["Add at least one lot allocation on the active option before confirm."]);
 
         if (existing.TargetQuantityKg <= 0)
             return OperationResult<BlendSheetDetailDto>.Fail(["Target / estimated quantity is required."]);
 
-        if (Math.Abs(existing.AllocatedQuantityKg - existing.TargetQuantityKg) > 0.001m)
+        var activeAllocated = activeLines.Sum(l => l.AllocatedQtyKg);
+        if (Math.Abs(activeAllocated - existing.TargetQuantityKg) > 0.001m)
         {
             return OperationResult<BlendSheetDetailDto>.Fail([
-                $"Allocated {existing.AllocatedQuantityKg:0.###} kg must equal estimated/target {existing.TargetQuantityKg:0.###} kg before confirm."
+                $"Active option {activeKey}: allocated {activeAllocated:0.###} kg must equal estimated/target {existing.TargetQuantityKg:0.###} kg before confirm."
             ]);
         }
 
-        // Re-validate availability excluding this sheet's own holds, then firm reservations.
+        var optionGroups = existing.Lines
+            .GroupBy(l => NormalizeOptionKey(l.OptionKey))
+            .Select(g => new BlendOptionInputDto(
+                g.Key,
+                $"Option {g.Key}",
+                g.Select(l => new BlendLineInputDto(l.CollectionLotId, l.AllocatedQtyKg, g.Key)).ToList()))
+            .ToList();
+
         var saveRequest = new SaveBlendSheetRequest(
             existing.Id,
             existing.SalesOrderRef,
@@ -77,7 +87,9 @@ public sealed class BlendService(
             existing.TargetTeaCostPerKg,
             existing.PreparedBy,
             existing.Remarks,
-            existing.Lines.Select(l => new BlendLineInputDto(l.CollectionLotId, l.AllocatedQtyKg)).ToList());
+            null,
+            activeKey,
+            optionGroups);
 
         return await UpsertAsync(saveRequest, confirm: true, cancellationToken);
     }
@@ -91,20 +103,14 @@ public sealed class BlendService(
             return OperationResult<BlendSheetDetailDto>.Fail(["Product / blend name is required."]);
         if (request.TargetQuantityKg < 0)
             return OperationResult<BlendSheetDetailDto>.Fail(["Target quantity cannot be negative."]);
-        if (request.Lines is null)
-            return OperationResult<BlendSheetDetailDto>.Fail(["Lines payload is required."]);
 
-        var lineInputs = request.Lines
-            .Where(l => l.AllocatedQtyKg > 0)
-            .GroupBy(l => l.CollectionLotId)
-            .Select(g => new BlendLineInputDto(g.Key, g.Sum(x => x.AllocatedQtyKg)))
-            .ToList();
+        var optionInputs = NormalizeOptions(request);
+        if (optionInputs.Count == 0)
+            return OperationResult<BlendSheetDetailDto>.Fail(["At least one blend option is required."]);
 
-        foreach (var line in lineInputs)
-        {
-            if (line.AllocatedQtyKg <= 0)
-                return OperationResult<BlendSheetDetailDto>.Fail(["Allocated quantity must be positive."]);
-        }
+        var activeKey = NormalizeOptionKey(request.ActiveOptionKey ?? optionInputs[0].Key);
+        if (optionInputs.All(o => NormalizeOptionKey(o.Key) != activeKey))
+            activeKey = NormalizeOptionKey(optionInputs[0].Key);
 
         BlendSheet sheet;
         var now = DateTimeOffset.UtcNow;
@@ -130,7 +136,8 @@ public sealed class BlendService(
                 BlendNumber = blendNumber,
                 BlendDate = DateOnly.FromDateTime(DateTime.UtcNow),
                 CreatedAt = now,
-                Version = 1
+                Version = 1,
+                ActiveOptionKey = activeKey
             };
             await blends.AddAsync(sheet, cancellationToken);
         }
@@ -144,78 +151,100 @@ public sealed class BlendService(
         sheet.TargetTeaCostPerKg = request.TargetTeaCostPerKg;
         sheet.PreparedBy = string.IsNullOrWhiteSpace(request.PreparedBy) ? "desk" : request.PreparedBy.Trim();
         sheet.Remarks = NullIfWhite(request.Remarks);
+        sheet.ActiveOptionKey = activeKey;
         sheet.UpdatedAt = now;
 
-        var lotMap = await blends.GetCollectedLotsAsync(lineInputs.Select(l => l.CollectionLotId).ToArray(), cancellationToken);
+        var allLotIds = optionInputs
+            .SelectMany(o => o.Lines)
+            .Select(l => l.CollectionLotId)
+            .Distinct()
+            .ToArray();
+        var lotMap = await blends.GetCollectedLotsAsync(allLotIds, cancellationToken);
         var reserved = await blends.GetReservedByLotAsync(sheet.Id, cancellationToken);
 
         var errors = new List<string>();
         var newLines = new List<BlendSheetLine>();
         var newReservations = new List<InventoryReservation>();
 
-        foreach (var input in lineInputs)
+        // Availability is shared across options for validation of the ACTIVE option only for holds.
+        // Non-active options are what-if compositions and must not exceed physical − other sheets' holds.
+        foreach (var option in optionInputs)
         {
-            if (!lotMap.TryGetValue(input.CollectionLotId, out var lot))
+            var optionKey = NormalizeOptionKey(option.Key);
+            var lineInputs = option.Lines
+                .Where(l => l.AllocatedQtyKg > 0)
+                .GroupBy(l => l.CollectionLotId)
+                .Select(g => new BlendLineInputDto(g.Key, g.Sum(x => x.AllocatedQtyKg), optionKey))
+                .ToList();
+
+            foreach (var input in lineInputs)
             {
-                errors.Add($"Collection lot {input.CollectionLotId} was not found.");
-                continue;
+                if (!lotMap.TryGetValue(input.CollectionLotId, out var lot))
+                {
+                    errors.Add($"Collection lot {input.CollectionLotId} was not found (option {optionKey}).");
+                    continue;
+                }
+
+                var boxOk = lot.SampleBox is not null
+                            && lot.SampleBox.Status is SampleBoxStatus.Received or SampleBoxStatus.Completed;
+                if (!boxOk)
+                {
+                    errors.Add($"{lot.Broker} lot {lot.LotNumber} is not from a collected sample box (option {optionKey}).");
+                    continue;
+                }
+
+                var physical = lot.NetWeightKg;
+                reserved.TryGetValue(lot.Id, out var alreadyReserved);
+                var available = physical - alreadyReserved;
+                if (input.AllocatedQtyKg > available + 0.0005m)
+                {
+                    errors.Add(
+                        $"Option {optionKey}: sale {lot.CollectionBatch?.SaleNumber}/{lot.CollectionBatch?.Year} {lot.Broker} lot {lot.LotNumber}: "
+                        + $"allocated {input.AllocatedQtyKg:0.###} exceeds available {available:0.###} kg.");
+                    continue;
+                }
+
+                var unitCost = lot.SoldPricePerKg;
+                newLines.Add(new BlendSheetLine
+                {
+                    Id = Guid.CreateVersion7(),
+                    BlendSheetId = sheet.Id,
+                    OptionKey = optionKey,
+                    CollectionLotId = lot.Id,
+                    SampleBoxId = lot.SampleBoxId,
+                    SaleNumber = lot.CollectionBatch?.SaleNumber ?? "",
+                    Year = lot.CollectionBatch?.Year ?? year,
+                    Broker = lot.Broker,
+                    LotNumber = lot.LotNumber,
+                    Estate = string.IsNullOrWhiteSpace(lot.SellerName) ? lot.GardenMark : lot.SellerName,
+                    Grade = lot.Grade,
+                    WarehouseOrBasis = lot.WarehouseOrBasis,
+                    PurchasedQtyKg = lot.NetWeightKg,
+                    PhysicalStockKg = physical,
+                    AllocatedQtyKg = input.AllocatedQtyKg,
+                    UnitCostPerKg = unitCost,
+                    QualityStatus = "Approved"
+                });
+
+                if (optionKey == activeKey)
+                {
+                    newReservations.Add(new InventoryReservation
+                    {
+                        Id = Guid.CreateVersion7(),
+                        BlendSheetId = sheet.Id,
+                        BlendVersion = sheet.Version,
+                        CollectionLotId = lot.Id,
+                        WarehouseOrBasis = lot.WarehouseOrBasis,
+                        ReservedQuantityKg = input.AllocatedQtyKg,
+                        ConsumedQuantityKg = 0,
+                        ReleasedQuantityKg = 0,
+                        Status = confirm ? InventoryReservationStatus.Approved : InventoryReservationStatus.Temp,
+                        CreatedBy = sheet.PreparedBy,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                }
             }
-
-            var boxOk = lot.SampleBox is not null
-                        && lot.SampleBox.Status is SampleBoxStatus.Received or SampleBoxStatus.Completed;
-            if (!boxOk)
-            {
-                errors.Add($"{lot.Broker} lot {lot.LotNumber} is not from a collected sample box.");
-                continue;
-            }
-
-            var physical = lot.NetWeightKg;
-            reserved.TryGetValue(lot.Id, out var alreadyReserved);
-            var available = physical - alreadyReserved;
-            if (input.AllocatedQtyKg > available + 0.0005m)
-            {
-                errors.Add(
-                    $"Sale {lot.CollectionBatch?.SaleNumber}/{lot.CollectionBatch?.Year} {lot.Broker} lot {lot.LotNumber}: "
-                    + $"allocated {input.AllocatedQtyKg:0.###} exceeds available {available:0.###} kg.");
-                continue;
-            }
-
-            var unitCost = lot.SoldPricePerKg;
-            newLines.Add(new BlendSheetLine
-            {
-                Id = Guid.CreateVersion7(),
-                BlendSheetId = sheet.Id,
-                CollectionLotId = lot.Id,
-                SampleBoxId = lot.SampleBoxId,
-                SaleNumber = lot.CollectionBatch?.SaleNumber ?? "",
-                Year = lot.CollectionBatch?.Year ?? year,
-                Broker = lot.Broker,
-                LotNumber = lot.LotNumber,
-                Estate = string.IsNullOrWhiteSpace(lot.SellerName) ? lot.GardenMark : lot.SellerName,
-                Grade = lot.Grade,
-                WarehouseOrBasis = lot.WarehouseOrBasis,
-                PurchasedQtyKg = lot.NetWeightKg,
-                PhysicalStockKg = physical,
-                AllocatedQtyKg = input.AllocatedQtyKg,
-                UnitCostPerKg = unitCost,
-                QualityStatus = "Approved"
-            });
-
-            newReservations.Add(new InventoryReservation
-            {
-                Id = Guid.CreateVersion7(),
-                BlendSheetId = sheet.Id,
-                BlendVersion = sheet.Version,
-                CollectionLotId = lot.Id,
-                WarehouseOrBasis = lot.WarehouseOrBasis,
-                ReservedQuantityKg = input.AllocatedQtyKg,
-                ConsumedQuantityKg = 0,
-                ReleasedQuantityKg = 0,
-                Status = confirm ? InventoryReservationStatus.Approved : InventoryReservationStatus.Temp,
-                CreatedBy = sheet.PreparedBy,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
         }
 
         if (errors.Count > 0)
@@ -226,7 +255,7 @@ public sealed class BlendService(
         foreach (var reservation in newReservations)
             sheet.Reservations.Add(reservation);
 
-        Recalc(sheet);
+        Recalc(sheet, activeKey);
 
         if (confirm)
         {
@@ -242,14 +271,16 @@ public sealed class BlendService(
         }
         else
         {
-            sheet.Status = sheet.Lines.Count > 0 ? BlendSheetStatus.TempAllocated : BlendSheetStatus.Draft;
+            var activeHasLines = sheet.Lines.Any(l => NormalizeOptionKey(l.OptionKey) == activeKey);
+            sheet.Status = activeHasLines ? BlendSheetStatus.TempAllocated : BlendSheetStatus.Draft;
         }
 
         await unitOfWork.SaveChangesAsync(cancellationToken);
         logger.LogInformation(
-            "Saved blend {BlendNumber} status={Status} lines={Lines} allocated={Qty}",
+            "Saved blend {BlendNumber} status={Status} activeOption={Option} lines={Lines} allocated={Qty}",
             sheet.BlendNumber,
             sheet.Status,
+            sheet.ActiveOptionKey,
             sheet.Lines.Count,
             sheet.AllocatedQuantityKg);
 
@@ -259,13 +290,56 @@ public sealed class BlendService(
             : OperationResult<BlendSheetDetailDto>.Ok(detail);
     }
 
-    private static void Recalc(BlendSheet sheet)
+    private static List<BlendOptionInputDto> NormalizeOptions(SaveBlendSheetRequest request)
     {
-        sheet.AllocatedQuantityKg = sheet.Lines.Sum(l => l.AllocatedQtyKg);
-        sheet.TotalRawTeaCost = sheet.Lines.Sum(l => l.AllocatedQtyKg * l.UnitCostPerKg);
+        if (request.Options is { Count: > 0 })
+        {
+            return request.Options
+                .Where(o => !string.IsNullOrWhiteSpace(o.Key))
+                .Select(o => new BlendOptionInputDto(
+                    NormalizeOptionKey(o.Key),
+                    string.IsNullOrWhiteSpace(o.Label) ? $"Option {NormalizeOptionKey(o.Key)}" : o.Label!.Trim(),
+                    (o.Lines ?? Array.Empty<BlendLineInputDto>())
+                        .Where(l => l.AllocatedQtyKg > 0)
+                        .ToList()))
+                .GroupBy(o => o.Key)
+                .Select(g => g.Last())
+                .OrderBy(o => o.Key)
+                .ToList();
+        }
+
+        var legacy = (request.Lines ?? Array.Empty<BlendLineInputDto>())
+            .Where(l => l.AllocatedQtyKg > 0)
+            .Select(l => new BlendLineInputDto(
+                l.CollectionLotId,
+                l.AllocatedQtyKg,
+                NormalizeOptionKey(l.OptionKey ?? "A")))
+            .ToList();
+
+        if (legacy.Count == 0)
+            return [new BlendOptionInputDto("A", "Option A", Array.Empty<BlendLineInputDto>())];
+
+        return legacy
+            .GroupBy(l => NormalizeOptionKey(l.OptionKey ?? "A"))
+            .Select(g => new BlendOptionInputDto(g.Key, $"Option {g.Key}", g.ToList()))
+            .OrderBy(o => o.Key)
+            .ToList();
+    }
+
+    private static void Recalc(BlendSheet sheet, string activeKey)
+    {
+        var activeLines = sheet.Lines.Where(l => NormalizeOptionKey(l.OptionKey) == activeKey).ToList();
+        sheet.AllocatedQuantityKg = activeLines.Sum(l => l.AllocatedQtyKg);
+        sheet.TotalRawTeaCost = activeLines.Sum(l => l.AllocatedQtyKg * l.UnitCostPerKg);
         sheet.WeightedAverageCostPerKg = sheet.AllocatedQuantityKg > 0
             ? Math.Round(sheet.TotalRawTeaCost / sheet.AllocatedQuantityKg, 4)
             : null;
+    }
+
+    internal static string NormalizeOptionKey(string? key)
+    {
+        var k = string.IsNullOrWhiteSpace(key) ? "A" : key.Trim().ToUpperInvariant();
+        return k.Length > 8 ? k[..8] : k;
     }
 
     private static string? NullIfWhite(string? value) =>
