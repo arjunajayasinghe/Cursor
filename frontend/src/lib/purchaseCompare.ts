@@ -1,4 +1,10 @@
 import type { Lot, PurchasedInvoiceLot, PurchasedInvoiceSummary } from "../api/client";
+import {
+  isVentureSalesBuyer,
+  knownSalesBuyerNames,
+  primaryVentureCode,
+  ventureSalesBuyerCodes,
+} from "./ventureBuyers";
 
 export type CompareMark = "match" | "priceDiff" | "otherBuyer" | "pdfOnly" | "salesOnly";
 
@@ -24,31 +30,16 @@ export type ComparedLot = {
   notes: string;
 };
 
-/**
- * Known Venture Tea buyer codes by broker (same company, different code each broker).
- * LC PDFs print `VT | VENTURE TEA (PVT) LTD`; LC/EB sales books often store the name only.
- * Do not confuse with lookalikes: AS VT01, BC VTC/VTE, CT VT (other buyers).
- */
-export const ventureSalesBuyerCodes: Record<string, string[]> = {
-  AS: ["VL01"],
-  BC: ["VEN"],
-  CT: ["VEN"],
-  EB: ["VEN"],
-  FW: ["VE1"],
-  JK: ["VE04"],
-  LC: ["VT"],
-  MB: ["V06"],
-};
-
-/** Fallback display names when sales files only store the short code. */
-export const knownSalesBuyerNames: Record<string, string> = {
-  VL01: "Venture Tea Pvt. Ltd.",
-  VEN: "VENTURE TEA (PVT) LTD",
-  VE1: "VENTURE TEA PVT LTD",
-  VE04: "VENTURE TEA",
-  VT: "VENTURE TEA (PVT) LTD",
-  V06: "VENTURE TEA (PVT) LTD",
-};
+// Re-export master Venture map so existing imports keep working.
+export {
+  formatVentureChip,
+  isVentureSalesBuyer,
+  knownSalesBuyerNames,
+  primaryVentureCode,
+  ventureBuyerMaster,
+  ventureDisplayName,
+  ventureSalesBuyerCodes,
+} from "./ventureBuyers";
 
 export function formatBuyer(side: Pick<SideValues, "buyerCode" | "buyerName"> | null | undefined) {
   if (!side) return "";
@@ -61,15 +52,6 @@ export function formatBuyer(side: Pick<SideValues, "buyerCode" | "buyerName"> | 
 export function buyerSearchText(side: SideValues | null | undefined) {
   if (!side) return "";
   return `${side.buyerCode} ${side.buyerName}`.trim().toLowerCase();
-}
-
-export function isVentureSalesBuyer(broker: string, buyerCode: string | null | undefined) {
-  const code = (buyerCode || "").trim();
-  if (!code) return false;
-  const upper = code.toUpperCase();
-  if (upper.includes("VENTURE")) return true;
-  const known = ventureSalesBuyerCodes[broker] ?? [];
-  return known.some((item) => upper === item || upper.startsWith(item));
 }
 
 export function matchesInvoiceBuyer(
@@ -128,7 +110,7 @@ export function splitSalesBuyer(
   if (looksLikeBuyerName(raw)) {
     const code =
       (invoice?.buyerCode || "").trim().toUpperCase() ||
-      (isVentureSalesBuyer(broker, raw) ? (ventureSalesBuyerCodes[broker]?.[0] ?? "") : "");
+      (isVentureSalesBuyer(broker, raw) ? primaryVentureCode(broker) : "");
     return { buyerCode: code, buyerName: raw };
   }
 
