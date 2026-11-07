@@ -1,8 +1,16 @@
 #!/usr/bin/env python3
-"""Seed the Phase 1 Admin workbench with Consumer Products 8.0."""
+"""Seed the Phase 1 Admin workbench with Consumer Products 8.0.
+
+WARNING: This wipes the database. The shared/live SQLite file is
+`data/aetria.db`. Do not run against that file unless you mean to replace
+all user data. Prefer `python app.py` — startup never deletes the DB.
+"""
 from __future__ import annotations
 
+import argparse
+import shutil
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from werkzeug.security import generate_password_hash
@@ -10,7 +18,7 @@ from werkzeug.security import generate_password_hash
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 
-from aetria_app.db import get_db, reset_db
+from aetria_app.db import DB_PATH, get_db, reset_db, using_postgres
 from aetria_app.services import (
     UPLOAD_ROOT,
     expand_codes,
@@ -26,9 +34,43 @@ MASTER_FILES = [
     Path("/cursor/stores/self/docs/templates/CBL_APQC_Consumer_Products_8_One_Consolidated_Sheet.xlsx"),
 ]
 
+# Outside the repo `data/` wipe path used by reset_db().
+BACKUP_DIR = Path.home() / "aetria-db-backups"
+
+
+def _backup_sqlite_if_present() -> Path | None:
+    if using_postgres() or not DB_PATH.is_file():
+        return None
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    dest = BACKUP_DIR / f"aetria-{stamp}.db"
+    shutil.copy2(DB_PATH, dest)
+    print(f"Backed up live DB to {dest}")
+    return dest
+
 
 def main() -> None:
-    reset_db()
+    parser = argparse.ArgumentParser(
+        description=(
+            "Wipe and re-seed the Aetria DB. "
+            "Refuses a populated live SQLite DB unless --force is set."
+        )
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow wiping a populated database (backs up SQLite first).",
+    )
+    args = parser.parse_args()
+
+    if args.force:
+        _backup_sqlite_if_present()
+
+    try:
+        reset_db(force=args.force)
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+
     password = generate_password_hash("password123")
     now = utcnow()
     master_path = next((path for path in MASTER_FILES if path.exists()), None)

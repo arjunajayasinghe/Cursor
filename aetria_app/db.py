@@ -413,9 +413,39 @@ def init_db() -> None:
         )
 
 
-def reset_db() -> None:
-    """Wipe existing data, then recreate schema. Safe for SQLite and Postgres."""
+def _sqlite_has_live_data() -> bool:
+    """True when the SQLite file exists and looks like a populated shared DB."""
+    if not DB_PATH.is_file():
+        return False
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            row = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='users' LIMIT 1"
+            ).fetchone()
+            if not row:
+                return False
+            count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+            return int(count) > 0
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        # Unreadable but present — treat as live so we do not unlink blindly.
+        return True
+
+
+def reset_db(*, force: bool = False) -> None:
+    """Wipe existing data, then recreate schema.
+
+    Refuses to destroy a populated SQLite file unless force=True.
+    Callers that pass force should back up first (see seed.py).
+    """
     if using_postgres():
+        if not force:
+            raise RuntimeError(
+                "Refusing to wipe Postgres without force=True "
+                "(shared/live data). Pass force only after an explicit backup."
+            )
         with get_db() as conn:
             conn.executescript(
                 """
@@ -438,6 +468,13 @@ def reset_db() -> None:
                 """
             )
     else:
+        if DB_PATH.exists() and _sqlite_has_live_data() and not force:
+            raise RuntimeError(
+                f"Refusing to delete live database at {DB_PATH}. "
+                "Shared user data is preserved. "
+                "Run `python seed.py --force` only after a dated backup "
+                "(see README). Restarts and `python app.py` never wipe this file."
+            )
         if DB_PATH.exists():
             DB_PATH.unlink()
     init_db()
