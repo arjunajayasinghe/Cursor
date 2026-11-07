@@ -260,15 +260,17 @@ export function comparePurchaseToSales(
       continue;
     }
 
-    const diffNotes = collectDiffNotes(pdfSide, salesSide);
+    // Lot number + Venture/same buyer on both sides → green Match.
+    // Soft field diffs (mark/grade/kg/price) stay in notes only — they do not turn the row orange.
+    const softNotes = collectDiffNotes(pdfSide, salesSide);
     rows.push({
       key: `both-${pdf.id}`,
       broker,
       lotNumber: pdf.lotNumber,
-      mark: diffNotes.length > 0 ? "priceDiff" : "match",
+      mark: "match",
       pdf: pdfSide,
       sales: salesSide,
-      notes: diffNotes.length > 0 ? diffNotes.join(" · ") : "Matched on lot + invoice values",
+      notes: softNotes.length > 0 ? softNotes.join(" · ") : "Lot + buyer matched",
     });
   }
 

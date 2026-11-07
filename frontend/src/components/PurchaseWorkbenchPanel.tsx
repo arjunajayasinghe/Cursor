@@ -313,7 +313,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
         </Typography>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
           <Chip size="small" color="success" label={`Match ${overall.match}`} />
-          <Chip size="small" color="warning" label={`Differs ${overall.priceDiff}`} />
+          {overall.priceDiff ? <Chip size="small" color="warning" label={`Differs ${overall.priceDiff}`} /> : null}
           <Chip size="small" label={`Other buyer ${overall.otherBuyer}`} />
           <Chip size="small" color="info" label={`PDF only ${overall.pdfOnly}`} />
           <Chip size="small" color="error" label={`Sales only ${overall.salesOnly}`} />
@@ -322,8 +322,8 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
 
       <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "rgba(26, 95, 122, 0.04)" }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} sx={{ flexWrap: "wrap" }}>
-          <LegendItem color="#2e7d32" title="Match" text="Same lot + same buyer code/name; values agree — row highlighted green." />
-          <LegendItem color="#b47814" title="Differs" text="Same buyer family; price/kg/bags/invoice/grade/mark disagree." />
+          <LegendItem color="#2e7d32" title="Match" text="Same lot number + same buyer on PDF and sales — always green." />
+          <LegendItem color="#b47814" title="Differs" text="Reserved for hard value clashes (not used when lot+buyer match)." />
           <LegendItem color="#6b4f2a" title="Other buyer" text="Lot on both sides, but sales buyer ≠ PDF buyer." />
           <LegendItem color="#1a5f7a" title="PDF only" text="On broker PDF; missing from sales file." />
           <LegendItem color="#8c3f2a" title="Sales only" text="On sales for this buyer; missing from PDF." />
@@ -401,8 +401,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
           >
             <ToggleButton value="ALL">All marks</ToggleButton>
             <ToggleButton value="ISSUES">Issues only</ToggleButton>
-            <ToggleButton value="match">Match</ToggleButton>
-            <ToggleButton value="priceDiff">Differs</ToggleButton>
+            <ToggleButton value="match">Match (green)</ToggleButton>
             <ToggleButton value="otherBuyer">Other buyer</ToggleButton>
             <ToggleButton value="pdfOnly">PDF only</ToggleButton>
             <ToggleButton value="salesOnly">Sales only</ToggleButton>
