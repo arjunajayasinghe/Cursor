@@ -108,9 +108,11 @@ export function splitSalesBuyer(
   if (!raw) return { buyerCode: "", buyerName: "" };
 
   if (looksLikeBuyerName(raw)) {
-    const code =
-      (invoice?.buyerCode || "").trim().toUpperCase() ||
-      (isVentureSalesBuyer(broker, raw) ? primaryVentureCode(broker) : "");
+    // Only attach the Venture invoice code when the sales name is actually Venture.
+    // Otherwise every LC/EB company name would inherit VT/VEN and flood Sales-only.
+    const code = isVentureSalesBuyer(broker, raw)
+      ? (invoice?.buyerCode || "").trim().toUpperCase() || primaryVentureCode(broker)
+      : "";
     return { buyerCode: code, buyerName: raw };
   }
 
