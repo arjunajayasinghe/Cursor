@@ -24,7 +24,11 @@ export type ComparedLot = {
   notes: string;
 };
 
-/** Known Venture buyer codes used on post-auction sales files, by broker. */
+/**
+ * Known Venture Tea buyer codes by broker (same company, different code each broker).
+ * LC PDFs print `VT | VENTURE TEA (PVT) LTD`; LC/EB sales books often store the name only.
+ * Do not confuse with lookalikes: AS VT01, BC VTC/VTE, CT VT (other buyers).
+ */
 export const ventureSalesBuyerCodes: Record<string, string[]> = {
   AS: ["VL01"],
   BC: ["VEN"],

@@ -43,6 +43,7 @@ import {
   comparePurchaseToSales,
   formatBuyer,
   summarizeCompare,
+  ventureSalesBuyerCodes,
 } from "../lib/purchaseCompare";
 
 type SortKey =
@@ -328,6 +329,39 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
           <LegendItem color="#1a5f7a" title="PDF only" text="On broker PDF; missing from sales file." />
           <LegendItem color="#8c3f2a" title="Sales only" text="On sales for this buyer; missing from PDF." />
         </Stack>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 1.5 }}>
+        <Typography variant="subtitle2" sx={{ mb: 0.75 }}>
+          Venture Tea buyer codes (same company, different code per broker)
+        </Typography>
+        <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1, mb: 1 }}>
+          {board.invoices.map((invoice) => {
+            const code =
+              (invoice.buyerCode || "").trim() ||
+              ventureSalesBuyerCodes[String(invoice.broker)]?.[0] ||
+              "—";
+            const name = (invoice.buyerName || "").trim() || "VENTURE TEA (PVT) LTD";
+            return (
+              <Chip
+                key={String(invoice.broker)}
+                size="small"
+                variant={brokerTab === String(invoice.broker) ? "filled" : "outlined"}
+                color={brokerTab === String(invoice.broker) ? "primary" : "default"}
+                onClick={() => {
+                  setBrokerTab(String(invoice.broker));
+                  setPage(0);
+                }}
+                label={`${invoice.broker}: ${code} | ${name}`}
+              />
+            );
+          })}
+        </Stack>
+        <Typography variant="caption" color="text.secondary">
+          LC invoice prints <strong>VT | VENTURE TEA (PVT) LTD</strong>; the LC sales book stores the company name
+          only (no short code). Lookalikes like AS <strong>VT01</strong>, BC <strong>VTC/VTE</strong>, or CT{" "}
+          <strong>VT</strong> are other buyers — not these Venture invoices.
+        </Typography>
       </Paper>
 
       {!salesReady && !saleBook.isPending ? (
