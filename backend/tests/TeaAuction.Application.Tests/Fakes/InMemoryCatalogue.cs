@@ -35,6 +35,20 @@ internal sealed class InMemoryCatalogue :
     public Task<Sale?> FindByKeyAsync(AuctionCentre centre, int year, string saleNumber, CancellationToken cancellationToken) =>
         Task.FromResult(Sales.FirstOrDefault(sale => sale.Centre == centre && sale.Year == year && sale.SaleNumber == saleNumber));
 
+    public Task<Sale?> FindByNumericKeyAsync(AuctionCentre centre, int year, string saleNumber, CancellationToken cancellationToken)
+    {
+        if (!int.TryParse(saleNumber, out var wanted))
+            return Task.FromResult<Sale?>(null);
+
+        var match = Sales
+            .Where(sale => sale.Centre == centre && sale.Year == year)
+            .Where(sale => int.TryParse(sale.SaleNumber, out var n) && n == wanted)
+            .OrderByDescending(sale => sale.Lots.Count)
+            .ThenBy(sale => sale.CreatedAt)
+            .FirstOrDefault();
+        return Task.FromResult(match);
+    }
+
     public Task AddAsync(Sale sale, CancellationToken cancellationToken)
     {
         Sales.Add(sale);
