@@ -31,8 +31,9 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
         string saleNumber,
         CancellationToken cancellationToken)
     {
+        // Do not Include Lots — appending via navigation + Include causes
+        // DbUpdateConcurrencyException on SaveChanges when the batch already has rows.
         var open = await db.CollectionBatches
-            .Include(x => x.Lots)
             .Where(x => x.Centre == centre && x.Year == year)
             .Where(x => x.Status == CollectionBatchStatus.Draft || x.Status == CollectionBatchStatus.Selected)
             .OrderByDescending(x => x.CreatedAt)
@@ -48,13 +49,40 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
         return int.TryParse(left, out var a) && int.TryParse(right, out var b) && a == b;
     }
 
-    public Task<CollectionBatch?> GetTrackedBatchAsync(Guid id, CancellationToken cancellationToken) =>
-        db.CollectionBatches.Include(x => x.Lots).FirstOrDefaultAsync(x => x.Id == id, cancellationToken);
-
     public Task AddBatchAsync(CollectionBatch batch, CancellationToken cancellationToken)
     {
         db.CollectionBatches.Add(batch);
         return Task.CompletedTask;
+    }
+
+    public Task AddLotsAsync(IReadOnlyList<CollectionLot> lots, CancellationToken cancellationToken)
+    {
+        if (lots.Count == 0) return Task.CompletedTask;
+        db.CollectionLots.AddRange(lots);
+        return Task.CompletedTask;
+    }
+
+    public async Task RecalcBatchAggregatesAsync(Guid batchId, CancellationToken cancellationToken)
+    {
+        var batch = await db.CollectionBatches.FirstOrDefaultAsync(x => x.Id == batchId, cancellationToken);
+        if (batch is null) return;
+
+        var stats = await db.CollectionLots
+            .AsNoTracking()
+            .Where(x => x.CollectionBatchId == batchId)
+            .GroupBy(_ => 1)
+            .Select(g => new
+            {
+                LotCount = g.Count(),
+                BagCount = g.Sum(x => x.Bags),
+                NetWeightKg = g.Sum(x => x.NetWeightKg)
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        batch.LotCount = stats?.LotCount ?? 0;
+        batch.BagCount = stats?.BagCount ?? 0;
+        batch.NetWeightKg = stats?.NetWeightKg ?? 0;
+        batch.UpdatedAt = DateTimeOffset.UtcNow;
     }
 
     public async Task<IReadOnlyList<PurchasedInvoiceLot>> GetInvoiceLotsAsync(
@@ -62,7 +90,9 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
         CancellationToken cancellationToken)
     {
         if (lotIds.Count == 0) return [];
+        // AsNoTracking so invoice rows are not UPDATE'd during collection SaveChanges.
         return await db.PurchasedInvoiceLots
+            .AsNoTracking()
             .Include(x => x.PurchasedInvoice)
             .Where(x => lotIds.Contains(x.Id))
             .ToListAsync(cancellationToken);
@@ -90,19 +120,44 @@ public sealed class CollectionRepository(TeaAuctionDbContext db) : ICollectionRe
             .ToDictionary(g => g.Key, g => g.First());
     }
 
-    public async Task<HashSet<Guid>> FindAlreadySelectedInvoiceLotIdsAsync(
-        Guid batchId,
+    public async Task<HashSet<Guid>> FindCollectedInvoiceLotIdsAsync(
         IReadOnlyCollection<Guid> invoiceLotIds,
         CancellationToken cancellationToken)
     {
         if (invoiceLotIds.Count == 0) return [];
         var existing = await db.CollectionLots
             .AsNoTracking()
-            .Where(x => x.CollectionBatchId == batchId && x.PurchasedInvoiceLotId != null)
+            .Where(x => x.PurchasedInvoiceLotId != null)
             .Where(x => invoiceLotIds.Contains(x.PurchasedInvoiceLotId!.Value))
             .Select(x => x.PurchasedInvoiceLotId!.Value)
             .ToListAsync(cancellationToken);
         return existing.ToHashSet();
+    }
+
+    public async Task<HashSet<Guid>> ListCollectedInvoiceLotIdsForSaleAsync(
+        AuctionCentre centre,
+        int year,
+        string saleNumber,
+        CancellationToken cancellationToken)
+    {
+        var batchIds = await db.CollectionBatches
+            .AsNoTracking()
+            .Where(x => x.Centre == centre && x.Year == year)
+            .Select(x => new { x.Id, x.SaleNumber })
+            .ToListAsync(cancellationToken);
+
+        var ids = batchIds
+            .Where(x => SaleNumbersMatch(x.SaleNumber, saleNumber))
+            .Select(x => x.Id)
+            .ToArray();
+        if (ids.Length == 0) return [];
+
+        var lotIds = await db.CollectionLots
+            .AsNoTracking()
+            .Where(x => ids.Contains(x.CollectionBatchId) && x.PurchasedInvoiceLotId != null)
+            .Select(x => x.PurchasedInvoiceLotId!.Value)
+            .ToListAsync(cancellationToken);
+        return lotIds.ToHashSet();
     }
 
     private static CollectionBatchSummaryDto MapSummary(CollectionBatch batch) =>

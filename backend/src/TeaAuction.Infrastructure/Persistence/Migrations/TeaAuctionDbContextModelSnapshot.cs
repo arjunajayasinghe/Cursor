@@ -25,7 +25,6 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TeaAuction.Domain.CollectionBatch", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -98,7 +97,6 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("TeaAuction.Domain.CollectionLot", b =>
                 {
                     b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
@@ -222,7 +220,9 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("PurchasedInvoiceLotId");
+                    b.HasIndex("PurchasedInvoiceLotId")
+                        .IsUnique()
+                        .HasFilter("purchased_invoice_lot_id IS NOT NULL");
 
                     b.HasIndex("CollectionBatchId", "Broker", "LotNumber")
                         .IsUnique();

@@ -15,6 +15,20 @@ public static class CollectionEndpoints
             .WithSummary("List collection batches (lots selected for sample/bag ops)")
             .Produces<IReadOnlyList<CollectionBatchSummaryDto>>();
 
+        group.MapGet("/collections/selected-invoice-lots", async (
+                [FromQuery] string saleNumber,
+                [FromQuery] int year,
+                CollectionService service,
+                CancellationToken cancellationToken) =>
+            {
+                var ids = await service.ListCollectedInvoiceLotIdsAsync(saleNumber, year, cancellationToken);
+                return Results.Ok(ids);
+            })
+            .WithName("ListCollectedInvoiceLotIds")
+            .WithTags("Collections")
+            .WithSummary("PDF invoice lot IDs already moved into collection for a sale (locked / no duplicates)")
+            .Produces<IReadOnlyList<Guid>>();
+
         group.MapGet("/collections/{id:guid}", async (
                 Guid id,
                 CollectionService service,

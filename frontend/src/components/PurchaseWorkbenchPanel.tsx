@@ -24,12 +24,13 @@ import {
   ToggleButtonGroup,
   Typography,
 } from "@mui/material";
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate } from "react-router-dom";
 import {
   getPurchasedInvoiceWorkbench,
   getSale,
+  listCollectedInvoiceLotIds,
   listSales,
   openPurchasedInvoicePdf,
   selectCollectionLots,
@@ -179,6 +180,29 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
     enabled: Boolean(saleNumber.trim() && year),
   });
 
+  const collectedLots = useQuery({
+    queryKey: ["collected-invoice-lots", saleNumber, year],
+    queryFn: () => listCollectedInvoiceLotIds(saleNumber.trim(), year),
+    enabled: Boolean(saleNumber.trim() && year),
+  });
+  const collectedIds = useMemo(
+    () => new Set(collectedLots.data ?? []),
+    [collectedLots.data],
+  );
+
+  useEffect(() => {
+    if (collectedIds.size === 0) return;
+    setSelectedIds((current) => {
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of current) {
+        if (collectedIds.has(id)) changed = true;
+        else next.add(id);
+      }
+      return changed ? next : current;
+    });
+  }, [collectedIds]);
+
   const salesIndex = useQuery({ queryKey: ["sales"], queryFn: listSales });
 
   const compareSaleId = useMemo(() => {
@@ -241,27 +265,38 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
 
   const pageRows = sorted.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
   const selectableRows = useMemo(
-    () => sorted.filter((row) => Boolean(row.purchasedInvoiceLotId)),
-    [sorted],
+    () =>
+      sorted.filter(
+        (row) =>
+          Boolean(row.purchasedInvoiceLotId) && !collectedIds.has(row.purchasedInvoiceLotId!),
+      ),
+    [sorted, collectedIds],
   );
   const selectedCount = selectedIds.size;
   const pageSelectableIds = pageRows
     .map((row) => row.purchasedInvoiceLotId)
-    .filter((id): id is string => Boolean(id));
+    .filter((id): id is string => typeof id === "string" && !collectedIds.has(id));
   const allPageSelected =
     pageSelectableIds.length > 0 && pageSelectableIds.every((id) => selectedIds.has(id));
   const somePageSelected = pageSelectableIds.some((id) => selectedIds.has(id));
+  const collectedCount = collectedIds.size;
 
   const sendMutation = useMutation({
-    mutationFn: () =>
-      selectCollectionLots({
+    mutationFn: () => {
+      const ids = [...selectedIds].filter((id) => !collectedIds.has(id));
+      if (ids.length === 0) {
+        throw new Error("Selected lots are already in collection.");
+      }
+      return selectCollectionLots({
         saleNumber,
         year,
-        purchasedInvoiceLotIds: [...selectedIds],
-      }),
+        purchasedInvoiceLotIds: ids,
+      });
+    },
     onSuccess: (batch) => {
       setSelectedIds(new Set());
       void queryClient.invalidateQueries({ queryKey: ["collections"] });
+      void queryClient.invalidateQueries({ queryKey: ["collected-invoice-lots", saleNumber, year] });
       navigate(`/collections/${batch.id}`);
     },
   });
@@ -272,6 +307,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
     (diffFilter === "ALL" ? 0 : 1);
 
   function toggleRow(id: string) {
+    if (collectedIds.has(id)) return;
     setSelectedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
@@ -529,6 +565,12 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
         <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} sx={{ alignItems: { sm: "center" } }}>
           <Typography variant="body2">
             Selected <strong>{selectedCount}</strong> PDF lot{selectedCount === 1 ? "" : "s"} for next stage
+            {collectedCount > 0 ? (
+              <>
+                {" "}
+                · <strong>{collectedCount}</strong> already in collection (locked)
+              </>
+            ) : null}
           </Typography>
           <Button size="small" variant="outlined" onClick={selectAllFiltered} disabled={selectableRows.length === 0}>
             Select filtered ({selectableRows.length})
@@ -537,6 +579,15 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
             Clear
           </Button>
           <Box sx={{ flex: 1 }} />
+          <Button
+            component={RouterLink}
+            to="/collections"
+            size="small"
+            variant="text"
+            disabled={collectedCount === 0}
+          >
+            Open collection
+          </Button>
           <Button
             variant="contained"
             disabled={selectedCount === 0 || sendMutation.isPending}
@@ -611,6 +662,7 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
               const buyerClash = row.mark === "otherBuyer";
               const isMatch = row.mark === "match";
               const lotId = row.purchasedInvoiceLotId;
+              const inCollection = Boolean(lotId && collectedIds.has(lotId));
               const checked = Boolean(lotId && selectedIds.has(lotId));
               return (
                 <TableRow
@@ -618,9 +670,10 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
                   hover
                   selected={checked}
                   sx={{
-                    bgcolor: style.rowBg,
-                    borderLeft: `4px solid ${style.bar}`,
-                    ...(isMatch
+                    bgcolor: inCollection ? "rgba(0, 0, 0, 0.04)" : style.rowBg,
+                    borderLeft: `4px solid ${inCollection ? "#607d8b" : style.bar}`,
+                    opacity: inCollection ? 0.72 : 1,
+                    ...(isMatch && !inCollection
                       ? {
                           "& td": { color: "#1b5e20" },
                           "& .MuiChip-root": { bgcolor: "#2e7d32", color: "#fff" },
@@ -630,14 +683,24 @@ export function PurchaseWorkbenchPanel({ saleNumber, year }: Props) {
                 >
                   <TableCell padding="checkbox">
                     <Checkbox
-                      checked={checked}
-                      disabled={!lotId}
+                      checked={inCollection || checked}
+                      disabled={!lotId || inCollection}
                       onChange={() => lotId && toggleRow(lotId)}
-                      slotProps={{ input: { "aria-label": `Select lot ${row.broker} ${row.lotNumber}` } }}
+                      slotProps={{
+                        input: {
+                          "aria-label": inCollection
+                            ? `Lot ${row.broker} ${row.lotNumber} already in collection`
+                            : `Select lot ${row.broker} ${row.lotNumber}`,
+                        },
+                      }}
                     />
                   </TableCell>
                   <TableCell>
-                    <Chip size="small" color={style.chip} label={style.label} />
+                    {inCollection ? (
+                      <Chip size="small" color="default" label="In collection" />
+                    ) : (
+                      <Chip size="small" color={style.chip} label={style.label} />
+                    )}
                   </TableCell>
                   <TableCell>{row.broker}</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>

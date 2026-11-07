@@ -257,6 +257,19 @@ export async function listCollectionBatches() {
   return (await response.json()) as CollectionBatchSummary[];
 }
 
+export async function listCollectedInvoiceLotIds(saleNumber: string, year: number) {
+  const params = new URLSearchParams({
+    saleNumber,
+    year: String(year),
+  });
+  const response = await fetch(
+    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/selected-invoice-lots?${params}`,
+    { headers: headers() },
+  );
+  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+  return (await response.json()) as string[];
+}
+
 export async function getCollectionBatch(id: string) {
   const response = await fetch(
     `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/collections/${id}`,

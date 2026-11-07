@@ -15,9 +15,11 @@ public interface ICollectionRepository
         string saleNumber,
         CancellationToken cancellationToken);
 
-    Task<CollectionBatch?> GetTrackedBatchAsync(Guid id, CancellationToken cancellationToken);
-
     Task AddBatchAsync(CollectionBatch batch, CancellationToken cancellationToken);
+
+    Task AddLotsAsync(IReadOnlyList<CollectionLot> lots, CancellationToken cancellationToken);
+
+    Task RecalcBatchAggregatesAsync(Guid batchId, CancellationToken cancellationToken);
 
     Task<IReadOnlyList<PurchasedInvoiceLot>> GetInvoiceLotsAsync(
         IReadOnlyCollection<Guid> lotIds,
@@ -28,8 +30,15 @@ public interface ICollectionRepository
         IReadOnlyCollection<(BrokerCode Broker, int LotNumber)> keys,
         CancellationToken cancellationToken);
 
-    Task<HashSet<Guid>> FindAlreadySelectedInvoiceLotIdsAsync(
-        Guid batchId,
+    /// <summary>Invoice lot IDs already copied into any collection batch (global — no duplicates).</summary>
+    Task<HashSet<Guid>> FindCollectedInvoiceLotIdsAsync(
         IReadOnlyCollection<Guid> invoiceLotIds,
+        CancellationToken cancellationToken);
+
+    /// <summary>All collected invoice lot IDs for a sale (for UI lockout).</summary>
+    Task<HashSet<Guid>> ListCollectedInvoiceLotIdsForSaleAsync(
+        AuctionCentre centre,
+        int year,
+        string saleNumber,
         CancellationToken cancellationToken);
 }

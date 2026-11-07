@@ -10,7 +10,7 @@ public sealed class CollectionBatchConfiguration : IEntityTypeConfiguration<Coll
     {
         builder.ToTable("collection_batches");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).HasColumnName("id");
+        builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.SaleId).HasColumnName("sale_id");
         builder.Property(x => x.SaleNumber).HasColumnName("sale_number").HasMaxLength(20).IsRequired();
         builder.Property(x => x.Year).HasColumnName("year");
@@ -41,7 +41,7 @@ public sealed class CollectionLotConfiguration : IEntityTypeConfiguration<Collec
     {
         builder.ToTable("collection_lots");
         builder.HasKey(x => x.Id);
-        builder.Property(x => x.Id).HasColumnName("id");
+        builder.Property(x => x.Id).HasColumnName("id").ValueGeneratedNever();
         builder.Property(x => x.CollectionBatchId).HasColumnName("collection_batch_id");
         builder.Property(x => x.PurchasedInvoiceLotId).HasColumnName("purchased_invoice_lot_id");
         builder.Property(x => x.PurchasedInvoiceId).HasColumnName("purchased_invoice_id");
@@ -66,6 +66,9 @@ public sealed class CollectionLotConfiguration : IEntityTypeConfiguration<Collec
         builder.Property(x => x.GardenMark).HasColumnName("garden_mark").HasMaxLength(80);
         builder.Property(x => x.SelectedAt).HasColumnName("selected_at");
         builder.HasIndex(x => new { x.CollectionBatchId, x.Broker, x.LotNumber }).IsUnique();
-        builder.HasIndex(x => x.PurchasedInvoiceLotId);
+        // One PDF invoice lot may appear in collection only once (no duplicates).
+        builder.HasIndex(x => x.PurchasedInvoiceLotId)
+            .IsUnique()
+            .HasFilter("purchased_invoice_lot_id IS NOT NULL");
     }
 }
