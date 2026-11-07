@@ -55,6 +55,8 @@ public sealed class PurchasedInvoiceLotConfiguration : IEntityTypeConfiguration<
         builder.Property(x => x.Broker).HasColumnName("broker").HasConversion<string>().HasMaxLength(8);
         builder.Property(x => x.LotNumber).HasColumnName("lot_number");
         builder.Property(x => x.SellingMark).HasColumnName("selling_mark").HasMaxLength(80);
+        builder.Property(x => x.SellerName).HasColumnName("seller_name").HasMaxLength(160);
+        builder.Property(x => x.SellerVatNo).HasColumnName("seller_vat_no").HasMaxLength(40);
         builder.Property(x => x.InvoiceNumber).HasColumnName("invoice_number").HasMaxLength(40);
         builder.Property(x => x.Grade).HasColumnName("grade").HasMaxLength(40);
         builder.Property(x => x.Bags).HasColumnName("bags");

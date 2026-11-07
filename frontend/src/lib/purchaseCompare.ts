@@ -18,6 +18,9 @@ export type SideValues = {
   netWeightKg: number | null;
   price: number | null;
   proceeds: number | null;
+  warehouseOrBasis?: string;
+  sellerName?: string;
+  gardenMark?: string;
 };
 
 export type ComparedLot = {
@@ -25,6 +28,8 @@ export type ComparedLot = {
   broker: string;
   lotNumber: number;
   mark: CompareMark;
+  /** Present when the row came from a purchased-invoice PDF lot (selectable for collection). */
+  purchasedInvoiceLotId?: string;
   pdf: SideValues | null;
   sales: SideValues | null;
   notes: string;
@@ -128,6 +133,7 @@ function fromPdf(pdf: PurchasedInvoiceLot, invoice: PurchasedInvoiceSummary | un
     buyerCode: (invoice?.buyerCode || "").trim(),
     buyerName: (invoice?.buyerName || "").trim(),
     sellingMark: pdf.sellingMark || "",
+    sellerName: pdf.sellerName || "",
     grade: pdf.grade || "",
     invoiceNumber: pdf.invoiceNumber || "",
     bags: pdf.bags || null,
@@ -148,12 +154,14 @@ function fromSales(
     buyerCode: buyer.buyerCode,
     buyerName: buyer.buyerName,
     sellingMark: lot.sellingMark || lot.gardenMark || "",
+    gardenMark: lot.gardenMark || "",
     grade: lot.grade || "",
     invoiceNumber: lot.invoiceNumber || "",
     bags: lot.bags == null ? null : Number(lot.bags),
     netWeightKg: lot.netWeightKg == null ? null : Number(lot.netWeightKg),
     price: lot.soldPricePerKg == null ? null : Number(lot.soldPricePerKg),
     proceeds: null,
+    warehouseOrBasis: lot.warehouseOrBasis || "",
   };
 }
 
@@ -221,6 +229,7 @@ export function comparePurchaseToSales(
         broker,
         lotNumber: pdf.lotNumber,
         mark: "pdfOnly",
+        purchasedInvoiceLotId: pdf.id,
         pdf: pdfSide,
         sales: null,
         notes: "On PDF invoice only — not on sales file",
@@ -239,6 +248,7 @@ export function comparePurchaseToSales(
         broker,
         lotNumber: pdf.lotNumber,
         mark: "otherBuyer",
+        purchasedInvoiceLotId: pdf.id,
         pdf: pdfSide,
         sales: salesSide,
         notes: blank
@@ -256,6 +266,7 @@ export function comparePurchaseToSales(
       broker,
       lotNumber: pdf.lotNumber,
       mark: "match",
+      purchasedInvoiceLotId: pdf.id,
       pdf: pdfSide,
       sales: salesSide,
       notes: softNotes.length > 0 ? softNotes.join(" · ") : "Lot + buyer matched",

@@ -68,6 +68,10 @@ public sealed class PurchasedInvoiceLot
 
     public string SellingMark { get; set; } = "";
 
+    public string SellerName { get; set; } = "";
+
+    public string SellerVatNo { get; set; } = "";
+
     public string InvoiceNumber { get; set; } = "";
 
     public string Grade { get; set; } = "";

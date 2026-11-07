@@ -7,6 +7,8 @@ import { AuctionDataExplorerPage } from "./pages/AuctionDataExplorerPage";
 import { SaleDetailPage } from "./pages/SaleDetailPage";
 import { SalesPage } from "./pages/SalesPage";
 import { InvoiceUploadPage } from "./pages/InvoiceUploadPage";
+import { CollectionDetailPage } from "./pages/CollectionDetailPage";
+import { CollectionsPage } from "./pages/CollectionsPage";
 import { PurchaseWorkbenchPage } from "./pages/PurchaseWorkbenchPage";
 import { SalesUploadPage } from "./pages/SalesUploadPage";
 import { UploadDetailPage } from "./pages/UploadDetailPage";
@@ -35,6 +37,8 @@ export function App() {
         <Route path="upload-sales" element={<SalesUploadPage />} />
         <Route path="upload-invoices" element={<InvoiceUploadPage />} />
         <Route path="purchases" element={<PurchaseWorkbenchPage />} />
+        <Route path="collections" element={<CollectionsPage />} />
+        <Route path="collections/:batchId" element={<CollectionDetailPage />} />
         <Route path="*" element={<Navigate to="/explorer" replace />} />
       </Route>
     </Routes>

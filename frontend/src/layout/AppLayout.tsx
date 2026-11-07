@@ -39,6 +39,11 @@ const navItems = [
     label: "Broker invoices",
     match: (path: string) => path.startsWith("/purchases"),
   },
+  {
+    to: "/collections",
+    label: "Collection",
+    match: (path: string) => path.startsWith("/collections"),
+  },
 ] as const;
 
 export function AppLayout() {

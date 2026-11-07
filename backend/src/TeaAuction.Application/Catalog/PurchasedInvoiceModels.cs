@@ -5,6 +5,8 @@ namespace TeaAuction.Application.Catalog;
 public sealed record PurchasedInvoiceLotRow(
     int LotNumber,
     string SellingMark,
+    string SellerName,
+    string SellerVatNo,
     string InvoiceNumber,
     string Grade,
     int Bags,

@@ -22,6 +22,214 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("TeaAuction.Domain.CollectionBatch", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("BagCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("bag_count");
+
+                    b.Property<string>("Centre")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("centre");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("LotCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_count");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("net_weight_kg");
+
+                    b.Property<DateOnly>("SaleDate")
+                        .HasColumnType("date")
+                        .HasColumnName("sale_date");
+
+                    b.Property<Guid?>("SaleId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("sale_id");
+
+                    b.Property<string>("SaleNumber")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sale_number");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<int>("Year")
+                        .HasColumnType("integer")
+                        .HasColumnName("year");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SaleId");
+
+                    b.HasIndex("Year", "SaleNumber");
+
+                    b.ToTable("collection_batches", (string)null);
+                });
+
+            modelBuilder.Entity("TeaAuction.Domain.CollectionLot", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Bags")
+                        .HasColumnType("integer")
+                        .HasColumnName("bags");
+
+                    b.Property<string>("Broker")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("broker");
+
+                    b.Property<string>("BuyerCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("buyer_code");
+
+                    b.Property<string>("BuyerName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("buyer_name");
+
+                    b.Property<Guid?>("CatalogueLotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalogue_lot_id");
+
+                    b.Property<Guid>("CollectionBatchId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("collection_batch_id");
+
+                    b.Property<string>("GardenMark")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("garden_mark");
+
+                    b.Property<string>("Grade")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("grade");
+
+                    b.Property<string>("InvoiceNumber")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("invoice_number");
+
+                    b.Property<int>("LotNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("lot_number");
+
+                    b.Property<decimal?>("NetPerBagKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("net_per_bag_kg");
+
+                    b.Property<decimal>("NetWeightKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("net_weight_kg");
+
+                    b.Property<decimal>("Proceeds")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("proceeds");
+
+                    b.Property<decimal>("ProceedsWithVat")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("proceeds_with_vat");
+
+                    b.Property<Guid?>("PurchasedInvoiceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchased_invoice_id");
+
+                    b.Property<Guid?>("PurchasedInvoiceLotId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("purchased_invoice_lot_id");
+
+                    b.Property<DateTimeOffset>("SelectedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("selected_at");
+
+                    b.Property<string>("SellerName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("seller_name");
+
+                    b.Property<string>("SellerVatNo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("seller_vat_no");
+
+                    b.Property<string>("SellingMark")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)")
+                        .HasColumnName("selling_mark");
+
+                    b.Property<decimal>("SoldPricePerKg")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("sold_price_per_kg");
+
+                    b.Property<decimal>("VatAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("vat_amount");
+
+                    b.Property<string>("WarehouseOrBasis")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("warehouse_or_basis");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PurchasedInvoiceLotId");
+
+                    b.HasIndex("CollectionBatchId", "Broker", "LotNumber")
+                        .IsUnique();
+
+                    b.ToTable("collection_lots", (string)null);
+                });
+
             modelBuilder.Entity("TeaAuction.Domain.Lot", b =>
                 {
                     b.Property<Guid>("Id")
@@ -329,6 +537,18 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("purchased_invoice_id");
 
+                    b.Property<string>("SellerName")
+                        .IsRequired()
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)")
+                        .HasColumnName("seller_name");
+
+                    b.Property<string>("SellerVatNo")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("seller_vat_no");
+
                     b.Property<string>("SellingMark")
                         .IsRequired()
                         .HasMaxLength(80)
@@ -490,6 +710,27 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                     b.ToTable("upload_batches", (string)null);
                 });
 
+            modelBuilder.Entity("TeaAuction.Domain.CollectionBatch", b =>
+                {
+                    b.HasOne("TeaAuction.Domain.Sale", "Sale")
+                        .WithMany()
+                        .HasForeignKey("SaleId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("TeaAuction.Domain.CollectionLot", b =>
+                {
+                    b.HasOne("TeaAuction.Domain.CollectionBatch", "CollectionBatch")
+                        .WithMany("Lots")
+                        .HasForeignKey("CollectionBatchId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("CollectionBatch");
+                });
+
             modelBuilder.Entity("TeaAuction.Domain.Lot", b =>
                 {
                     b.HasOne("TeaAuction.Domain.Sale", "Sale")
@@ -537,6 +778,11 @@ namespace TeaAuction.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Sale");
+                });
+
+            modelBuilder.Entity("TeaAuction.Domain.CollectionBatch", b =>
+                {
+                    b.Navigation("Lots");
                 });
 
             modelBuilder.Entity("TeaAuction.Domain.PurchasedInvoice", b =>
