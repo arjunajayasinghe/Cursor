@@ -2,6 +2,16 @@ using TeaAuction.Domain;
 
 namespace TeaAuction.Application.Dtos;
 
+public sealed record BlendLotAllocationDto(
+    Guid BlendSheetId,
+    string BlendNumber,
+    string ProductName,
+    string OptionKey,
+    bool IsActiveOption,
+    BlendSheetStatus Status,
+    decimal ReservedQtyKg,
+    string ReservationStatus);
+
 public sealed record BlendInventoryLotDto(
     Guid CollectionLotId,
     Guid? SampleBoxId,
@@ -25,7 +35,8 @@ public sealed record BlendInventoryLotDto(
     decimal AvailableQtyKg,
     decimal UnitCostPerKg,
     string QualityStatus,
-    bool CostVerified);
+    bool CostVerified,
+    IReadOnlyList<BlendLotAllocationDto> Allocations);
 
 public sealed record BlendSheetLineDto(
     Guid Id,

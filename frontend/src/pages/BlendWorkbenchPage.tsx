@@ -27,7 +27,9 @@ import AddIcon from "@mui/icons-material/Add";
 import BalanceIcon from "@mui/icons-material/Balance";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
+import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
@@ -74,6 +76,7 @@ function optionStats(alloc: AllocMap, lotsById: Map<string, BlendInventoryLot>, 
   const spread = target == null ? null : target * allocated - totalCost;
   return { rows, allocated, totalCost, wavg, remaining, variance, spread };
 }
+
 type LotSortKey =
   | "sale"
   | "broker"
@@ -81,10 +84,13 @@ type LotSortKey =
   | "sellingMark"
   | "gardenMark"
   | "grade"
+  | "physicalStockKg"
+  | "reservedQtyKg"
   | "availableQtyKg"
   | "unitCostPerKg";
 
 type ColKey =
+  | "expand"
   | "drag"
   | "sale"
   | "broker"
@@ -92,45 +98,70 @@ type ColKey =
   | "sellingMark"
   | "gardenMark"
   | "grade"
+  | "physical"
+  | "reserved"
   | "avail"
   | "cost"
   | "alloc"
   | "pct"
+  | "amount"
   | "action";
 
 const DND_TYPE = "application/x-blend-lot";
 
 const DEFAULT_LEFT_COLS: Record<ColKey, number> = {
-  drag: 28,
-  sale: 62,
-  broker: 46,
-  lot: 44,
-  sellingMark: 118,
-  gardenMark: 108,
-  grade: 68,
-  avail: 82,
-  cost: 64,
+  expand: 28,
+  drag: 26,
+  sale: 58,
+  broker: 44,
+  lot: 42,
+  sellingMark: 110,
+  gardenMark: 96,
+  grade: 62,
+  physical: 70,
+  reserved: 68,
+  avail: 70,
+  cost: 60,
   alloc: 0,
   pct: 0,
-  action: 34,
+  amount: 0,
+  action: 32,
 };
 
 const DEFAULT_RIGHT_COLS: Record<ColKey, number> = {
+  expand: 0,
   drag: 0,
-  sale: 58,
-  broker: 42,
-  lot: 42,
-  sellingMark: 100,
-  gardenMark: 90,
-  grade: 58,
+  sale: 54,
+  broker: 40,
+  lot: 40,
+  sellingMark: 96,
+  gardenMark: 86,
+  grade: 54,
+  physical: 0,
+  reserved: 0,
   avail: 0,
-  cost: 58,
-  alloc: 78,
-  pct: 48,
-  action: 34,
+  cost: 56,
+  alloc: 72,
+  pct: 44,
+  amount: 78,
+  action: 32,
 };
 
-const RESIZE_COLS: ColKey[] = ["sale", "broker", "lot", "sellingMark", "gardenMark", "grade", "avail", "cost", "alloc", "pct"];
+const RESIZE_COLS: ColKey[] = [
+  "sale",
+  "broker",
+  "lot",
+  "sellingMark",
+  "gardenMark",
+  "grade",
+  "physical",
+  "reserved",
+  "avail",
+  "cost",
+  "alloc",
+  "pct",
+  "amount",
+];
 
 export function BlendWorkbenchPage() {
   const { blendId: routeBlendId } = useParams();
@@ -173,6 +204,7 @@ export function BlendWorkbenchPage() {
   const [leftCols, setLeftCols] = useState(DEFAULT_LEFT_COLS);
   const [rightCols, setRightCols] = useState(DEFAULT_RIGHT_COLS);
   const [allocHint, setAllocHint] = useState<string | null>(null);
+  const [expandedLots, setExpandedLots] = useState<Record<string, boolean>>({});
   const [hydrated, setHydrated] = useState(!routeBlendId);
 
   const activeOption = options.find((o) => o.key === activeOptionKey) ?? options[0];
@@ -364,6 +396,12 @@ export function BlendWorkbenchPage() {
           break;
         case "grade":
           cmp = (a.grade || "").localeCompare(b.grade || "");
+          break;
+        case "physicalStockKg":
+          cmp = Number(a.physicalStockKg) - Number(b.physicalStockKg);
+          break;
+        case "reservedQtyKg":
+          cmp = Number(a.reservedQtyKg) - Number(b.reservedQtyKg);
           break;
         case "availableQtyKg":
           cmp = remainingOf(a) - remainingOf(b);
@@ -886,7 +924,7 @@ export function BlendWorkbenchPage() {
                   Available lots
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                  Drag / + takes only what’s still needed for Est. Qty · leftover Remain kg stays here
+                  Expand a lot to see where it is allocated across blends · Remain updates for this option
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                   <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 84 }} />
@@ -929,6 +967,7 @@ export function BlendWorkbenchPage() {
                   >
                     <TableHead>
                       <TableRow>
+                        <ResizeHead width={leftCols.expand} />
                         <ResizeHead width={leftCols.drag} />
                         <ResizeHead width={leftCols.sale} colKey="sale" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "sale"} direction={lotSortKey === "sale" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sale")}>
@@ -960,9 +999,19 @@ export function BlendWorkbenchPage() {
                             Type of tea
                           </TableSortLabel>
                         </ResizeHead>
+                        <ResizeHead width={leftCols.physical} align="right" colKey="physical" onResize={(e, k) => startColResize("left", k, e)}>
+                          <TableSortLabel active={lotSortKey === "physicalStockKg"} direction={lotSortKey === "physicalStockKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("physicalStockKg")}>
+                            Physical
+                          </TableSortLabel>
+                        </ResizeHead>
+                        <ResizeHead width={leftCols.reserved} align="right" colKey="reserved" onResize={(e, k) => startColResize("left", k, e)}>
+                          <TableSortLabel active={lotSortKey === "reservedQtyKg"} direction={lotSortKey === "reservedQtyKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("reservedQtyKg")}>
+                            Reserved
+                          </TableSortLabel>
+                        </ResizeHead>
                         <ResizeHead width={leftCols.avail} align="right" colKey="avail" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "availableQtyKg"} direction={lotSortKey === "availableQtyKg" ? lotSortDir : "asc"} onClick={() => toggleLotSort("availableQtyKg")}>
-                            Remain kg
+                            Remain
                           </TableSortLabel>
                         </ResizeHead>
                         <ResizeHead width={leftCols.cost} align="right" colKey="cost" onResize={(e, k) => startColResize("left", k, e)}>
@@ -978,53 +1027,127 @@ export function BlendWorkbenchPage() {
                         const dragging = draggingId === lot.collectionLotId;
                         const remain = remainingOf(lot);
                         const inBlend = (alloc[lot.collectionLotId] || 0) > 0;
+                        const expanded = Boolean(expandedLots[lot.collectionLotId]);
+                        const localUses = options
+                          .map((o) => ({ key: o.key, label: o.label, qty: o.alloc[lot.collectionLotId] || 0, active: o.key === activeOptionKey }))
+                          .filter((x) => x.qty > 0);
+                        const serverUses = lot.allocations ?? [];
+                        const useCount = localUses.length + serverUses.length;
                         return (
-                          <TableRow
-                            key={lot.collectionLotId}
-                            hover
-                            draggable={!locked}
-                            onDragStart={(e) => {
-                              e.dataTransfer.setData(DND_TYPE, lot.collectionLotId);
-                              e.dataTransfer.effectAllowed = "copy";
-                              setDraggingId(lot.collectionLotId);
-                            }}
-                            onDragEnd={() => setDraggingId(null)}
-                            sx={{
-                              cursor: locked ? "default" : "grab",
-                              opacity: dragging ? 0.45 : 1,
-                              bgcolor: dragging ? "action.selected" : inBlend ? "rgba(26,95,122,0.04)" : undefined,
-                              "&:active": { cursor: locked ? "default" : "grabbing" },
-                            }}
-                          >
-                            <TableCell sx={{ width: leftCols.drag, color: "text.secondary" }}>
-                              <DragIndicatorIcon sx={{ fontSize: 16 }} />
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.sale, fontWeight: 700 }}>
-                              {lot.saleNumber}/{lot.year}
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.broker }}>{lot.broker}</TableCell>
-                            <TableCell align="right" sx={{ width: leftCols.lot, fontWeight: 700 }}>
-                              {lot.lotNumber}
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.sellingMark }} title={lot.sellingMark || lot.estate || ""}>
-                              {lot.sellingMark || lot.estate || "—"}
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.gardenMark }} title={lot.gardenMark || ""}>
-                              {lot.gardenMark || "—"}
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.grade }}>{lot.grade || "—"}</TableCell>
-                            <TableCell align="right" sx={{ width: leftCols.avail, fontWeight: inBlend ? 700 : 400 }}>
-                              {remain.toFixed(2)}
-                            </TableCell>
-                            <TableCell align="right" sx={{ width: leftCols.cost, fontWeight: 600 }}>
-                              {Number(lot.unitCostPerKg).toFixed(2)}
-                            </TableCell>
-                            <TableCell sx={{ width: leftCols.action }}>
-                              <IconButton size="small" disabled={locked} aria-label="Add lot" onClick={() => addLot(lot)}>
-                                <AddIcon sx={{ fontSize: 16 }} />
-                              </IconButton>
-                            </TableCell>
-                          </TableRow>
+                          <Fragment key={lot.collectionLotId}>
+                            <TableRow
+                              hover
+                              draggable={!locked}
+                              onDragStart={(e) => {
+                                e.dataTransfer.setData(DND_TYPE, lot.collectionLotId);
+                                e.dataTransfer.effectAllowed = "copy";
+                                setDraggingId(lot.collectionLotId);
+                              }}
+                              onDragEnd={() => setDraggingId(null)}
+                              sx={{
+                                cursor: locked ? "default" : "grab",
+                                opacity: dragging ? 0.45 : 1,
+                                bgcolor: dragging ? "action.selected" : inBlend ? "rgba(26,95,122,0.04)" : undefined,
+                                "&:active": { cursor: locked ? "default" : "grabbing" },
+                              }}
+                            >
+                              <TableCell sx={{ width: leftCols.expand, px: 0.25 }}>
+                                <IconButton
+                                  size="small"
+                                  aria-label={expanded ? "Collapse allocations" : "Expand allocations"}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setExpandedLots((m) => ({ ...m, [lot.collectionLotId]: !m[lot.collectionLotId] }));
+                                  }}
+                                  sx={{ p: 0.25 }}
+                                >
+                                  {expanded ? (
+                                    <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+                                  ) : (
+                                    <KeyboardArrowRightIcon sx={{ fontSize: 16, opacity: useCount ? 1 : 0.35 }} />
+                                  )}
+                                </IconButton>
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.drag, color: "text.secondary" }}>
+                                <DragIndicatorIcon sx={{ fontSize: 16 }} />
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.sale, fontWeight: 700 }}>
+                                {lot.saleNumber}/{lot.year}
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.broker }}>{lot.broker}</TableCell>
+                              <TableCell align="right" sx={{ width: leftCols.lot, fontWeight: 700 }}>
+                                {lot.lotNumber}
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.sellingMark }} title={lot.sellingMark || lot.estate || ""}>
+                                {lot.sellingMark || lot.estate || "—"}
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.gardenMark }} title={lot.gardenMark || ""}>
+                                {lot.gardenMark || "—"}
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.grade }}>{lot.grade || "—"}</TableCell>
+                              <TableCell align="right" sx={{ width: leftCols.physical }}>
+                                {Number(lot.physicalStockKg).toFixed(2)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ width: leftCols.reserved }}>
+                                {Number(lot.reservedQtyKg).toFixed(2)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ width: leftCols.avail, fontWeight: inBlend ? 700 : 400 }}>
+                                {remain.toFixed(2)}
+                              </TableCell>
+                              <TableCell align="right" sx={{ width: leftCols.cost, fontWeight: 600 }}>
+                                {Number(lot.unitCostPerKg).toFixed(2)}
+                              </TableCell>
+                              <TableCell sx={{ width: leftCols.action }}>
+                                <IconButton size="small" disabled={locked} aria-label="Add lot" onClick={() => addLot(lot)}>
+                                  <AddIcon sx={{ fontSize: 16 }} />
+                                </IconButton>
+                              </TableCell>
+                            </TableRow>
+                            {expanded ? (
+                              <TableRow>
+                                <TableCell
+                                  colSpan={12}
+                                  sx={{
+                                    py: 1,
+                                    px: 1.5,
+                                    bgcolor: "rgba(26,95,122,0.04)",
+                                    whiteSpace: "normal",
+                                    overflow: "visible",
+                                  }}
+                                >
+                                  <Typography variant="caption" sx={{ fontWeight: 700, display: "block", mb: 0.5 }}>
+                                    Allocations for lot {lot.lotNumber}
+                                  </Typography>
+                                  {localUses.length === 0 && serverUses.length === 0 ? (
+                                    <Typography variant="caption" color="text.secondary">
+                                      Not allocated to any blend yet.
+                                    </Typography>
+                                  ) : (
+                                    <Stack spacing={0.5}>
+                                      {localUses.map((u) => (
+                                        <Typography key={`local-${u.key}`} variant="caption" sx={{ display: "block" }}>
+                                          This sheet · {u.label}
+                                          {u.active ? " (editing)" : ""} · {u.qty.toFixed(2)} kg
+                                          {!sheetId ? " · unsaved" : " · draft/local"}
+                                        </Typography>
+                                      ))}
+                                      {serverUses.map((a) => (
+                                        <Typography
+                                          key={`${a.blendSheetId}-${a.optionKey}`}
+                                          variant="caption"
+                                          sx={{ display: "block" }}
+                                        >
+                                          {a.blendNumber} · {a.productName || "Blend"} · Option {a.optionKey}
+                                          {a.isActiveOption ? " (active)" : ""} · {Number(a.reservedQtyKg).toFixed(2)} kg ·{" "}
+                                          {a.status}/{a.reservationStatus}
+                                        </Typography>
+                                      ))}
+                                    </Stack>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ) : null}
+                          </Fragment>
                         );
                       })}
                     </TableBody>
@@ -1161,6 +1284,9 @@ export function BlendWorkbenchPage() {
                         <ResizeHead width={rightCols.cost} align="right" colKey="cost" onResize={(e, k) => startColResize("right", k, e)}>
                           Cost/kg
                         </ResizeHead>
+                        <ResizeHead width={rightCols.amount} align="right" colKey="amount" onResize={(e, k) => startColResize("right", k, e)}>
+                          Amount
+                        </ResizeHead>
                         <ResizeHead width={rightCols.action} />
                       </TableRow>
                     </TableHead>
@@ -1200,6 +1326,9 @@ export function BlendWorkbenchPage() {
                           </TableCell>
                           <TableCell align="right" sx={{ width: rightCols.cost, fontWeight: 600 }}>
                             {row.unit.toFixed(2)}
+                          </TableCell>
+                          <TableCell align="right" sx={{ width: rightCols.amount, fontWeight: 600 }}>
+                            {row.cost.toFixed(2)}
                           </TableCell>
                           <TableCell sx={{ width: rightCols.action }}>
                             <IconButton size="small" disabled={locked} aria-label="Remove lot" onClick={() => removeLot(row.id)}>

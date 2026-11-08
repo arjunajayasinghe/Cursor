@@ -149,6 +149,71 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
             .Take(500)
             .ToListAsync(cancellationToken);
 
+        var lotIds = lots.Select(l => l.Id).ToList();
+        var allocationRows = await db.InventoryReservations.AsNoTracking()
+            .Where(r => ActiveReservationStatuses.Contains(r.Status))
+            .Where(r => lotIds.Contains(r.CollectionLotId))
+            .Where(r => excludeBlendSheetId == null || r.BlendSheetId != excludeBlendSheetId.Value)
+            .Join(
+                db.BlendSheets.AsNoTracking(),
+                r => r.BlendSheetId,
+                s => s.Id,
+                (r, s) => new { Reservation = r, Sheet = s })
+            .ToListAsync(cancellationToken);
+
+        // Active-option lines for each sheet (fallback Option A) so expand view shows which option holds the lot.
+        var sheetIds = allocationRows.Select(x => x.Sheet.Id).Distinct().ToList();
+        var activeLines = await db.BlendSheetLines.AsNoTracking()
+            .Where(l => sheetIds.Contains(l.BlendSheetId) && lotIds.Contains(l.CollectionLotId))
+            .ToListAsync(cancellationToken);
+        var lineBySheetLot = activeLines
+            .GroupBy(l => (l.BlendSheetId, l.CollectionLotId, Option: string.IsNullOrWhiteSpace(l.OptionKey) ? "A" : l.OptionKey.Trim().ToUpperInvariant()))
+            .ToDictionary(g => g.Key, g => g.Sum(x => x.AllocatedQtyKg));
+
+        var allocationsByLot = allocationRows
+            .GroupBy(x => x.Reservation.CollectionLotId)
+            .ToDictionary(
+                g => g.Key,
+                g => (IReadOnlyList<BlendLotAllocationDto>)g.Select(x =>
+                {
+                    var activeKey = string.IsNullOrWhiteSpace(x.Sheet.ActiveOptionKey)
+                        ? "A"
+                        : x.Sheet.ActiveOptionKey.Trim().ToUpperInvariant();
+                    // Prefer the active option line qty; if missing, use reservation qty.
+                    var optionKey = activeKey;
+                    var qty = x.Reservation.ReservedQuantityKg - x.Reservation.ConsumedQuantityKg - x.Reservation.ReleasedQuantityKg;
+                    if (lineBySheetLot.TryGetValue((x.Sheet.Id, x.Reservation.CollectionLotId, activeKey), out var activeQty) && activeQty > 0)
+                        qty = activeQty;
+                    else
+                    {
+                        // Lot may sit on a non-active saved option — surface that option key if present.
+                        var match = activeLines
+                            .Where(l => l.BlendSheetId == x.Sheet.Id && l.CollectionLotId == x.Reservation.CollectionLotId)
+                            .OrderByDescending(l => (string.IsNullOrWhiteSpace(l.OptionKey) ? "A" : l.OptionKey.Trim().ToUpperInvariant()) == activeKey)
+                            .ThenByDescending(l => l.AllocatedQtyKg)
+                            .FirstOrDefault();
+                        if (match is not null)
+                        {
+                            optionKey = string.IsNullOrWhiteSpace(match.OptionKey) ? "A" : match.OptionKey.Trim().ToUpperInvariant();
+                            qty = match.AllocatedQtyKg;
+                        }
+                    }
+
+                    return new BlendLotAllocationDto(
+                        x.Sheet.Id,
+                        x.Sheet.BlendNumber,
+                        x.Sheet.ProductName,
+                        optionKey,
+                        optionKey == activeKey,
+                        x.Sheet.Status,
+                        qty < 0 ? 0 : qty,
+                        x.Reservation.Status.ToString());
+                })
+                .Where(a => a.ReservedQtyKg > 0)
+                .OrderBy(a => a.BlendNumber)
+                .ThenBy(a => a.OptionKey)
+                .ToList());
+
         return lots.Select(l =>
         {
             var physical = l.NetWeightKg;
@@ -156,6 +221,7 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
             var available = physical - resQty;
             if (available < 0) available = 0;
             var cost = l.SoldPricePerKg;
+            allocationsByLot.TryGetValue(l.Id, out var allocs);
             return new BlendInventoryLotDto(
                 l.Id,
                 l.SampleBoxId,
@@ -175,8 +241,9 @@ public sealed class BlendRepository(TeaAuctionDbContext db) : IBlendRepository
                 available,
                 cost,
                 "Approved",
-                cost > 0);
-        }).Where(x => x.AvailableQtyKg > 0).ToList();
+                cost > 0,
+                allocs ?? Array.Empty<BlendLotAllocationDto>());
+        }).Where(x => x.AvailableQtyKg > 0 || x.Allocations.Count > 0).ToList();
     }
 
     public async Task<Dictionary<Guid, CollectionLot>> GetCollectedLotsAsync(

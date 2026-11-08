@@ -446,6 +446,17 @@ export async function reverseSampleBoxes(input: {
   return (await response.json()) as SampleBoxSummary[];
 }
 
+export type BlendLotAllocation = {
+  blendSheetId: string;
+  blendNumber: string;
+  productName: string;
+  optionKey: string;
+  isActiveOption: boolean;
+  status: string;
+  reservedQtyKg: number;
+  reservationStatus: string;
+};
+
 export type BlendInventoryLot = {
   collectionLotId: string;
   sampleBoxId?: string | null;
@@ -466,6 +477,7 @@ export type BlendInventoryLot = {
   unitCostPerKg: number;
   qualityStatus: string;
   costVerified: boolean;
+  allocations?: BlendLotAllocation[];
 };
 
 export type BlendSheetLine = {
