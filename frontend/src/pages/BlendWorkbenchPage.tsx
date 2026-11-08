@@ -94,7 +94,6 @@ type LotSortKey =
   | "sale"
   | "broker"
   | "lotNumber"
-  | "sellingMark"
   | "gardenMark"
   | "grade"
   | "physicalStockKg"
@@ -108,7 +107,6 @@ type ColKey =
   | "sale"
   | "broker"
   | "lot"
-  | "sellingMark"
   | "gardenMark"
   | "grade"
   | "physical"
@@ -128,8 +126,7 @@ const DEFAULT_LEFT_COLS: Record<ColKey, number> = {
   sale: 58,
   broker: 44,
   lot: 42,
-  sellingMark: 110,
-  gardenMark: 96,
+  gardenMark: 120,
   grade: 62,
   physical: 70,
   reserved: 68,
@@ -147,8 +144,7 @@ const DEFAULT_RIGHT_COLS: Record<ColKey, number> = {
   sale: 54,
   broker: 40,
   lot: 40,
-  sellingMark: 96,
-  gardenMark: 86,
+  gardenMark: 110,
   grade: 54,
   physical: 0,
   reserved: 0,
@@ -164,7 +160,6 @@ const RESIZE_COLS: ColKey[] = [
   "sale",
   "broker",
   "lot",
-  "sellingMark",
   "gardenMark",
   "grade",
   "physical",
@@ -406,9 +401,6 @@ export function BlendWorkbenchPage() {
           break;
         case "lotNumber":
           cmp = a.lotNumber - b.lotNumber;
-          break;
-        case "sellingMark":
-          cmp = (a.sellingMark || a.estate || "").localeCompare(b.sellingMark || b.estate || "");
           break;
         case "gardenMark":
           cmp = (a.gardenMark || "").localeCompare(b.gardenMark || "");
@@ -1271,11 +1263,6 @@ export function BlendWorkbenchPage() {
                             Lot
                           </TableSortLabel>
                         </ResizeHead>
-                        <ResizeHead width={leftCols.sellingMark} colKey="sellingMark" onResize={(e, k) => startColResize("left", k, e)}>
-                          <TableSortLabel active={lotSortKey === "sellingMark"} direction={lotSortKey === "sellingMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("sellingMark")}>
-                            Estate marking
-                          </TableSortLabel>
-                        </ResizeHead>
                         <ResizeHead width={leftCols.gardenMark} colKey="gardenMark" onResize={(e, k) => startColResize("left", k, e)}>
                           <TableSortLabel active={lotSortKey === "gardenMark"} direction={lotSortKey === "gardenMark" ? lotSortDir : "asc"} onClick={() => toggleLotSort("gardenMark")}>
                             Garden
@@ -1365,11 +1352,8 @@ export function BlendWorkbenchPage() {
                               <TableCell align="right" sx={{ width: leftCols.lot, fontWeight: 700 }}>
                                 {lot.lotNumber}
                               </TableCell>
-                              <TableCell sx={{ width: leftCols.sellingMark }} title={lot.sellingMark || lot.estate || ""}>
-                                {lot.sellingMark || lot.estate || "—"}
-                              </TableCell>
-                              <TableCell sx={{ width: leftCols.gardenMark }} title={lot.gardenMark || ""}>
-                                {lot.gardenMark || "—"}
+                              <TableCell sx={{ width: leftCols.gardenMark }} title={lot.gardenMark || lot.estate || ""}>
+                                {lot.gardenMark || lot.estate || "—"}
                               </TableCell>
                               <TableCell sx={{ width: leftCols.grade }}>{lot.grade || "—"}</TableCell>
                               <TableCell align="right" sx={{ width: leftCols.physical }}>
@@ -1393,7 +1377,7 @@ export function BlendWorkbenchPage() {
                             {expanded ? (
                               <TableRow>
                                 <TableCell
-                                  colSpan={12}
+                                  colSpan={11}
                                   sx={{
                                     py: 1,
                                     px: 1.5,
@@ -1554,9 +1538,6 @@ export function BlendWorkbenchPage() {
                         <ResizeHead width={rightCols.lot} align="right" colKey="lot" onResize={(e, k) => startColResize("right", k, e)}>
                           Lot
                         </ResizeHead>
-                        <ResizeHead width={rightCols.sellingMark} colKey="sellingMark" onResize={(e, k) => startColResize("right", k, e)}>
-                          Estate marking
-                        </ResizeHead>
                         <ResizeHead width={rightCols.gardenMark} colKey="gardenMark" onResize={(e, k) => startColResize("right", k, e)}>
                           Garden
                         </ResizeHead>
@@ -1588,11 +1569,8 @@ export function BlendWorkbenchPage() {
                           <TableCell align="right" sx={{ width: rightCols.lot, fontWeight: 700 }}>
                             {row.lot?.lotNumber ?? "—"}
                           </TableCell>
-                          <TableCell sx={{ width: rightCols.sellingMark }} title={row.lot?.sellingMark || row.lot?.estate || ""}>
-                            {row.lot?.sellingMark || row.lot?.estate || "—"}
-                          </TableCell>
-                          <TableCell sx={{ width: rightCols.gardenMark }} title={row.lot?.gardenMark || ""}>
-                            {row.lot?.gardenMark || "—"}
+                          <TableCell sx={{ width: rightCols.gardenMark }} title={row.lot?.gardenMark || row.lot?.estate || ""}>
+                            {row.lot?.gardenMark || row.lot?.estate || "—"}
                           </TableCell>
                           <TableCell sx={{ width: rightCols.grade }}>{row.lot?.grade || "—"}</TableCell>
                           <TableCell align="right" sx={{ width: rightCols.alloc }}>
