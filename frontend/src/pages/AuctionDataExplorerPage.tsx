@@ -57,8 +57,19 @@ export function AuctionDataExplorerPage() {
   const saleIdParam = params.get("saleId") ?? "";
   const activeColor = tabColors[tab];
 
-  const sales = useQuery({ queryKey: ["sales"], queryFn: listSales });
-  const invoiceIndex = useQuery({ queryKey: ["purchased-invoices"], queryFn: listPurchasedInvoices });
+  const sales = useQuery({
+    queryKey: ["sales"],
+    queryFn: listSales,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+    refetchOnWindowFocus: true,
+  });
+  const invoiceIndex = useQuery({
+    queryKey: ["purchased-invoices"],
+    queryFn: listPurchasedInvoices,
+    retry: 2,
+    refetchOnWindowFocus: true,
+  });
   const orderedSales = useMemo(() => {
     const byKey = new Map<string, SaleSummary>();
     for (const row of sales.data ?? []) {

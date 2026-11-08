@@ -10,9 +10,15 @@ export type UploadDetail = components["schemas"]["UploadDetailDto"];
 export type UploadAccepted = components["schemas"]["UploadAcceptedDto"];
 export type AuctionCentre = components["schemas"]["AuctionCentre"];
 
+function apiBaseUrl() {
+  const configured = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+  if (configured) return configured.replace(/\/$/, "");
+  // Same-origin relative base — works with Vite proxy and Cursor port forwards.
+  return "";
+}
+
 const api = createClient<paths>({
-  // Prefer same-origin (Vite /api proxy) when VITE_API_BASE_URL is unset or blank.
-  baseUrl: (import.meta.env.VITE_API_BASE_URL ?? "").trim() || "",
+  baseUrl: apiBaseUrl(),
 });
 
 
@@ -29,18 +35,47 @@ function failure(error: unknown, status: number) {
   return `The request failed (${status}).`;
 }
 
+function networkErrorMessage(error: unknown) {
+  const msg = error instanceof Error ? error.message : String(error ?? "");
+  if (/failed to fetch|networkerror|load failed|fetch failed/i.test(msg)) {
+    return "Cannot reach the API (network). Check the backend is running, then retry.";
+  }
+  return msg || "Cannot reach the API.";
+}
+
 async function unwrap<T>(pending: Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
-  const result = await pending;
-  if (result.response.ok && result.data !== undefined) return result.data;
-  throw new Error(failure(result.error, result.response.status));
+  try {
+    const result = await pending;
+    if (result.response.ok && result.data !== undefined) return result.data;
+    throw new Error(failure(result.error, result.response.status));
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("The request failed")) throw error;
+    if (error instanceof Error && error.message === "The API key was rejected.") throw error;
+    if (error instanceof Error && error.message === "That record was not found.") throw error;
+    throw new Error(networkErrorMessage(error));
+  }
 }
 
-export function listSales() {
-  return unwrap(api.GET("/api/sales", { headers: headers() }));
+export async function listSales() {
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/sales`, { headers: headers() });
+    if (!response.ok) throw new Error(failure(undefined, response.status));
+    return (await response.json()) as SaleSummary[];
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("The request failed")) throw error;
+    throw new Error(networkErrorMessage(error));
+  }
 }
 
-export function getSale(id: string) {
-  return unwrap(api.GET("/api/sales/{id}", { params: { path: { id } }, headers: headers() }));
+export async function getSale(id: string) {
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/sales/${encodeURIComponent(id)}`, { headers: headers() });
+    if (!response.ok) throw new Error(failure(undefined, response.status));
+    return (await response.json()) as SaleDetail;
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("The request failed")) throw error;
+    throw new Error(networkErrorMessage(error));
+  }
 }
 
 export function listUploads() {
@@ -275,12 +310,14 @@ export async function getPurchasedInvoiceWorkbench(saleNumber?: string, year?: n
 }
 
 export async function listPurchasedInvoices() {
-  const response = await fetch(
-    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/purchased-invoices`,
-    { headers: headers() },
-  );
-  if (!response.ok) throw new Error(`The request failed (${response.status}).`);
-  return (await response.json()) as PurchasedInvoiceSummary[];
+  try {
+    const response = await fetch(`${apiBaseUrl()}/api/purchased-invoices`, { headers: headers() });
+    if (!response.ok) throw new Error(`The request failed (${response.status}).`);
+    return (await response.json()) as PurchasedInvoiceSummary[];
+  } catch (error) {
+    if (error instanceof Error && error.message.startsWith("The request failed")) throw error;
+    throw new Error(networkErrorMessage(error));
+  }
 }
 
 export async function openPurchasedInvoicePdf(id: string) {
@@ -574,12 +611,11 @@ export async function listBlendInventory(input?: {
   const q = params.toString();
   let response: Response;
   try {
-    response = await fetch(
-      `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/inventory${q ? `?${q}` : ""}`,
-      { headers: headers() },
-    );
-  } catch {
-    throw new Error("Cannot reach the API (network). Check the backend is running, then retry.");
+    response = await fetch(`${apiBaseUrl()}/api/blends/inventory${q ? `?${q}` : ""}`, {
+      headers: headers(),
+    });
+  } catch (error) {
+    throw new Error(networkErrorMessage(error));
   }
   if (!response.ok) throw new Error(`The request failed (${response.status}).`);
   return (await response.json()) as BlendInventoryLot[];
