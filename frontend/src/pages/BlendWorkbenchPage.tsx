@@ -10,14 +10,17 @@ import {
   DialogTitle,
   Divider,
   IconButton,
+  LinearProgress,
   Paper,
   Stack,
+  Tab,
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableRow,
   TableSortLabel,
+  Tabs,
   TextField,
   ToggleButton,
   ToggleButtonGroup,
@@ -25,10 +28,13 @@ import {
 } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import BalanceIcon from "@mui/icons-material/Balance";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import DeleteOutlineIcon from "@mui/icons-material/DeleteOutlined";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
+import HistoryIcon from "@mui/icons-material/History";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
+import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
 import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -194,6 +200,7 @@ export function BlendWorkbenchPage() {
   const [options, setOptions] = useState<LocalOption[]>(emptyOptions);
   const [activeOptionKey, setActiveOptionKey] = useState("A");
   const [compareOpen, setCompareOpen] = useState(false);
+  const [workTab, setWorkTab] = useState<"options" | "tasting" | "cost" | "notes">("options");
   const [saleFilter, setSaleFilter] = useState("");
   const [brokerFilter, setBrokerFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
@@ -442,6 +449,16 @@ export function BlendWorkbenchPage() {
   const totalCost = composition.reduce((s, r) => s + r.cost, 0);
   const wavg = totalAllocated > 0 ? totalCost / totalAllocated : 0;
   const remainingTarget = (Number(targetQty) || 0) - totalAllocated;
+  const targetQtyNum = Number(targetQty) || 0;
+  const completionPct = targetQtyNum > 0 ? Math.min(100, (totalAllocated / targetQtyNum) * 100) : 0;
+  const targetPriceNum = targetPrice === "" ? null : Number(targetPrice);
+  const costVariance = targetPriceNum == null ? null : wavg - targetPriceNum;
+  const costVariancePct =
+    targetPriceNum != null && targetPriceNum > 0 && costVariance != null
+      ? (costVariance / targetPriceNum) * 100
+      : null;
+  const estBlendValue = targetPriceNum == null ? null : targetPriceNum * totalAllocated;
+  const grossSpread = estBlendValue == null ? null : estBlendValue - totalCost;
   const locked = status === "Confirmed" || status === "Cancelled" || status === "Rejected";
 
   const allSheets = sheets.data ?? [];
@@ -607,12 +624,15 @@ export function BlendWorkbenchPage() {
         sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}
       >
         <div>
-          <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.14em" }}>
-            Tea Operations · Blending
+          <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: "0.12em" }}>
+            Tea Operations › Blending › Blend Workbench
           </Typography>
-          <Typography variant="h4" sx={{ lineHeight: 1.15 }}>
-            Blend workbench
-          </Typography>
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <LayersOutlinedIcon sx={{ color: "primary.main", fontSize: 28 }} />
+            <Typography variant="h4" sx={{ lineHeight: 1.15 }}>
+              Blend Workbench
+            </Typography>
+          </Stack>
         </div>
         <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", alignItems: "center" }}>
           <ToggleButtonGroup
@@ -630,6 +650,14 @@ export function BlendWorkbenchPage() {
             <ToggleButton value="approved">Approved ({approvedSheets.length})</ToggleButton>
             <ToggleButton value="history">History</ToggleButton>
           </ToggleButtonGroup>
+          <Button
+            size="small"
+            variant="outlined"
+            startIcon={<HistoryIcon />}
+            onClick={() => setShelf("history")}
+          >
+            History
+          </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={resetNew}>
             New
           </Button>
@@ -704,18 +732,26 @@ export function BlendWorkbenchPage() {
         <>
           {/* Header strip */}
           <Paper
+            elevation={0}
             sx={{
-              p: 1.75,
+              p: 2,
+              border: "1px solid",
+              borderColor: "divider",
               background:
-                "linear-gradient(135deg, rgba(26,95,122,0.06) 0%, rgba(244,241,234,0.9) 45%, rgba(255,255,255,0.95) 100%)",
+                "linear-gradient(120deg, rgba(31,77,58,0.08) 0%, rgba(255,253,248,0.98) 42%, #fffdf8 100%)",
             }}
           >
-            <Stack direction={{ xs: "column", lg: "row" }} spacing={1.25} useFlexGap sx={{ flexWrap: "wrap" }}>
+            <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} useFlexGap sx={{ flexWrap: "wrap", alignItems: { lg: "flex-end" } }}>
               <Field label="Blend No.">
-                <Typography sx={{ fontWeight: 800, minWidth: 140, pt: 0.75 }}>{blendNumber}</Typography>
-              </Field>
-              <Field label="Status">
-                <Chip size="small" label={status} sx={{ mt: 0.75 }} />
+                <Stack direction="row" spacing={1} sx={{ alignItems: "center", pt: 0.5 }}>
+                  <Typography sx={{ fontWeight: 800, minWidth: 130 }}>{blendNumber}</Typography>
+                  <Chip
+                    size="small"
+                    label={status}
+                    color={status === "Confirmed" ? "success" : status === "TempAllocated" ? "warning" : "default"}
+                    variant={status === "Draft" ? "outlined" : "filled"}
+                  />
+                </Stack>
               </Field>
               <Field label="Product / Blend" grow>
                 <TextField
@@ -742,7 +778,7 @@ export function BlendWorkbenchPage() {
                   value={customerName}
                   disabled={locked}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  sx={{ width: 140 }}
+                  sx={{ width: 150 }}
                 />
               </Field>
               <Field label="Est. Qty kg">
@@ -755,14 +791,14 @@ export function BlendWorkbenchPage() {
                   sx={{ width: 110 }}
                 />
               </Field>
-              <Field label="Est. Avg Price">
+              <Field label="Target price / kg">
                 <TextField
                   size="small"
                   type="number"
                   value={targetPrice}
                   disabled={locked}
                   onChange={(e) => setTargetPrice(e.target.value === "" ? "" : Number(e.target.value))}
-                  sx={{ width: 110 }}
+                  sx={{ width: 120 }}
                 />
               </Field>
               <Field label="Tea cost / kg">
@@ -784,125 +820,212 @@ export function BlendWorkbenchPage() {
                   sx={{ width: 72 }}
                 />
               </Field>
-            </Stack>
-            <Stack direction={{ xs: "column", sm: "row" }} spacing={1} sx={{ mt: 1.5, alignItems: { sm: "center" } }}>
-              <TextField
-                size="small"
-                fullWidth
-                placeholder="Remarks / blend instructions"
-                value={remarks}
-                disabled={locked}
-                onChange={(e) => setRemarks(e.target.value)}
-              />
-              <Button variant="outlined" disabled={locked || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
-                {saveMutation.isPending ? "Saving…" : "Save"}
-              </Button>
-              <Button
-                variant="contained"
-                disabled={locked || confirmMutation.isPending || totalAllocated <= 0}
-                onClick={() => confirmMutation.mutate()}
-              >
-                {confirmMutation.isPending ? "Confirming…" : "Confirm"}
-              </Button>
+              <Stack direction="row" spacing={1} sx={{ ml: { lg: "auto" } }}>
+                <Button variant="outlined" disabled={locked || saveMutation.isPending} onClick={() => saveMutation.mutate()}>
+                  {saveMutation.isPending ? "Saving…" : "Save draft"}
+                </Button>
+                <Button
+                  variant="contained"
+                  disabled={locked || confirmMutation.isPending || totalAllocated <= 0}
+                  onClick={() => confirmMutation.mutate()}
+                >
+                  {confirmMutation.isPending ? "Confirming…" : "Confirm"}
+                </Button>
+              </Stack>
             </Stack>
             {(saveMutation.isError || confirmMutation.isError) && (
-              <Alert severity="error" sx={{ mt: 1 }}>
+              <Alert severity="error" sx={{ mt: 1.25 }}>
                 {saveMutation.error?.message || confirmMutation.error?.message}
               </Alert>
             )}
           </Paper>
 
-          {/* Compare options */}
-          <Paper sx={{ p: 1.5 }}>
-            <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ alignItems: { md: "center" }, justifyContent: "space-between" }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
-                Blend options · active holds inventory
-              </Typography>
-              <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
-                <Button size="small" startIcon={<AddIcon />} disabled={locked || options.length >= 8} onClick={addOption}>
-                  Add option
-                </Button>
-                <Button size="small" disabled={locked} onClick={duplicateActiveOption}>
-                  Duplicate active
-                </Button>
-                <Button size="small" variant="outlined" startIcon={<BalanceIcon />} onClick={() => setCompareOpen(true)}>
-                  Compare options
-                </Button>
-              </Stack>
-            </Stack>
-            <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap", mt: 1.25 }}>
-              {options.map((opt) => {
-                const stats = optionStats(opt.alloc, lotsById, targetQty, targetPrice);
-                const active = opt.key === activeOptionKey;
-                return (
+          {/* Section tabs */}
+          <Paper elevation={0} sx={{ border: "1px solid", borderColor: "divider", overflow: "hidden" }}>
+            <Tabs
+              value={workTab}
+              onChange={(_, v: typeof workTab) => {
+                setWorkTab(v);
+                if (v === "cost") setCompareOpen(true);
+              }}
+              variant="scrollable"
+              allowScrollButtonsMobile
+              sx={{
+                minHeight: 46,
+                px: 1,
+                bgcolor: "rgba(31,77,58,0.05)",
+                borderBottom: "1px solid",
+                borderColor: "divider",
+                "& .MuiTab-root": { textTransform: "none", fontWeight: 650, minHeight: 46 },
+                "& .Mui-selected": { color: "primary.main" },
+                "& .MuiTabs-indicator": { height: 3, bgcolor: "primary.main" },
+              }}
+            >
+              <Tab value="options" label="Blend Options" />
+              <Tab value="tasting" label="Tasting & Quality" />
+              <Tab value="cost" label="Cost Comparison" />
+              <Tab value="notes" label="Notes & Attachments" />
+            </Tabs>
+
+            {workTab === "notes" ? (
+              <Box sx={{ p: 2 }}>
+                <TextField
+                  size="small"
+                  fullWidth
+                  multiline
+                  minRows={4}
+                  label="Remarks / blend instructions"
+                  value={remarks}
+                  disabled={locked}
+                  onChange={(e) => setRemarks(e.target.value)}
+                />
+              </Box>
+            ) : workTab === "tasting" ? (
+              <Box sx={{ p: 2 }}>
+                <Alert severity="info">
+                  Tasting & quality notes stay on this tab. Cupping scores and lab checks can be added later — blend
+                  allocation stays on Blend Options.
+                </Alert>
+              </Box>
+            ) : (
+              <Box sx={{ p: 1.75 }}>
+                <Stack direction={{ xs: "column", md: "row" }} spacing={1} sx={{ justifyContent: "space-between", mb: 1.25 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 700 }}>
+                    Options · only the active option reserves inventory
+                  </Typography>
+                  <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap" }}>
+                    <Button size="small" disabled={locked} onClick={duplicateActiveOption}>
+                      Duplicate active
+                    </Button>
+                    <Button size="small" variant="outlined" startIcon={<BalanceIcon />} onClick={() => setCompareOpen(true)}>
+                      Compare options
+                    </Button>
+                  </Stack>
+                </Stack>
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                  {options.map((opt) => {
+                    const stats = optionStats(opt.alloc, lotsById, targetQty, targetPrice);
+                    const active = opt.key === activeOptionKey;
+                    return (
+                      <Paper
+                        key={opt.key}
+                        variant="outlined"
+                        onClick={() => setActiveOptionKey(opt.key)}
+                        sx={{
+                          px: 1.5,
+                          py: 1.15,
+                          minWidth: 168,
+                          cursor: "pointer",
+                          borderWidth: active ? 2 : 1,
+                          borderColor: active ? "primary.main" : "divider",
+                          bgcolor: active ? "rgba(31,77,58,0.07)" : "background.paper",
+                          position: "relative",
+                        }}
+                      >
+                        <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 1 }}>
+                          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                            {active ? <CheckCircleIcon sx={{ fontSize: 16, color: "primary.main" }} /> : null}
+                            <Typography variant="body2" sx={{ fontWeight: 800 }}>
+                              {opt.label}
+                              {active ? " · Active" : ""}
+                            </Typography>
+                          </Stack>
+                          {options.length > 1 && !locked ? (
+                            <IconButton
+                              size="small"
+                              aria-label={`Remove ${opt.label}`}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeOption(opt.key);
+                              }}
+                            >
+                              <DeleteOutlineIcon sx={{ fontSize: 14 }} />
+                            </IconButton>
+                          ) : null}
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.35 }}>
+                          Tea cost {currency} {stats.wavg.toFixed(2)}/kg
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                          {stats.allocated.toFixed(1)} kg · {stats.rows.length} lots
+                        </Typography>
+                      </Paper>
+                    );
+                  })}
                   <Paper
-                    key={opt.key}
                     variant="outlined"
-                    onClick={() => setActiveOptionKey(opt.key)}
+                    onClick={() => {
+                      if (!locked && options.length < 8) addOption();
+                    }}
                     sx={{
-                      px: 1.25,
-                      py: 1,
-                      minWidth: 150,
-                      cursor: "pointer",
-                      borderWidth: active ? 2 : 1,
-                      borderColor: active ? "primary.main" : "divider",
-                      bgcolor: active ? "rgba(26,95,122,0.06)" : "background.paper",
+                      px: 1.5,
+                      py: 1.15,
+                      minWidth: 140,
+                      cursor: locked || options.length >= 8 ? "default" : "pointer",
+                      borderStyle: "dashed",
+                      display: "grid",
+                      placeContent: "center",
+                      color: "text.secondary",
+                      opacity: locked || options.length >= 8 ? 0.5 : 1,
                     }}
                   >
-                    <Stack direction="row" sx={{ justifyContent: "space-between", alignItems: "center", gap: 1 }}>
-                      <Typography variant="body2" sx={{ fontWeight: 800 }}>
-                        {opt.label}
-                        {active ? " · Active" : ""}
+                    <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                      <AddIcon fontSize="small" />
+                      <Typography variant="body2" sx={{ fontWeight: 700 }}>
+                        Add option
                       </Typography>
-                      {options.length > 1 && !locked ? (
-                        <IconButton
-                          size="small"
-                          aria-label={`Remove ${opt.label}`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeOption(opt.key);
-                          }}
-                        >
-                          <DeleteOutlineIcon sx={{ fontSize: 14 }} />
-                        </IconButton>
-                      ) : null}
                     </Stack>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                      {stats.allocated.toFixed(1)} kg · WAVG {stats.wavg.toFixed(2)}
-                    </Typography>
-                    {stats.variance != null && (
-                      <Typography
-                        variant="caption"
-                        sx={{ color: stats.variance > 0 ? "error.main" : "success.main", fontWeight: 600 }}
-                      >
-                        {stats.variance >= 0 ? "+" : ""}
-                        {stats.variance.toFixed(2)} vs target
-                      </Typography>
-                    )}
                   </Paper>
-                );
-              })}
-            </Stack>
+                </Stack>
+              </Box>
+            )}
           </Paper>
 
-          {/* Live totals (active option) */}
-          <Stack direction="row" spacing={1.5} useFlexGap sx={{ flexWrap: "wrap" }}>
-            <MiniStat label={`Allocated (${activeOptionKey})`} value={`${totalAllocated.toFixed(2)} kg`} />
-            <MiniStat label="To target" value={`${remainingTarget.toFixed(2)} kg`} tone={Math.abs(remainingTarget) < 0.001 ? "ok" : "warn"} />
-            <MiniStat label="WAVG cost" value={wavg.toFixed(2)} />
-            <MiniStat label="Raw tea cost" value={totalCost.toFixed(2)} />
-            <MiniStat
-              label="Lots in blend"
-              value={String(composition.length)}
+          {(workTab === "options" || workTab === "cost") && (
+            <>
+          {/* KPI strip */}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: {
+                xs: "repeat(2, minmax(0, 1fr))",
+                sm: "repeat(4, minmax(0, 1fr))",
+                lg: "repeat(8, minmax(0, 1fr))",
+              },
+              gap: 1,
+            }}
+          >
+            <KpiTile label="Target qty" value={`${targetQtyNum.toFixed(2)} kg`} />
+            <KpiTile label={`Allocated (${activeOptionKey})`} value={`${totalAllocated.toFixed(2)} kg`} />
+            <KpiTile
+              label="Remaining"
+              value={`${remainingTarget.toFixed(2)} kg`}
+              tone={Math.abs(remainingTarget) < 0.001 ? "ok" : "warn"}
             />
-            {targetPrice !== "" && (
-              <MiniStat
-                label="Cost vs price"
-                value={`${wavg - Number(targetPrice) >= 0 ? "+" : ""}${(wavg - Number(targetPrice)).toFixed(2)}`}
-                tone={wavg - Number(targetPrice) <= 0 ? "ok" : "warn"}
-              />
-            )}
-          </Stack>
+            <KpiTile
+              label="Completion"
+              value={`${completionPct.toFixed(1)}%`}
+              tone={completionPct >= 99.9 ? "ok" : undefined}
+              progress={completionPct}
+            />
+            <KpiTile label="WAVG tea cost" value={`${currency} ${wavg.toFixed(2)}`} />
+            <KpiTile
+              label="Target price"
+              value={targetPriceNum == null ? "—" : `${currency} ${targetPriceNum.toFixed(2)}`}
+            />
+            <KpiTile
+              label="Variance"
+              value={
+                costVariance == null
+                  ? "—"
+                  : `${costVariance >= 0 ? "+" : ""}${currency} ${costVariance.toFixed(2)}${
+                      costVariancePct == null ? "" : ` (${costVariancePct >= 0 ? "+" : ""}${costVariancePct.toFixed(1)}%)`
+                    }`
+              }
+              tone={costVariance == null ? undefined : costVariance <= 0 ? "ok" : "warn"}
+            />
+            <KpiTile label="Lots in blend" value={String(composition.length)} />
+          </Box>
           {allocHint && (
             <Alert severity="info" onClose={() => setAllocHint(null)} sx={{ py: 0 }}>
               {allocHint}
@@ -923,11 +1046,11 @@ export function BlendWorkbenchPage() {
             {/* Left: available grid */}
             <Paper sx={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 520 }}>
               <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                  Available lots
+                <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.98rem" }}>
+                  Available auction inventory
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                  Expand a lot to see where it is allocated across blends · Remain updates for this option
+                  Expand a row to see allocations across blends · Remain updates for the active option
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                   <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 84 }} />
@@ -1205,12 +1328,12 @@ export function BlendWorkbenchPage() {
               <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
                 <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                   <Box>
-                    <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.95rem" }}>
-                      Blend box · Option {activeOptionKey}
+                    <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.98rem" }}>
+                      Blend composition — Option {activeOptionKey}
                       {dropActive ? " · drop to add" : ""}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
-                      Same columns · edit Alloc kg · unused Remain kg stays on the left
+                      Edit Alloc kg · leftover Remain stays in inventory
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={0.5}>
@@ -1352,8 +1475,50 @@ export function BlendWorkbenchPage() {
                   </Table>
                 )}
               </Box>
+              <Box
+                sx={{
+                  px: 1.25,
+                  py: 1,
+                  borderTop: "1px solid",
+                  borderColor: "divider",
+                  bgcolor: "rgba(31,77,58,0.04)",
+                }}
+              >
+                <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
+                  <KpiTile
+                    compact
+                    label="Target price"
+                    value={targetPriceNum == null ? "—" : `${currency} ${targetPriceNum.toFixed(2)}`}
+                  />
+                  <KpiTile compact label="Tea cost (WAVG)" value={`${currency} ${wavg.toFixed(2)}`} />
+                  <KpiTile
+                    compact
+                    label="Variance"
+                    value={
+                      costVariance == null
+                        ? "—"
+                        : `${costVariance >= 0 ? "+" : ""}${currency} ${Math.abs(costVariance).toFixed(2)}`
+                    }
+                    tone={costVariance == null ? undefined : costVariance <= 0 ? "ok" : "warn"}
+                  />
+                  <KpiTile
+                    compact
+                    label="Est. blend value"
+                    value={estBlendValue == null ? "—" : `${currency} ${estBlendValue.toFixed(2)}`}
+                  />
+                  <KpiTile compact label="Est. tea cost" value={`${currency} ${totalCost.toFixed(2)}`} />
+                  <KpiTile
+                    compact
+                    label="Gross spread"
+                    value={grossSpread == null ? "—" : `${currency} ${grossSpread.toFixed(2)}`}
+                    tone={grossSpread == null ? undefined : grossSpread >= 0 ? "ok" : "warn"}
+                  />
+                </Stack>
+              </Box>
             </Paper>
           </Box>
+            </>
+          )}
 
           <Button component={RouterLink} to="/collections" size="small" sx={{ alignSelf: "flex-start" }}>
             Back to collection
@@ -1498,23 +1663,58 @@ function Field({
   );
 }
 
-function MiniStat({ label, value, tone }: { label: string; value: string; tone?: "ok" | "warn" }) {
+function KpiTile({
+  label,
+  value,
+  tone,
+  progress,
+  compact,
+}: {
+  label: string;
+  value: string;
+  tone?: "ok" | "warn";
+  progress?: number;
+  compact?: boolean;
+}) {
   return (
     <Paper
       variant="outlined"
       sx={{
-        px: 1.5,
-        py: 1,
-        minWidth: 110,
+        px: compact ? 1.1 : 1.35,
+        py: compact ? 0.85 : 1.1,
+        minWidth: compact ? 108 : 0,
+        flex: compact ? "1 1 120px" : undefined,
         borderColor: tone === "ok" ? "success.light" : tone === "warn" ? "warning.light" : "divider",
+        bgcolor: tone === "ok" ? "rgba(46,125,50,0.04)" : tone === "warn" ? "rgba(237,108,2,0.05)" : "background.paper",
       }}
     >
-      <Typography variant="caption" color="text.secondary">
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.2 }}>
         {label}
       </Typography>
-      <Typography variant="subtitle2" sx={{ fontWeight: 800 }}>
+      <Typography
+        variant={compact ? "body2" : "subtitle2"}
+        sx={{
+          fontWeight: 800,
+          mt: 0.2,
+          color: tone === "warn" ? "error.dark" : tone === "ok" ? "success.dark" : "text.primary",
+          wordBreak: "break-word",
+        }}
+      >
         {value}
       </Typography>
+      {typeof progress === "number" ? (
+        <LinearProgress
+          variant="determinate"
+          value={Math.max(0, Math.min(100, progress))}
+          sx={{
+            mt: 0.75,
+            height: 6,
+            borderRadius: 99,
+            bgcolor: "rgba(31,77,58,0.12)",
+            "& .MuiLinearProgress-bar": { bgcolor: "primary.main", borderRadius: 99 },
+          }}
+        />
+      ) : null}
     </Paper>
   );
 }
