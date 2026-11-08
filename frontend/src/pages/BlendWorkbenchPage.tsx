@@ -11,6 +11,10 @@ import {
   Divider,
   IconButton,
   LinearProgress,
+  ListItemIcon,
+  ListItemText,
+  Menu,
+  MenuItem,
   Paper,
   Stack,
   Tab,
@@ -35,6 +39,9 @@ import HistoryIcon from "@mui/icons-material/History";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import KeyboardArrowRightIcon from "@mui/icons-material/KeyboardArrowRight";
 import LayersOutlinedIcon from "@mui/icons-material/LayersOutlined";
+import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import PrintOutlinedIcon from "@mui/icons-material/PrintOutlined";
 import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link as RouterLink, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -201,6 +208,8 @@ export function BlendWorkbenchPage() {
   const [activeOptionKey, setActiveOptionKey] = useState("A");
   const [compareOpen, setCompareOpen] = useState(false);
   const [workTab, setWorkTab] = useState<"options" | "tasting" | "cost" | "notes">("options");
+  const [headerMenuEl, setHeaderMenuEl] = useState<null | HTMLElement>(null);
+  const [editingHeader, setEditingHeader] = useState(false);
   const [saleFilter, setSaleFilter] = useState("");
   const [brokerFilter, setBrokerFilter] = useState("");
   const [gradeFilter, setGradeFilter] = useState("");
@@ -568,6 +577,10 @@ export function BlendWorkbenchPage() {
 
   function addOption() {
     if (locked) return;
+    if (options.length >= 12) {
+      setAllocHint("Maximum 12 options on one blend sheet.");
+      return;
+    }
     const key = nextOptionKey(options);
     setOptions((prev) => [...prev, { key, label: `Option ${key}`, alloc: {} }]);
     setActiveOptionKey(key);
@@ -730,57 +743,187 @@ export function BlendWorkbenchPage() {
         </Paper>
       ) : (
         <>
-          {/* Header strip */}
+          {/* Header info bar (mockup-style) */}
           <Paper
             elevation={0}
             sx={{
-              p: 2,
+              px: 2,
+              py: 1.35,
               border: "1px solid",
               borderColor: "divider",
-              background:
-                "linear-gradient(120deg, rgba(31,77,58,0.08) 0%, rgba(255,253,248,0.98) 42%, #fffdf8 100%)",
+              bgcolor: "background.paper",
             }}
           >
-            <Stack direction={{ xs: "column", lg: "row" }} spacing={1.5} useFlexGap sx={{ flexWrap: "wrap", alignItems: { lg: "flex-end" } }}>
-              <Field label="Blend No.">
-                <Stack direction="row" spacing={1} sx={{ alignItems: "center", pt: 0.5 }}>
-                  <Typography sx={{ fontWeight: 800, minWidth: 130 }}>{blendNumber}</Typography>
-                  <Chip
-                    size="small"
-                    label={status}
-                    color={status === "Confirmed" ? "success" : status === "TempAllocated" ? "warning" : "default"}
-                    variant={status === "Draft" ? "outlined" : "filled"}
-                  />
-                </Stack>
-              </Field>
-              <Field label="Product / Blend" grow>
-                <TextField
+            <Stack
+              direction={{ xs: "column", md: "row" }}
+              spacing={{ xs: 1.25, md: 0 }}
+              sx={{ alignItems: { md: "center" }, justifyContent: "space-between", gap: { md: 0 } }}
+            >
+              <Stack
+                direction={{ xs: "column", sm: "row" }}
+                spacing={0}
+                divider={<Divider orientation="vertical" flexItem sx={{ display: { xs: "none", sm: "block" }, mx: 2 }} />}
+                sx={{ flexWrap: "wrap", alignItems: { sm: "stretch" }, flex: 1, minWidth: 0 }}
+              >
+                <HeaderInfo label="Blend No.">
+                  <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: "1rem" }}>{blendNumber}</Typography>
+                    <Chip
+                      size="small"
+                      label={status}
+                      sx={{
+                        height: 22,
+                        fontWeight: 700,
+                        bgcolor:
+                          status === "Draft"
+                            ? "rgba(237,108,2,0.12)"
+                            : status === "Confirmed"
+                              ? "rgba(46,125,50,0.12)"
+                              : "rgba(31,77,58,0.1)",
+                        color:
+                          status === "Draft"
+                            ? "#b54708"
+                            : status === "Confirmed"
+                              ? "success.dark"
+                              : "primary.main",
+                      }}
+                    />
+                  </Stack>
+                </HeaderInfo>
+                <HeaderInfo label="Product / Blend">
+                  {editingHeader && !locked ? (
+                    <TextField
+                      size="small"
+                      variant="standard"
+                      value={productName}
+                      onChange={(e) => setProductName(e.target.value)}
+                      placeholder="Product / blend"
+                      sx={{ minWidth: 140 }}
+                    />
+                  ) : (
+                    <Typography sx={{ fontWeight: 700 }}>{productName || "—"}</Typography>
+                  )}
+                </HeaderInfo>
+                <HeaderInfo label="Sales Order">
+                  <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+                    {editingHeader && !locked ? (
+                      <TextField
+                        size="small"
+                        variant="standard"
+                        value={salesOrderRef}
+                        onChange={(e) => setSalesOrderRef(e.target.value)}
+                        placeholder="SO…"
+                        sx={{ width: 120 }}
+                      />
+                    ) : (
+                      <Typography sx={{ fontWeight: 700 }}>{salesOrderRef || "—"}</Typography>
+                    )}
+                    {salesOrderRef ? (
+                      <IconButton size="small" aria-label="Open sales order" sx={{ p: 0.25 }} disabled>
+                        <OpenInNewIcon sx={{ fontSize: 14 }} />
+                      </IconButton>
+                    ) : null}
+                  </Stack>
+                </HeaderInfo>
+                <HeaderInfo label="Customer">
+                  {editingHeader && !locked ? (
+                    <TextField
+                      size="small"
+                      variant="standard"
+                      value={customerName}
+                      onChange={(e) => setCustomerName(e.target.value)}
+                      placeholder="Customer"
+                      sx={{ minWidth: 140 }}
+                    />
+                  ) : (
+                    <Typography sx={{ fontWeight: 700 }}>{customerName || "—"}</Typography>
+                  )}
+                </HeaderInfo>
+              </Stack>
+
+              <Stack direction="row" spacing={1} sx={{ flexShrink: 0, alignItems: "center", pt: { xs: 0.5, md: 0 } }}>
+                <Button size="small" variant="outlined" startIcon={<HistoryIcon />} onClick={() => setShelf("history")}>
+                  History
+                </Button>
+                <Button
                   size="small"
-                  fullWidth
-                  placeholder="e.g. BOPF Export Blend"
-                  value={productName}
-                  disabled={locked}
-                  onChange={(e) => setProductName(e.target.value)}
-                />
-              </Field>
-              <Field label="Sales Order">
-                <TextField
+                  variant="outlined"
+                  startIcon={<PrintOutlinedIcon />}
+                  onClick={() => window.print()}
+                >
+                  Print
+                </Button>
+                <IconButton
                   size="small"
-                  value={salesOrderRef}
-                  disabled={locked}
-                  onChange={(e) => setSalesOrderRef(e.target.value)}
-                  sx={{ width: 130 }}
-                />
-              </Field>
-              <Field label="Customer">
-                <TextField
-                  size="small"
-                  value={customerName}
-                  disabled={locked}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  sx={{ width: 150 }}
-                />
-              </Field>
+                  aria-label="More actions"
+                  onClick={(e) => setHeaderMenuEl(e.currentTarget)}
+                  sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1.5 }}
+                >
+                  <MoreHorizIcon fontSize="small" />
+                </IconButton>
+                <Menu
+                  anchorEl={headerMenuEl}
+                  open={Boolean(headerMenuEl)}
+                  onClose={() => setHeaderMenuEl(null)}
+                >
+                  <MenuItem
+                    disabled={locked}
+                    onClick={() => {
+                      setEditingHeader((v) => !v);
+                      setHeaderMenuEl(null);
+                    }}
+                  >
+                    <ListItemText>{editingHeader ? "Done editing header" : "Edit header fields"}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    disabled={locked || saveMutation.isPending}
+                    onClick={() => {
+                      setHeaderMenuEl(null);
+                      saveMutation.mutate();
+                    }}
+                  >
+                    <ListItemText>Save draft</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    disabled={locked || confirmMutation.isPending || totalAllocated <= 0}
+                    onClick={() => {
+                      setHeaderMenuEl(null);
+                      confirmMutation.mutate();
+                    }}
+                  >
+                    <ListItemText>Confirm blend</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    onClick={() => {
+                      setHeaderMenuEl(null);
+                      setCompareOpen(true);
+                    }}
+                  >
+                    <ListItemIcon>
+                      <BalanceIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Compare options</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    disabled={locked}
+                    onClick={() => {
+                      setHeaderMenuEl(null);
+                      addOption();
+                    }}
+                  >
+                    <ListItemIcon>
+                      <AddIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>Add option</ListItemText>
+                  </MenuItem>
+                </Menu>
+              </Stack>
+            </Stack>
+          </Paper>
+
+          {/* Targets / save bar */}
+          <Paper elevation={0} sx={{ px: 2, py: 1.25, border: "1px solid", borderColor: "divider" }}>
+            <Stack direction={{ xs: "column", lg: "row" }} spacing={1.25} useFlexGap sx={{ flexWrap: "wrap", alignItems: { lg: "flex-end" } }}>
               <Field label="Est. Qty kg">
                 <TextField
                   size="small"
@@ -955,18 +1098,18 @@ export function BlendWorkbenchPage() {
                   <Paper
                     variant="outlined"
                     onClick={() => {
-                      if (!locked && options.length < 8) addOption();
+                      if (!locked && options.length < 12) addOption();
                     }}
                     sx={{
                       px: 1.5,
                       py: 1.15,
                       minWidth: 140,
-                      cursor: locked || options.length >= 8 ? "default" : "pointer",
+                      cursor: locked || options.length >= 12 ? "default" : "pointer",
                       borderStyle: "dashed",
                       display: "grid",
                       placeContent: "center",
                       color: "text.secondary",
-                      opacity: locked || options.length >= 8 ? 0.5 : 1,
+                      opacity: locked || options.length >= 12 ? 0.5 : 1,
                     }}
                   >
                     <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
@@ -1039,18 +1182,28 @@ export function BlendWorkbenchPage() {
               gridTemplateColumns: { xs: "1fr", lg: "minmax(0, 1.85fr) minmax(320px, 1fr)" },
               gap: 1.5,
               alignItems: "stretch",
-              minHeight: 580,
+              height: { xs: "auto", lg: 560 },
+              minHeight: { xs: 480, lg: 560 },
+              maxHeight: { lg: 560 },
               flex: 1,
             }}
           >
-            {/* Left: available grid */}
-            <Paper sx={{ display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 520 }}>
-              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+            {/* Left: available grid — fixed height, internal scroll */}
+            <Paper
+              sx={{
+                display: "flex",
+                flexDirection: "column",
+                overflow: "hidden",
+                height: { xs: 480, lg: "100%" },
+                minHeight: 0,
+              }}
+            >
+              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
                 <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.98rem" }}>
                   Available auction inventory
                 </Typography>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
-                  Expand a row to see allocations across blends · Remain updates for the active option
+                  Fixed panel · scroll lots inside · expand a row for multi-blend allocations
                 </Typography>
                 <Stack direction="row" spacing={1} sx={{ mt: 1, flexWrap: "wrap" }}>
                   <TextField size="small" label="Sale" value={saleFilter} onChange={(e) => setSaleFilter(e.target.value)} sx={{ width: 84 }} />
@@ -1058,7 +1211,7 @@ export function BlendWorkbenchPage() {
                   <TextField size="small" label="Type / grade" value={gradeFilter} onChange={(e) => setGradeFilter(e.target.value)} sx={{ width: 110 }} />
                 </Stack>
               </Box>
-              <Box sx={{ overflow: "auto", flex: 1 }}>
+              <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }}>
                 {inventory.isPending ? (
                   <Box sx={{ p: 2 }}>
                     <CircularProgress size={24} />
@@ -1317,7 +1470,8 @@ export function BlendWorkbenchPage() {
                 display: "flex",
                 flexDirection: "column",
                 overflow: "hidden",
-                minHeight: 520,
+                height: { xs: 480, lg: "100%" },
+                minHeight: 0,
                 border: dropActive ? "2px solid" : "1px solid",
                 borderColor: dropActive ? "primary.main" : "divider",
                 boxShadow: dropActive ? "0 0 0 4px rgba(26,95,122,0.12)" : undefined,
@@ -1325,7 +1479,7 @@ export function BlendWorkbenchPage() {
                 transition: "border-color 120ms ease, box-shadow 120ms ease, background-color 120ms ease",
               }}
             >
-              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider" }}>
+              <Box sx={{ px: 1.5, py: 1, borderBottom: "1px solid", borderColor: "divider", flexShrink: 0 }}>
                 <Stack direction="row" spacing={1} sx={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                   <Box>
                     <Typography variant="subtitle1" sx={{ fontWeight: 700, fontSize: "0.98rem" }}>
@@ -1346,12 +1500,12 @@ export function BlendWorkbenchPage() {
                   </Stack>
                 </Stack>
               </Box>
-              <Box sx={{ overflow: "auto", flex: 1 }}>
+              <Box sx={{ overflow: "auto", flex: 1, minHeight: 0 }}>
                 {composition.length === 0 ? (
                   <Box
                     sx={{
                       m: 1.25,
-                      minHeight: 260,
+                      minHeight: 180,
                       p: 3,
                       border: "2px dashed",
                       borderColor: dropActive ? "primary.main" : "divider",
@@ -1482,6 +1636,7 @@ export function BlendWorkbenchPage() {
                   borderTop: "1px solid",
                   borderColor: "divider",
                   bgcolor: "rgba(31,77,58,0.04)",
+                  flexShrink: 0,
                 }}
               >
                 <Stack direction="row" spacing={1} useFlexGap sx={{ flexWrap: "wrap" }}>
@@ -1641,6 +1796,21 @@ function ResizeHead({
         />
       ) : null}
     </TableCell>
+  );
+}
+
+function HeaderInfo({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Box sx={{ py: 0.25, pr: { sm: 0.5 }, minWidth: 0 }}>
+      <Typography
+        variant="caption"
+        color="text.secondary"
+        sx={{ display: "block", mb: 0.2, fontSize: "0.7rem", letterSpacing: "0.02em" }}
+      >
+        {label}
+      </Typography>
+      {children}
+    </Box>
   );
 }
 
