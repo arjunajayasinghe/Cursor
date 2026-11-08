@@ -330,6 +330,9 @@ export function BlendWorkbenchPage() {
         grade: gradeFilter || undefined,
       }),
     enabled: shelf === "work" && hydrated,
+    retry: 2,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 4000),
+    refetchOnWindowFocus: true,
   });
 
   const saveMutation = useMutation({
@@ -938,7 +941,15 @@ export function BlendWorkbenchPage() {
                     <CircularProgress size={24} />
                   </Box>
                 ) : inventory.isError ? (
-                  <Alert severity="error" sx={{ m: 1 }}>
+                  <Alert
+                    severity="error"
+                    sx={{ m: 1 }}
+                    action={
+                      <Button color="inherit" size="small" onClick={() => void inventory.refetch()}>
+                        Retry
+                      </Button>
+                    }
+                  >
                     {inventory.error.message}
                   </Alert>
                 ) : availableLots.length === 0 ? (

@@ -572,10 +572,15 @@ export async function listBlendInventory(input?: {
   if (input?.grade) params.set("grade", input.grade);
   if (input?.estate) params.set("estate", input.estate);
   const q = params.toString();
-  const response = await fetch(
-    `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/inventory${q ? `?${q}` : ""}`,
-    { headers: headers() },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${(import.meta.env.VITE_API_BASE_URL ?? "").trim() || ""}/api/blends/inventory${q ? `?${q}` : ""}`,
+      { headers: headers() },
+    );
+  } catch {
+    throw new Error("Cannot reach the API (network). Check the backend is running, then retry.");
+  }
   if (!response.ok) throw new Error(`The request failed (${response.status}).`);
   return (await response.json()) as BlendInventoryLot[];
 }
