@@ -28,24 +28,34 @@ import { SOURCE_CODES } from "@/lib/api";
 const nav = [
   { href: "/", label: "Overview", icon: LayoutGrid, group: "Workspace" },
   { href: "/pr", label: "Purchase requisitions", icon: FileText, group: "Procurement" },
-  { href: "/quotations", label: "Quotations", icon: Quote, group: "Procurement", soon: true },
-  { href: "/evaluation", label: "Evaluation & approval", icon: CheckSquare, group: "Procurement", soon: true },
+  { href: "/quotations", label: "Quotations", icon: Quote, group: "Procurement" },
+  { href: "/evaluation", label: "Evaluation & approval", icon: CheckSquare, group: "Procurement" },
   { href: "/po", label: "PO / PI", icon: ShoppingCart, group: "Procurement" },
-  { href: "/payments", label: "Payments", icon: Wallet, group: "Finance", soon: true },
-  { href: "/confirmations", label: "Supplier confirmation", icon: CheckSquare, group: "Import", soon: true },
-  { href: "/shipping", label: "Shipping", icon: Box, group: "Import", soon: true },
-  { href: "/vessel", label: "Vessel tracking", icon: Ship, group: "Import", soon: true },
-  { href: "/customs", label: "Customs clearance", icon: Shield, group: "Import", soon: true },
-  { href: "/delivery", label: "Delivery & landed cost", icon: Truck, group: "Import", soon: true },
-  { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores", soon: true },
-  { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights", soon: true },
+  { href: "/payments", label: "Payments", icon: Wallet, group: "Finance" },
+  { href: "/confirmations", label: "Supplier confirmation", icon: CheckSquare, group: "Import" },
+  { href: "/shipping", label: "Shipping", icon: Box, group: "Import" },
+  { href: "/vessel", label: "Vessel tracking", icon: Ship, group: "Import" },
+  { href: "/customs", label: "Customs clearance", icon: Shield, group: "Import" },
+  { href: "/delivery", label: "Delivery & landed cost", icon: Truck, group: "Import" },
+  { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores" },
+  { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights" },
   { href: "/admin", label: "Role administration", icon: Users, group: "Admin", soon: true },
 ];
 
 const titles: Record<string, string> = {
   "/": "Overview",
   "/pr": "Purchase requisitions",
+  "/quotations": "Quotations",
+  "/evaluation": "Evaluation & approval",
   "/po": "PO / PI",
+  "/payments": "Payments",
+  "/confirmations": "Supplier confirmation",
+  "/shipping": "Shipping",
+  "/vessel": "Vessel tracking",
+  "/customs": "Customs clearance",
+  "/delivery": "Delivery & landed cost",
+  "/grn": "GRN & closure",
+  "/reports": "Reports",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
@@ -98,7 +108,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   );
                   if (item.soon) {
                     return (
-                      <span key={item.href} className={className} title="Stub — later module">
+                      <span key={item.href} className={className} title="Permissions / admin deferred">
                         <Icon className="h-[15px] w-[15px]" />
                         <span className="truncate">{item.label}</span>
                         <span className="ml-auto text-[10px] text-muted">soon</span>

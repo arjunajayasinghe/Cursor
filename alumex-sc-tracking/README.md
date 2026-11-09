@@ -1,19 +1,33 @@
 # Alumex Supply Chain Connect
 
-Self-contained Procurement Approval & Supply Chain Connect core (demo). Lives under `alumex-sc-tracking/` in the Cursor workspace — no separate GitHub repo required.
+Self-contained Procurement Approval & Supply Chain Connect demo. Lives under `alumex-sc-tracking/` in the Cursor workspace — no separate GitHub repo required.
 
 **Stack:** Next.js + React + TypeScript · Tailwind + shadcn-style UI · NestJS REST · PostgreSQL + Prisma
 
-**Scope in this build**
-
-1. App shell + Overview dashboard  
-2. Purchase requisitions (list, expand lines, report columns, SAP PR import stub)  
-3. PO & PI module  
-4. Prisma foundations for PR/PO plus stubs for later modules  
-5. NestJS REST CRUD for PR and PO with GUI-schema demo seed  
-6. Open demo access (permissions / Entra last)
-
 Field source tags: **S** SAP · **W** web app · **A** calculated · **E** external · **M** master data.
+
+Permissions / Entra ID / RBAC are deferred — open demo access.
+
+## Modules
+
+| Screen | Route | API |
+| --- | --- | --- |
+| Overview | `/` | `GET /overview` |
+| Purchase requisitions | `/pr` | `/pr`, `/pr/groups`, `/pr/import/*` |
+| Quotations | `/quotations` | `/quotes` |
+| Evaluation & approval | `/evaluation` | `/eval` |
+| PO / PI | `/po` | `/po` |
+| Payments | `/payments` | `/pay` |
+| Supplier confirmation | `/confirmations` | `/confirm` |
+| Shipping | `/shipping` | `/ship` |
+| Vessel tracking | `/vessel` | `/vessel` |
+| Customs clearance | `/customs` | `/customs` |
+| Delivery & landed cost | `/delivery` | `/delivery` |
+| GRN & closure | `/grn` | `/grn` |
+| Reports (pipeline / action / cost / closure + CSV) | `/reports` | `GET /reports?type=` |
+| Role administration | — | deferred |
+
+Each operational module uses the shared list + detail drawer pattern with source tags. Demo records are seeded from the GUI handoff `schema.js` cases.
 
 ## Structure
 
@@ -32,10 +46,8 @@ alumex-sc-tracking/
 - PostgreSQL 16 (local or Docker)
 
 ```bash
-# Docker (if available)
 docker compose up -d
-
-# Or local Postgres — create DB/user matching .env.example
+# or create local DB/user matching .env.example
 ```
 
 ## Setup
@@ -45,50 +57,27 @@ cd alumex-sc-tracking
 cp .env.example .env
 cp .env packages/db/.env
 cp .env apps/api/.env
-cp apps/web/.env.local.example apps/web/.env.local   # or use the committed template values
+cp apps/web/.env.local.example apps/web/.env.local
 
 npm install
 npm run db:generate -w @alumex/db
-npm run deploy -w @alumex/db          # prisma migrate deploy
+npm run deploy -w @alumex/db
 npm run seed -w @alumex/db
 ```
 
-Default `DATABASE_URL`:
-
-```
-postgresql://alumex:alumex@localhost:5432/alumex_scc?schema=public
-```
+Default `DATABASE_URL`: `postgresql://alumex:alumex@localhost:5432/alumex_scc?schema=public`
 
 ## Run
 
-Terminal 1 — API:
-
 ```bash
-npm run start:dev -w @alumex/api
-# http://localhost:4000/health
+npm run start:dev -w @alumex/api   # http://localhost:4000/health
+npm run dev -w @alumex/web         # http://localhost:3000
 ```
-
-Terminal 2 — Web:
-
-```bash
-npm run dev -w @alumex/web
-# http://localhost:3000
-```
-
-## What works
-
-| Area | Behaviour |
-| --- | --- |
-| Overview | KPI cards, pipeline bars, attention list, recent PR/PO |
-| Purchase requisitions | Grouped list, expand lines, Report columns toggle, detail drawer with S/W/A/E/M tags, create line, SAP TSV import analyze/commit |
-| PO / PI | List/search/filter, detail drawer, create/update, calculated total + expected delivery |
-| API | `GET/POST/PATCH/DELETE /pr`, `/pr/groups`, `/pr/import/*`, `/po`, `GET /overview` |
-| Later modules | Prisma models seeded; nav stubs marked “soon” |
 
 ## Sample import
 
-Use `samples/sap-pr-report.tsv` on **Purchase requisitions → Import SAP PR file**. The analyzer ports the GUI handoff `pr-import.js` column map and validation.
+Use `samples/sap-pr-report.tsv` on **Purchase requisitions → Import SAP PR file**.
 
 ## Design notes
 
-UI follows the Alumex GUI handoff: light surface, SAP-like blue primary, status badges, left nav, list + detail drawer. Demo role selector is visual only — RBAC is deferred.
+UI follows the Alumex GUI handoff: light surface, SAP-like blue primary, status badges, left nav, list + detail drawer. Independent modules share the PR → PO → shipment data model.

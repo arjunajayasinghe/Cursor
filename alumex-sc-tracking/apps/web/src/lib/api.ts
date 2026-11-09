@@ -42,6 +42,28 @@ export const api = {
     request<PoItem>("/po", { method: "POST", body: JSON.stringify(body) }),
   poUpdate: (id: string, body: Partial<PoItem>) =>
     request<PoItem>(`/po/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(body) }),
+  moduleList: (path: string, q = "", status = "") =>
+    request<Array<Record<string, unknown>>>(
+      `/${path}?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`,
+    ),
+  moduleGet: (path: string, id: string) =>
+    request<Record<string, unknown>>(`/${path}/${encodeURIComponent(id)}`),
+  moduleCreate: (path: string, body: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/${path}`, { method: "POST", body: JSON.stringify(body) }),
+  moduleUpdate: (path: string, id: string, body: Record<string, unknown>) =>
+    request<Record<string, unknown>>(`/${path}/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  reports: (type = "pipeline") =>
+    request<ReportPayload>(`/reports?type=${encodeURIComponent(type)}`),
+};
+
+export type ReportPayload = {
+  type: string;
+  headers: string[];
+  rows: Array<Record<string, unknown>>;
+  counts?: Array<{ key: string; label: string; count: number }>;
 };
 
 export type OverviewData = {

@@ -98,7 +98,23 @@ export default function OverviewPage() {
             {(data?.pipeline || []).map((row) => (
               <Link
                 key={row.key}
-                href={row.key === "pr" ? "/pr" : row.key === "po" ? "/po" : "#"}
+                href={
+                  (
+                    {
+                      pr: "/pr",
+                      quotes: "/quotations",
+                      eval: "/evaluation",
+                      po: "/po",
+                      pay: "/payments",
+                      confirm: "/confirmations",
+                      ship: "/shipping",
+                      vessel: "/vessel",
+                      customs: "/customs",
+                      delivery: "/delivery",
+                      grn: "/grn",
+                    } as Record<string, string>
+                  )[row.key] || "/reports"
+                }
                 className="grid grid-cols-[128px_minmax(0,1fr)_22px] items-center gap-3 py-2 text-xs text-ink hover:text-blue"
               >
                 <span className="truncate">{row.label}</span>
@@ -128,7 +144,16 @@ export default function OverviewPage() {
               data?.attention.map((item) => (
                 <Link
                   key={`${item.module}-${item.id}`}
-                  href={item.module === "pr" ? "/pr" : item.module === "po" ? "/po" : "/"}
+                  href={
+                    (
+                      {
+                        pr: "/pr",
+                        po: "/po",
+                        vessel: "/vessel",
+                        pay: "/payments",
+                      } as Record<string, string>
+                    )[item.module] || "/reports"
+                  }
                   className="flex min-h-[49px] items-center gap-2.5 border-b border-[#edf1f6] px-1 py-2.5 last:border-0 hover:text-blue"
                 >
                   <span
