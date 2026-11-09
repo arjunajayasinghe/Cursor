@@ -1,0 +1,379 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Field source tags used across modules: S / W / A / E / M
+enum FieldSource {
+  S
+  W
+  A
+  E
+  M
+}
+
+model PurchaseRequisition {
+  id              String   @id @default(cuid())
+  recordId        String   @unique
+  prNo            String
+  line            String
+  date            DateTime? @db.Date
+  purchasingGroup String?
+  createdBy       String?
+  requester       String?
+  changed         DateTime? @db.Date
+  reportReceived  DateTime? @db.Date
+  reportDate      DateTime? @db.Date
+  reportDelay     Int?
+  delayBand       String?
+  sourcing        String?
+  stockType       String?
+  department      String?
+  plant           String?
+  materialCode    String?
+  material        String?
+  materialGroup   String?
+  quantity        Decimal  @db.Decimal(18, 3)
+  uom             String?
+  brand           String?
+  need            DateTime? @db.Date
+  approved        DateTime? @db.Date
+  release         String?
+  handler         String?
+  buyer           String?
+  priority        String?  @default("Normal")
+  notes           String?
+  status          String   @default("Draft")
+  imported        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  quotations Quotation[]
+  evaluations Evaluation[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([prNo, line])
+  @@index([prNo])
+  @@index([status])
+  @@map("purchase_requisitions")
+}
+
+model Quotation {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  rfq           String?
+  called        DateTime? @db.Date
+  supplierCode  String?
+  supplier      String?
+  received      DateTime? @db.Date
+  quoteRef      String?
+  email         String?
+  currency      String?
+  unitPrice     Decimal? @db.Decimal(18, 4)
+  quantity      Decimal? @db.Decimal(18, 3)
+  paymentTerms  String?
+  incoterm      String?
+  lead          Int?
+  validity      DateTime? @db.Date
+  technical     String?
+  exception     String?
+  notes         String?
+  status        String   @default("Requested")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@map("quotations")
+}
+
+model Evaluation {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  start         DateTime? @db.Date
+  evaluator     String?
+  due           DateTime? @db.Date
+  compliance    String?
+  recommended   String?
+  compare       String?
+  technical     String?
+  reason        String?
+  notes         String?
+  decisions     Json?
+  status        String   @default("Draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@map("evaluations")
+}
+
+model PurchaseOrder {
+  id              String   @id @default(cuid())
+  recordId        String   @unique
+  prId            String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  poNo            String
+  line            String
+  date            DateTime? @db.Date
+  supplierCode    String?
+  supplier        String?
+  materialCode    String?
+  material        String?
+  quantity        Decimal  @db.Decimal(18, 3)
+  uom             String?
+  currency        String?
+  unitPrice       Decimal? @db.Decimal(18, 4)
+  paymentTerms    String?
+  incoterm        String?
+  approval        String?
+  approved        DateTime? @db.Date
+  sapNeed         DateTime? @db.Date
+  sent            DateTime? @db.Date
+  importNo        String?
+  piNo            String?
+  piDate          DateTime? @db.Date
+  piAmount        Decimal? @db.Decimal(18, 2)
+  production      Int?
+  transit         Int?
+  supplierEta     DateTime? @db.Date
+  notes           String?
+  status          String   @default("Draft")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  payments Payment[]
+  confirmations SupplierConfirmation[]
+  shipments Shipment[]
+
+  @@unique([poNo, line])
+  @@index([poNo])
+  @@index([prId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  poId          String?
+  purchaseOrderId String?
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  method        String?
+  due           DateTime? @db.Date
+  currency      String?
+  amount        Decimal? @db.Decimal(18, 2)
+  bank          String?
+  bankDate      DateTime? @db.Date
+  reference     String?
+  lcNo          String?
+  lcDate        DateTime? @db.Date
+  maturity      DateTime? @db.Date
+  completed     DateTime? @db.Date
+  paid          Decimal? @db.Decimal(18, 2)
+  notes         String?
+  status        String   @default("Scheduled")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([poId])
+  @@map("payments")
+}
+
+model SupplierConfirmation {
+  id                 String   @id @default(cuid())
+  recordId           String   @unique
+  poId               String?
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  supplier           String?
+  contact            String?
+  acknowledged       DateTime? @db.Date
+  confirmedQuantity  Decimal? @db.Decimal(18, 3)
+  production         DateTime? @db.Date
+  ready              DateTime? @db.Date
+  shipBy             DateTime? @db.Date
+  revised            DateTime? @db.Date
+  reason             String?
+  notes              String?
+  status             String   @default("Awaiting response")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([poId])
+  @@map("supplier_confirmations")
+}
+
+model Shipment {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  poId          String?
+  purchaseOrderId String?
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  importNo      String?
+  booking       String?
+  booked        DateTime? @db.Date
+  forwarder     String?
+  carrier       String?
+  vessel        String?
+  voyage        String?
+  bl            String?
+  blDate        DateTime? @db.Date
+  container     String?
+  seal          String?
+  weight        Decimal? @db.Decimal(18, 3)
+  packages      Int?
+  loading       String?
+  destination   String?
+  etd           DateTime? @db.Date
+  atd           DateTime? @db.Date
+  eta           DateTime? @db.Date
+  etaRevised    DateTime? @db.Date
+  arrived       DateTime? @db.Date
+  invoice       String?
+  packing       String?
+  origin        String?
+  insurance     String?
+  notes         String?
+  status        String   @default("Booking pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vesselTrackings VesselTracking[]
+  customsClearances CustomsClearance[]
+  deliveries DeliveryLandedCost[]
+
+  @@index([poId])
+  @@index([importNo])
+  @@map("shipments")
+}
+
+model VesselTracking {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  vessel        String?
+  imo           String?
+  voyage        String?
+  position      String?
+  updated       DateTime? @db.Date
+  eta           DateTime? @db.Date
+  etaRevised    DateTime? @db.Date
+  arrived       DateTime? @db.Date
+  reason        String?
+  tracking      String?
+  notes         String?
+  status        String   @default("Awaiting departure")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("vessel_trackings")
+}
+
+model CustomsClearance {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  broker        String?
+  declaration   String?
+  filed         DateTime? @db.Date
+  hs            String?
+  assessment    String?
+  value         Decimal? @db.Decimal(18, 2)
+  duty          Decimal? @db.Decimal(18, 2)
+  tax           Decimal? @db.Decimal(18, 2)
+  paidDate      DateTime? @db.Date
+  inspection    DateTime? @db.Date
+  permit        String?
+  order         String?
+  released      DateTime? @db.Date
+  notes         String?
+  status        String   @default("Awaiting documents")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("customs_clearances")
+}
+
+model DeliveryLandedCost {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  site          String?
+  transport     String?
+  vehicle       String?
+  dispatch      DateTime? @db.Date
+  delivered     DateTime? @db.Date
+  quantity      Decimal? @db.Decimal(18, 3)
+  uom           String?
+  currency      String?
+  goods         Decimal? @db.Decimal(18, 2)
+  fx            Decimal? @db.Decimal(18, 6)
+  freight       Decimal? @db.Decimal(18, 2)
+  insurance     Decimal? @db.Decimal(18, 2)
+  duty          Decimal? @db.Decimal(18, 2)
+  handling      Decimal? @db.Decimal(18, 2)
+  demurrage     Decimal? @db.Decimal(18, 2)
+  local         Decimal? @db.Decimal(18, 2)
+  other         Decimal? @db.Decimal(18, 2)
+  notes         String?
+  status        String   @default("Dispatch pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("delivery_landed_costs")
+}
+
+model GoodsReceipt {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  poId          String?
+  grnNo         String?
+  year          Int?
+  item          String?
+  movement      String?
+  posted        DateTime? @db.Date
+  plant         String?
+  location      String?
+  received      Decimal? @db.Decimal(18, 3)
+  accepted      Decimal? @db.Decimal(18, 3)
+  uom           String?
+  quality       String?
+  closed        DateTime? @db.Date
+  closedBy      String?
+  notes         String?
+  status        String   @default("Awaiting posting")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@index([poId])
+  @@map("goods_receipts")
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  moduleKey  String
+  recordId   String
+  actor      String
+  action     String
+  detail     String?
+  createdAt  DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@map("audit_events")
+}

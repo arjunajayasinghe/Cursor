@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --ink: #172b42;
+  --sub: #566980;
+  --muted: #65758a;
+  --blue: #065db8;
+  --line: #dce5ef;
+  --page: #f3f6fa;
+  --pale: #eaf3ff;
+  --radius: 11px;
+  --sidebar: 228px;
+}
+
+body {
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 420px at 12% -10%, #dcebff 0%, transparent 55%),
+    radial-gradient(900px 360px at 90% 0%, #e8f1fa 0%, transparent 50%),
+    var(--page);
+  font-family: var(--font-ibm-plex), "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(18px);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.72;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.35s ease-out both;
+}
+
+.animate-drawer-in {
+  animation: drawer-in 0.22s ease-out both;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2.4s ease-in-out infinite;
+}
