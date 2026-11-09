@@ -4,6 +4,7 @@ import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
 import type { ModuleUiDef } from "@/lib/modules";
+import { useAuth } from "@/lib/auth";
 import { FieldGrid } from "@/components/field-grid";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,8 @@ import { Drawer } from "@/components/ui/drawer";
 type Row = Record<string, unknown> & { id: string; recordId: string; status: string };
 
 export function ModuleListPage({ def }: { def: ModuleUiDef }) {
+  const { canEdit, canView, role } = useAuth();
+  const editable = canEdit(def.key);
   const [rows, setRows] = useState<Row[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -21,6 +24,11 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
   const [toast, setToast] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    if (!canView(def.key)) {
+      setError(`${role} has no access to ${def.title}`);
+      setRows([]);
+      return;
+    }
     try {
       setError(null);
       const data = await api.moduleList(def.apiPath, q, status);
@@ -28,7 +36,7 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
     } catch (e) {
       setError((e as Error).message);
     }
-  }, [def.apiPath, q, status]);
+  }, [def.apiPath, def.key, def.title, q, status, canView, role]);
 
   useEffect(() => {
     const t = setTimeout(load, 150);
@@ -85,9 +93,15 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
           <span className="rounded-[5px] border border-[#dae6f2] bg-[#edf3fa] px-2 py-1 text-[11px] font-semibold text-[#365470]">
             {def.owner}
           </span>
-          <Button variant="primary" onClick={openCreate}>
-            <Plus className="h-3.5 w-3.5" /> New {def.noun}
-          </Button>
+          {editable ? (
+            <Button variant="primary" onClick={openCreate}>
+              <Plus className="h-3.5 w-3.5" /> New {def.noun}
+            </Button>
+          ) : (
+            <span className="rounded-[5px] border border-line bg-[#f6f8fb] px-2 py-1 text-[11px] text-muted">
+              View only
+            </span>
+          )}
         </div>
       </div>
 
@@ -191,19 +205,21 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
             >
               Close
             </Button>
-            <Button variant="primary" onClick={save}>
-              Save
-            </Button>
+            {editable ? (
+              <Button variant="primary" onClick={save}>
+                Save
+              </Button>
+            ) : null}
           </>
         }
       >
         {selected ? (
           <div className="space-y-4">
             <div className="rounded-md border border-[#d7e7fb] bg-[#eef6ff] p-3 text-xs text-[#244c74]">
-              Open demo access — permissions deferred. Source tags mark SAP (S), web (W), calculated (A),
-              external (E) and master (M) fields.
+              Role <strong>{role}</strong> · {editable ? "create/edit" : "view only"}. API enforces access via
+              X-Demo-Role. Source tags: S / W / A / E / M.
             </div>
-            {creating || !selected.id ? (
+            {editable && (creating || !selected.id) ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {def.createFields.map((key) => {
                   const field = def.fields.find((f) => f.key === key);

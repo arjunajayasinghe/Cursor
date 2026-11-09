@@ -7,8 +7,8 @@ export class HealthController {
     return {
       ok: true,
       service: "alumex-scc-api",
-      demoAccess: true,
-      note: "Permissions / Entra ID deferred — open demo access",
+      auth: "demo-role-header",
+      note: "Pass X-Demo-Role for RBAC. Entra ID deferred.",
     };
   }
 }

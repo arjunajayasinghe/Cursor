@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/lib/auth";
 import "./globals.css";
 
 const plex = IBM_Plex_Sans({
@@ -18,7 +19,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="en">
       <body className={`${plex.variable} font-sans antialiased`}>
-        <AppShell>{children}</AppShell>
+        <AuthProvider>
+          <AppShell>{children}</AppShell>
+        </AuthProvider>
       </body>
     </html>
   );

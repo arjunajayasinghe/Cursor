@@ -1,23 +1,48 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
+let demoRole = "Administrator";
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      "X-Demo-Role": demoRole,
       ...(init?.headers || {}),
     },
     cache: "no-store",
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(body || `Request failed (${res.status})`);
+    let message = body || `Request failed (${res.status})`;
+    try {
+      const parsed = JSON.parse(body);
+      message = parsed.message || parsed.error || message;
+      if (Array.isArray(message)) message = message.join(", ");
+    } catch {
+      /* plain text */
+    }
+    throw new Error(message);
   }
   return res.json() as Promise<T>;
 }
 
 export const api = {
+  setDemoRole: (role: string) => {
+    demoRole = role || "Administrator";
+  },
+  getDemoRole: () => demoRole,
   health: () => request<{ ok: boolean }>("/health"),
+  permissionsMe: () => request<PermissionsMe>("/permissions/me"),
+  permissionsRoles: () => request<PermissionsRole[]>("/permissions/roles"),
+  permissionsRole: (name: string) =>
+    request<PermissionsRoleDetail>(`/permissions/roles/${encodeURIComponent(name)}`),
+  savePermissionsRole: (name: string, access: Record<string, number>) =>
+    request<PermissionsRoleDetail>(`/permissions/roles/${encodeURIComponent(name)}`, {
+      method: "PUT",
+      body: JSON.stringify({ access }),
+    }),
+  permissionsAssignments: () => request<RecordAssignment[]>("/permissions/assignments"),
   overview: () => request<OverviewData>("/overview"),
   prGroups: (q = "", status = "") =>
     request<PrGroup[]>(`/pr/groups?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`),
@@ -64,6 +89,46 @@ export type ReportPayload = {
   headers: string[];
   rows: Array<Record<string, unknown>>;
   counts?: Array<{ key: string; label: string; count: number }>;
+};
+
+export type PermissionsMe = {
+  role: string;
+  assignedOnly: boolean;
+  access: Record<string, number>;
+  accessLabels: string[];
+  availableRoles: string[];
+  modules: Array<{ key: string; label: string; owner: string; level: number }>;
+  assignments: Array<{ moduleKey: string; recordId: string; partyLabel?: string | null }>;
+  note?: string;
+};
+
+export type PermissionsRole = {
+  id: string;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  assignedOnly: boolean;
+  assignmentCount: number;
+  access: Record<string, number>;
+};
+
+export type PermissionsRoleDetail = {
+  id: string;
+  name: string;
+  description?: string | null;
+  isSystem: boolean;
+  assignedOnly: boolean;
+  modules: Array<{ key: string; label: string; owner: string; level: number }>;
+  assignments: Array<{ moduleKey: string; recordId: string; partyLabel?: string | null; notes?: string | null }>;
+};
+
+export type RecordAssignment = {
+  id: string;
+  moduleKey: string;
+  recordId: string;
+  partyLabel?: string | null;
+  notes?: string | null;
+  role: { name: string; assignedOnly: boolean };
 };
 
 export type OverviewData = {

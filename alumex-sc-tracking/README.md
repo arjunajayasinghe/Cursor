@@ -6,7 +6,31 @@ Self-contained Procurement Approval & Supply Chain Connect demo. Lives under `al
 
 Field source tags: **S** SAP · **W** web app · **A** calculated · **E** external · **M** master data.
 
-Permissions / Entra ID / RBAC are deferred — open demo access.
+## Permissions (demo RBAC)
+
+Demo auth uses the **X-Demo-Role** header (role selector in the top bar). NestJS enforces per-module levels on every write/read — UI button hiding is not enough.
+
+| Level | Meaning |
+| --- | --- |
+| 0 | No access |
+| 1 | View only |
+| 2 | Create and edit |
+
+Seeded roles (proposed Alumex matrix + GUI handoff):
+
+- **Administrator** — full access + role administration
+- **Management** — view across modules
+- **Requester** (Requesting Dept.) — edit PR; view linked stages
+- **Procurement** — PR / quotes / eval / PO / confirmation owner
+- **Finance** — payments (+ delivery cost edit)
+- **Import Team** — shipping / vessel / customs / delivery
+- **Stores** (Warehouse) — GRN owner
+- **Technical 1 / 2** — quotation & evaluation review
+- **Supplier** / **Clearing Agent** — assigned-only external stubs (`record_assignments`)
+
+Role matrix UI: `/admin`. Assignment hooks: `GET/POST /permissions/assignments`.
+
+Entra ID / production SSO remains out of scope for this demo.
 
 ## Modules
 
@@ -25,7 +49,7 @@ Permissions / Entra ID / RBAC are deferred — open demo access.
 | Delivery & landed cost | `/delivery` | `/delivery` |
 | GRN & closure | `/grn` | `/grn` |
 | Reports (pipeline / action / cost / closure + CSV) | `/reports` | `GET /reports?type=` |
-| Role administration | — | deferred |
+| Role administration | `/admin` | `/permissions/*` |
 
 Each operational module uses the shared list + detail drawer pattern with source tags. Demo records are seeded from the GUI handoff `schema.js` cases.
 
@@ -60,9 +84,9 @@ cp .env apps/api/.env
 cp apps/web/.env.local.example apps/web/.env.local
 
 npm install
-npm run db:generate -w @alumex/db
-npm run deploy -w @alumex/db
-npm run seed -w @alumex/db
+npm run db:generate
+npm run db:migrate
+npm run db:seed
 ```
 
 Default `DATABASE_URL`: `postgresql://alumex:alumex@localhost:5432/alumex_scc?schema=public`
@@ -73,6 +97,8 @@ Default `DATABASE_URL`: `postgresql://alumex:alumex@localhost:5432/alumex_scc?sc
 npm run start:dev -w @alumex/api   # http://localhost:4000/health
 npm run dev -w @alumex/web         # http://localhost:3000
 ```
+
+Switch roles with the demo selector in the header. API calls send `X-Demo-Role`.
 
 ## Sample import
 

@@ -1,4 +1,5 @@
 import { PrismaClient, Prisma } from "@prisma/client";
+import { seedPermissions } from "./permissions-seed";
 
 const prisma = new PrismaClient();
 
@@ -412,7 +413,8 @@ async function main() {
     }
   }
 
-  console.log("Seeded Alumex demo data from GUI schema.");
+  await seedPermissions(prisma);
+  console.log("Seeded Alumex demo data from GUI schema + role matrix.");
 }
 
 main()

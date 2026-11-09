@@ -377,3 +377,51 @@ model AuditEvent {
   @@index([moduleKey, recordId])
   @@map("audit_events")
 }
+
+/// Demo / production role. Access levels: 0 none · 1 view · 2 create/edit
+model Role {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  isSystem     Boolean  @default(false)
+  /// External parties (supplier / clearing agent) only see assigned records
+  assignedOnly Boolean  @default(false)
+  sortOrder    Int      @default(100)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permissions RolePermission[]
+  assignments RecordAssignment[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id        String   @id @default(cuid())
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  moduleKey String
+  /// 0 = no access, 1 = view, 2 = create and edit
+  level     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([roleId, moduleKey])
+  @@index([moduleKey])
+  @@map("role_permissions")
+}
+
+/// Record-level assignment for external / restricted roles
+model RecordAssignment {
+  id         String   @id @default(cuid())
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  moduleKey  String
+  recordId   String
+  partyLabel String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@unique([roleId, moduleKey, recordId])
+  @@index([moduleKey, recordId])
+  @@map("record_assignments")
+}

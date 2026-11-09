@@ -1,206 +1,252 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query, UseGuards } from "@nestjs/common";
+import { AccessGuard } from "../permissions/access.guard";
+import { CurrentRole, RequireAccess } from "../permissions/role.decorator";
+import { PermissionsService, RoleContext } from "../permissions/permissions.service";
+import { ModuleKey } from "./module-defs";
 import { ModulesService } from "./modules.service";
 
 @Controller()
+@UseGuards(AccessGuard)
 export class ModulesController {
-  constructor(private readonly modules: ModulesService) {}
+  constructor(
+    private readonly modules: ModulesService,
+    private readonly permissions: PermissionsService,
+  ) {}
+
+  private async listSecured(role: RoleContext, key: ModuleKey, q?: string, status?: string) {
+    this.permissions.assert(role, key, 1);
+    const rows = await this.modules.list(key, q, status);
+    return this.permissions.filterRows(role, key, rows as Array<{ recordId: string }>);
+  }
+
+  private async getSecured(role: RoleContext, key: ModuleKey, id: string) {
+    this.permissions.assert(role, key, 1);
+    const row = await this.modules.get(key, id);
+    this.permissions.assertRecord(role, key, String(row.recordId));
+    return row;
+  }
+
+  private async createSecured(role: RoleContext, key: ModuleKey, body: Record<string, unknown>) {
+    this.permissions.assert(role, key, 2);
+    return this.modules.create(key, body || {});
+  }
+
+  private async updateSecured(
+    role: RoleContext,
+    key: ModuleKey,
+    id: string,
+    body: Record<string, unknown>,
+  ) {
+    this.permissions.assert(role, key, 2);
+    const current = await this.modules.get(key, id);
+    this.permissions.assertRecord(role, key, String(current.recordId));
+    return this.modules.update(key, id, body || {});
+  }
+
+  private async removeSecured(role: RoleContext, key: ModuleKey, id: string) {
+    this.permissions.assert(role, key, 2);
+    const current = await this.modules.get(key, id);
+    this.permissions.assertRecord(role, key, String(current.recordId));
+    return this.modules.remove(key, id);
+  }
 
   @Get("modules")
-  listDefs() {
-    return this.modules.listDefs();
+  listDefs(@CurrentRole() role: RoleContext) {
+    return this.modules.listDefs().filter((m) => this.permissions.level(role, m.key) > 0);
   }
 
   @Get("reports")
+  @RequireAccess("reports", 1)
   reports(@Query("type") type?: string) {
     return this.modules.reports(type || "pipeline");
   }
 
   @Get("quotes")
-  listQuotes(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("quotes", q, status);
+  listQuotes(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "quotes", q, status);
   }
   @Get("quotes/:id")
-  getQuote(@Param("id") id: string) {
-    return this.modules.get("quotes", id);
+  getQuote(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "quotes", id);
   }
   @Post("quotes")
-  createQuote(@Body() body: Record<string, unknown>) {
-    return this.modules.create("quotes", body || {});
+  createQuote(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "quotes", body);
   }
   @Patch("quotes/:id")
-  updateQuote(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("quotes", id, body || {});
+  updateQuote(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "quotes", id, body);
   }
   @Delete("quotes/:id")
-  removeQuote(@Param("id") id: string) {
-    return this.modules.remove("quotes", id);
+  removeQuote(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "quotes", id);
   }
 
   @Get("eval")
-  listEval(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("eval", q, status);
+  listEval(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "eval", q, status);
   }
   @Get("eval/:id")
-  getEval(@Param("id") id: string) {
-    return this.modules.get("eval", id);
+  getEval(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "eval", id);
   }
   @Post("eval")
-  createEval(@Body() body: Record<string, unknown>) {
-    return this.modules.create("eval", body || {});
+  createEval(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "eval", body);
   }
   @Patch("eval/:id")
-  updateEval(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("eval", id, body || {});
+  updateEval(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "eval", id, body);
   }
   @Delete("eval/:id")
-  removeEval(@Param("id") id: string) {
-    return this.modules.remove("eval", id);
+  removeEval(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "eval", id);
   }
 
   @Get("pay")
-  listPay(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("pay", q, status);
+  listPay(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "pay", q, status);
   }
   @Get("pay/:id")
-  getPay(@Param("id") id: string) {
-    return this.modules.get("pay", id);
+  getPay(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "pay", id);
   }
   @Post("pay")
-  createPay(@Body() body: Record<string, unknown>) {
-    return this.modules.create("pay", body || {});
+  createPay(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "pay", body);
   }
   @Patch("pay/:id")
-  updatePay(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("pay", id, body || {});
+  updatePay(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "pay", id, body);
   }
   @Delete("pay/:id")
-  removePay(@Param("id") id: string) {
-    return this.modules.remove("pay", id);
+  removePay(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "pay", id);
   }
 
   @Get("confirm")
-  listConfirm(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("confirm", q, status);
+  listConfirm(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "confirm", q, status);
   }
   @Get("confirm/:id")
-  getConfirm(@Param("id") id: string) {
-    return this.modules.get("confirm", id);
+  getConfirm(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "confirm", id);
   }
   @Post("confirm")
-  createConfirm(@Body() body: Record<string, unknown>) {
-    return this.modules.create("confirm", body || {});
+  createConfirm(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "confirm", body);
   }
   @Patch("confirm/:id")
-  updateConfirm(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("confirm", id, body || {});
+  updateConfirm(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "confirm", id, body);
   }
   @Delete("confirm/:id")
-  removeConfirm(@Param("id") id: string) {
-    return this.modules.remove("confirm", id);
+  removeConfirm(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "confirm", id);
   }
 
   @Get("ship")
-  listShip(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("ship", q, status);
+  listShip(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "ship", q, status);
   }
   @Get("ship/:id")
-  getShip(@Param("id") id: string) {
-    return this.modules.get("ship", id);
+  getShip(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "ship", id);
   }
   @Post("ship")
-  createShip(@Body() body: Record<string, unknown>) {
-    return this.modules.create("ship", body || {});
+  createShip(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "ship", body);
   }
   @Patch("ship/:id")
-  updateShip(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("ship", id, body || {});
+  updateShip(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "ship", id, body);
   }
   @Delete("ship/:id")
-  removeShip(@Param("id") id: string) {
-    return this.modules.remove("ship", id);
+  removeShip(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "ship", id);
   }
 
   @Get("vessel")
-  listVessel(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("vessel", q, status);
+  listVessel(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "vessel", q, status);
   }
   @Get("vessel/:id")
-  getVessel(@Param("id") id: string) {
-    return this.modules.get("vessel", id);
+  getVessel(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "vessel", id);
   }
   @Post("vessel")
-  createVessel(@Body() body: Record<string, unknown>) {
-    return this.modules.create("vessel", body || {});
+  createVessel(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "vessel", body);
   }
   @Patch("vessel/:id")
-  updateVessel(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("vessel", id, body || {});
+  updateVessel(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "vessel", id, body);
   }
   @Delete("vessel/:id")
-  removeVessel(@Param("id") id: string) {
-    return this.modules.remove("vessel", id);
+  removeVessel(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "vessel", id);
   }
 
   @Get("customs")
-  listCustoms(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("customs", q, status);
+  listCustoms(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "customs", q, status);
   }
   @Get("customs/:id")
-  getCustoms(@Param("id") id: string) {
-    return this.modules.get("customs", id);
+  getCustoms(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "customs", id);
   }
   @Post("customs")
-  createCustoms(@Body() body: Record<string, unknown>) {
-    return this.modules.create("customs", body || {});
+  createCustoms(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "customs", body);
   }
   @Patch("customs/:id")
-  updateCustoms(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("customs", id, body || {});
+  updateCustoms(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "customs", id, body);
   }
   @Delete("customs/:id")
-  removeCustoms(@Param("id") id: string) {
-    return this.modules.remove("customs", id);
+  removeCustoms(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "customs", id);
   }
 
   @Get("delivery")
-  listDelivery(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("delivery", q, status);
+  listDelivery(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "delivery", q, status);
   }
   @Get("delivery/:id")
-  getDelivery(@Param("id") id: string) {
-    return this.modules.get("delivery", id);
+  getDelivery(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "delivery", id);
   }
   @Post("delivery")
-  createDelivery(@Body() body: Record<string, unknown>) {
-    return this.modules.create("delivery", body || {});
+  createDelivery(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "delivery", body);
   }
   @Patch("delivery/:id")
-  updateDelivery(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("delivery", id, body || {});
+  updateDelivery(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "delivery", id, body);
   }
   @Delete("delivery/:id")
-  removeDelivery(@Param("id") id: string) {
-    return this.modules.remove("delivery", id);
+  removeDelivery(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "delivery", id);
   }
 
   @Get("grn")
-  listGrn(@Query("q") q?: string, @Query("status") status?: string) {
-    return this.modules.list("grn", q, status);
+  listGrn(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
+    return this.listSecured(role, "grn", q, status);
   }
   @Get("grn/:id")
-  getGrn(@Param("id") id: string) {
-    return this.modules.get("grn", id);
+  getGrn(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.getSecured(role, "grn", id);
   }
   @Post("grn")
-  createGrn(@Body() body: Record<string, unknown>) {
-    return this.modules.create("grn", body || {});
+  createGrn(@CurrentRole() role: RoleContext, @Body() body: Record<string, unknown>) {
+    return this.createSecured(role, "grn", body);
   }
   @Patch("grn/:id")
-  updateGrn(@Param("id") id: string, @Body() body: Record<string, unknown>) {
-    return this.modules.update("grn", id, body || {});
+  updateGrn(@CurrentRole() role: RoleContext, @Param("id") id: string, @Body() body: Record<string, unknown>) {
+    return this.updateSecured(role, "grn", id, body);
   }
   @Delete("grn/:id")
-  removeGrn(@Param("id") id: string) {
-    return this.modules.remove("grn", id);
+  removeGrn(@CurrentRole() role: RoleContext, @Param("id") id: string) {
+    return this.removeSecured(role, "grn", id);
   }
 }

@@ -7,8 +7,11 @@ import { FieldGrid } from "@/components/field-grid";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
+import { useAuth } from "@/lib/auth";
 
 export default function PoPage() {
+  const { canEdit } = useAuth();
+  const editable = canEdit("po");
   const [rows, setRows] = useState<PoItem[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -45,22 +48,28 @@ export default function PoPage() {
             details.
           </p>
         </div>
-        <Button
-          variant="primary"
-          onClick={() =>
-            setSelected({
-              id: "",
-              recordId: "",
-              poNo: "",
-              line: "00010",
-              quantity: 1,
-              currency: "USD",
-              status: "Draft",
-            })
-          }
-        >
-          <Plus className="h-3.5 w-3.5" /> New PO line
-        </Button>
+        {editable ? (
+          <Button
+            variant="primary"
+            onClick={() =>
+              setSelected({
+                id: "",
+                recordId: "",
+                poNo: "",
+                line: "00010",
+                quantity: 1,
+                currency: "USD",
+                status: "Draft",
+              })
+            }
+          >
+            <Plus className="h-3.5 w-3.5" /> New PO line
+          </Button>
+        ) : (
+          <span className="rounded-[5px] border border-line bg-[#f6f8fb] px-2 py-1 text-[11px] text-muted">
+            View only
+          </span>
+        )}
       </div>
 
       {error ? (
@@ -148,36 +157,38 @@ export default function PoPage() {
         footer={
           <>
             <Button onClick={() => setSelected(null)}>Close</Button>
-            <Button
-              variant="primary"
-              onClick={async () => {
-                if (!selected) return;
-                try {
-                  if (!selected.id) {
-                    await api.poCreate({
-                      ...selected,
-                      poNo: selected.poNo || `45000${Date.now().toString().slice(-5)}`,
-                      line: selected.line || "00010",
-                      quantity: Number(selected.quantity || 1),
-                      supplier: selected.supplier || "Demo supplier",
-                      material: selected.material || "Demo material",
-                      currency: selected.currency || "USD",
-                      unitPrice: Number(selected.unitPrice || 1),
-                    });
-                    setToast("PO line created");
-                  } else {
-                    await api.poUpdate(selected.id, selected);
-                    setToast("PO line updated");
+            {editable ? (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  if (!selected) return;
+                  try {
+                    if (!selected.id) {
+                      await api.poCreate({
+                        ...selected,
+                        poNo: selected.poNo || `45000${Date.now().toString().slice(-5)}`,
+                        line: selected.line || "00010",
+                        quantity: Number(selected.quantity || 1),
+                        supplier: selected.supplier || "Demo supplier",
+                        material: selected.material || "Demo material",
+                        currency: selected.currency || "USD",
+                        unitPrice: Number(selected.unitPrice || 1),
+                      });
+                      setToast("PO line created");
+                    } else {
+                      await api.poUpdate(selected.id, selected);
+                      setToast("PO line updated");
+                    }
+                    setSelected(null);
+                    await load();
+                  } catch (e) {
+                    setToast((e as Error).message);
                   }
-                  setSelected(null);
-                  await load();
-                } catch (e) {
-                  setToast((e as Error).message);
-                }
-              }}
-            >
-              Save
-            </Button>
+                }}
+              >
+                Save
+              </Button>
+            ) : null}
           </>
         }
       >

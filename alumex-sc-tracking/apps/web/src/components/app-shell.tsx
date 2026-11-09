@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   Box,
   CheckSquare,
@@ -18,53 +18,88 @@ import {
   ChartColumn,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { SourceTag } from "@/components/ui/badge";
 import { SOURCE_CODES } from "@/lib/api";
+import { useAuth } from "@/lib/auth";
 
 const nav = [
-  { href: "/", label: "Overview", icon: LayoutGrid, group: "Workspace" },
-  { href: "/pr", label: "Purchase requisitions", icon: FileText, group: "Procurement" },
-  { href: "/quotations", label: "Quotations", icon: Quote, group: "Procurement" },
-  { href: "/evaluation", label: "Evaluation & approval", icon: CheckSquare, group: "Procurement" },
-  { href: "/po", label: "PO / PI", icon: ShoppingCart, group: "Procurement" },
-  { href: "/payments", label: "Payments", icon: Wallet, group: "Finance" },
-  { href: "/confirmations", label: "Supplier confirmation", icon: CheckSquare, group: "Import" },
-  { href: "/shipping", label: "Shipping", icon: Box, group: "Import" },
-  { href: "/vessel", label: "Vessel tracking", icon: Ship, group: "Import" },
-  { href: "/customs", label: "Customs clearance", icon: Shield, group: "Import" },
-  { href: "/delivery", label: "Delivery & landed cost", icon: Truck, group: "Import" },
-  { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores" },
-  { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights" },
-  { href: "/admin", label: "Role administration", icon: Users, group: "Admin", soon: true },
+  { href: "/", label: "Overview", icon: LayoutGrid, group: "Workspace", moduleKey: "overview" },
+  { href: "/pr", label: "Purchase requisitions", icon: FileText, group: "Procurement", moduleKey: "pr" },
+  { href: "/quotations", label: "Quotations", icon: Quote, group: "Procurement", moduleKey: "quotes" },
+  { href: "/evaluation", label: "Evaluation & approval", icon: CheckSquare, group: "Procurement", moduleKey: "eval" },
+  { href: "/po", label: "PO / PI", icon: ShoppingCart, group: "Procurement", moduleKey: "po" },
+  { href: "/payments", label: "Payments", icon: Wallet, group: "Finance", moduleKey: "pay" },
+  { href: "/confirmations", label: "Supplier confirmation", icon: CheckSquare, group: "Import", moduleKey: "confirm" },
+  { href: "/shipping", label: "Shipping", icon: Box, group: "Import", moduleKey: "ship" },
+  { href: "/vessel", label: "Vessel tracking", icon: Ship, group: "Import", moduleKey: "vessel" },
+  { href: "/customs", label: "Customs clearance", icon: Shield, group: "Import", moduleKey: "customs" },
+  { href: "/delivery", label: "Delivery & landed cost", icon: Truck, group: "Import", moduleKey: "delivery" },
+  { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores", moduleKey: "grn" },
+  { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights", moduleKey: "reports" },
+  { href: "/admin", label: "Role administration", icon: Users, group: "Admin", moduleKey: "roles" },
 ];
 
-const titles: Record<string, string> = {
-  "/": "Overview",
-  "/pr": "Purchase requisitions",
-  "/quotations": "Quotations",
-  "/evaluation": "Evaluation & approval",
-  "/po": "PO / PI",
-  "/payments": "Payments",
-  "/confirmations": "Supplier confirmation",
-  "/shipping": "Shipping",
-  "/vessel": "Vessel tracking",
-  "/customs": "Customs clearance",
-  "/delivery": "Delivery & landed cost",
-  "/grn": "GRN & closure",
-  "/reports": "Reports",
-};
+const titles: Record<string, string> = Object.fromEntries(nav.map((n) => [n.href, n.label]));
+
+const ROLE_OPTIONS = [
+  "Administrator",
+  "Management",
+  "Requester",
+  "Procurement",
+  "Finance",
+  "Import Team",
+  "Stores",
+  "Technical 1",
+  "Technical 2",
+  "Supplier",
+  "Clearing Agent",
+];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { role, setRole, canView, me, loading } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const crumb = titles[pathname] || "Module";
+  const roles = me?.availableRoles?.length ? me.availableRoles : ROLE_OPTIONS;
 
-  const groups = Array.from(new Set(nav.map((n) => n.group)));
+  const visibleNav = useMemo(
+    () =>
+      nav.filter((item) => {
+        if (item.moduleKey === "overview") {
+          return role === "Administrator" || nav.some((n) => n.moduleKey !== "overview" && n.moduleKey !== "roles" && canView(n.moduleKey));
+        }
+        return canView(item.moduleKey);
+      }),
+    [canView, role],
+  );
+
+  useEffect(() => {
+    if (loading) return;
+    const current = nav.find((n) => n.href === pathname);
+    if (!current) return;
+    const allowed =
+      current.moduleKey === "overview"
+        ? role === "Administrator" || visibleNav.some((n) => n.href !== "/")
+        : canView(current.moduleKey);
+    if (!allowed) router.replace(visibleNav[0]?.href || "/");
+  }, [pathname, loading, canView, role, router, visibleNav]);
+
+  const groups = Array.from(new Set(visibleNav.map((n) => n.group)));
+  const avatar =
+    role === "Administrator"
+      ? "AD"
+      : role
+          .split(" ")
+          .map((w) => w[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase();
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[var(--sidebar)_minmax(0,1fr)]">
@@ -95,31 +130,20 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <div className="mb-1 mt-3 px-2.5 text-[10px] font-bold uppercase tracking-[1.02px] text-muted first:mt-0.5">
                 {group}
               </div>
-              {nav
+              {visibleNav
                 .filter((n) => n.group === group)
                 .map((item) => {
                   const Icon = item.icon;
                   const active = pathname === item.href;
-                  const className = cn(
-                    "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12.5px] text-[#41546c]",
-                    active && "bg-[#e8f2ff] font-bold text-[#075bb3] shadow-[inset_3px_0_#0973d2]",
-                    !active && "hover:bg-[#eef4fa]",
-                    item.soon && !active && "opacity-70",
-                  );
-                  if (item.soon) {
-                    return (
-                      <span key={item.href} className={className} title="Permissions / admin deferred">
-                        <Icon className="h-[15px] w-[15px]" />
-                        <span className="truncate">{item.label}</span>
-                        <span className="ml-auto text-[10px] text-muted">soon</span>
-                      </span>
-                    );
-                  }
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={className}
+                      className={cn(
+                        "mb-0.5 flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-[12.5px] text-[#41546c]",
+                        active && "bg-[#e8f2ff] font-bold text-[#075bb3] shadow-[inset_3px_0_#0973d2]",
+                        !active && "hover:bg-[#eef4fa]",
+                      )}
                       onClick={() => setMenuOpen(false)}
                     >
                       <Icon className="h-[15px] w-[15px]" />
@@ -159,11 +183,27 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="animate-pulse-soft rounded-[5px] border border-[#f2dfb7] bg-[#fff4db] px-2 py-1 text-[11px] font-semibold text-[#76521c]">
               DEMO DATA
             </span>
+            {me?.assignedOnly ? (
+              <span className="rounded-[5px] border border-[#d7e7fb] bg-[#eef6ff] px-2 py-1 text-[11px] font-semibold text-[#244c74]">
+                Assigned records only
+              </span>
+            ) : null}
             <div className="flex items-center gap-2">
               <span className="grid h-[29px] min-w-[29px] place-items-center rounded-full bg-[#e4effe] text-[11px] font-bold text-[#0c57a2]">
-                AD
+                {avatar}
               </span>
-              <span className="hidden text-xs font-semibold text-[#213a55] sm:inline">Administrator</span>
+              <select
+                aria-label="Demo role"
+                className="max-w-[155px] border-0 bg-white px-1 py-1 text-xs font-semibold text-[#213a55]"
+                value={role}
+                onChange={(e) => setRole(e.target.value)}
+              >
+                {roles.map((r) => (
+                  <option key={r} value={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
         </header>
@@ -178,8 +218,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         footer={<Button onClick={() => setSourcesOpen(false)}>Close</Button>}
       >
         <div className="mb-4 flex gap-2 rounded-md border border-[#d7e7fb] bg-[#eef6ff] p-3 text-xs text-[#244c74]">
-          Field tags identify where data originates and how it can be sourced later. SAP document numbers and item
-          numbers are captured separately.
+          Field tags identify where data originates and how it can be sourced later. Access is enforced by the API
+          using the demo role selector (X-Demo-Role).
         </div>
         <div className="space-y-2">
           {Object.entries(SOURCE_CODES).map(([code, [name, desc]]) => (

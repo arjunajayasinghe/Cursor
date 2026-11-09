@@ -15,8 +15,11 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 
 export default function PrPage() {
+  const { canEdit } = useAuth();
+  const editable = canEdit("pr");
   const [groups, setGroups] = useState<PrGroup[]>([]);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("");
@@ -97,25 +100,33 @@ export default function PrPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setImportOpen(true)}>
-            <Download className="h-3.5 w-3.5" /> Import SAP PR file
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() =>
-              setSelected({
-                id: "",
-                recordId: "",
-                prNo: "",
-                line: "00010",
-                quantity: 1,
-                status: "Draft",
-                priority: "Normal",
-              })
-            }
-          >
-            <Plus className="h-3.5 w-3.5" /> New line
-          </Button>
+          {editable ? (
+            <>
+              <Button onClick={() => setImportOpen(true)}>
+                <Download className="h-3.5 w-3.5" /> Import SAP PR file
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() =>
+                  setSelected({
+                    id: "",
+                    recordId: "",
+                    prNo: "",
+                    line: "00010",
+                    quantity: 1,
+                    status: "Draft",
+                    priority: "Normal",
+                  })
+                }
+              >
+                <Plus className="h-3.5 w-3.5" /> New line
+              </Button>
+            </>
+          ) : (
+            <span className="rounded-[5px] border border-line bg-[#f6f8fb] px-2 py-1 text-[11px] text-muted">
+              View only
+            </span>
+          )}
         </div>
       </div>
 
@@ -299,45 +310,47 @@ export default function PrPage() {
         footer={
           <>
             <Button onClick={() => setSelected(null)}>Close</Button>
-            <Button
-              variant="primary"
-              onClick={async () => {
-                if (!selected) return;
-                try {
-                  if (!selected.id) {
-                    await api.prCreate({
-                      ...selected,
-                      prNo: selected.prNo || `10000${Date.now().toString().slice(-5)}`,
-                      line: selected.line || "00010",
-                      quantity: Number(selected.quantity || 1),
-                      requester: selected.requester || "Demo requester",
-                      department: selected.department || "Manufacturing",
-                      plant: selected.plant || "1100 · Sapugaskanda",
-                      material: selected.material || "New material",
-                      uom: selected.uom || "EA",
-                      buyer: selected.buyer || "A. Jayasinghe",
-                    });
-                    setToast("PR line created");
-                  } else {
-                    await api.prUpdate(selected.id, selected);
-                    setToast("PR line updated");
+            {editable ? (
+              <Button
+                variant="primary"
+                onClick={async () => {
+                  if (!selected) return;
+                  try {
+                    if (!selected.id) {
+                      await api.prCreate({
+                        ...selected,
+                        prNo: selected.prNo || `10000${Date.now().toString().slice(-5)}`,
+                        line: selected.line || "00010",
+                        quantity: Number(selected.quantity || 1),
+                        requester: selected.requester || "Demo requester",
+                        department: selected.department || "Manufacturing",
+                        plant: selected.plant || "1100 · Sapugaskanda",
+                        material: selected.material || "New material",
+                        uom: selected.uom || "EA",
+                        buyer: selected.buyer || "A. Jayasinghe",
+                      });
+                      setToast("PR line created");
+                    } else {
+                      await api.prUpdate(selected.id, selected);
+                      setToast("PR line updated");
+                    }
+                    setSelected(null);
+                    await load();
+                  } catch (e) {
+                    setToast((e as Error).message);
                   }
-                  setSelected(null);
-                  await load();
-                } catch (e) {
-                  setToast((e as Error).message);
-                }
-              }}
-            >
-              Save
-            </Button>
+                }}
+              >
+                Save
+              </Button>
+            ) : null}
           </>
         }
       >
         {selected ? (
           <div className="space-y-4">
             <div className="rounded-md border border-[#d7e7fb] bg-[#eef6ff] p-3 text-xs text-[#244c74]">
-              Demo access is open — Entra ID / RBAC deferred. Source tags (S/W/A/E/M) mark field origin.
+              Role permissions apply via X-Demo-Role. Source tags (S/W/A/E/M) mark field origin.
             </div>
             {!selected.id ? (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
