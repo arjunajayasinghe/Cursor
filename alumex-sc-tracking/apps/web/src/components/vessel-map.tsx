@@ -61,9 +61,16 @@ export function VesselMap({
       for (const m of markers) {
         if (!Number.isFinite(m.lat) || !Number.isFinite(m.lng)) continue;
         latLngs.push([m.lat, m.lng]);
-        L.marker([m.lat, m.lng], { icon })
-          .bindPopup(`<strong>${m.label}</strong><br/>${m.status || ""}<br/>${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}`)
-          .addTo(layer);
+        // Text-only popup — never interpolate unsanitized HTML from labels/status.
+        const popup = document.createElement("div");
+        const title = document.createElement("strong");
+        title.textContent = m.label;
+        popup.appendChild(title);
+        popup.appendChild(document.createElement("br"));
+        popup.appendChild(document.createTextNode(m.status || ""));
+        popup.appendChild(document.createElement("br"));
+        popup.appendChild(document.createTextNode(`${m.lat.toFixed(4)}, ${m.lng.toFixed(4)}`));
+        L.marker([m.lat, m.lng], { icon }).bindPopup(popup).addTo(layer);
       }
       if (focus && Number.isFinite(focus.lat) && Number.isFinite(focus.lng)) {
         map.setView([focus.lat, focus.lng], 7);

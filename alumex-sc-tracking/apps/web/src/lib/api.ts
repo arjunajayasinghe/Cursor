@@ -1,15 +1,24 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+import { DEFAULT_SAFE_ROLE, DEMO_ROLE_SWITCHING } from "@/lib/demo-mode";
 
-let demoRole = "Administrator";
+/** Local Nest when demo switching is on; otherwise same-origin Cursor-identity proxy. */
+const API_URL = DEMO_ROLE_SWITCHING
+  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+  : "/api/backend";
+
+let demoRole = DEFAULT_SAFE_ROLE;
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
+  };
+  // Never send a client-chosen role in published builds.
+  if (DEMO_ROLE_SWITCHING) {
+    headers["X-Demo-Role"] = demoRole;
+  }
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
-    headers: {
-      "Content-Type": "application/json",
-      "X-Demo-Role": demoRole,
-      ...(init?.headers || {}),
-    },
+    headers,
     cache: "no-store",
   });
   if (!res.ok) {
@@ -29,9 +38,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const api = {
   setDemoRole: (role: string) => {
-    demoRole = role || "Administrator";
+    if (!DEMO_ROLE_SWITCHING) {
+      demoRole = DEFAULT_SAFE_ROLE;
+      return;
+    }
+    demoRole = role || DEFAULT_SAFE_ROLE;
   },
   getDemoRole: () => demoRole,
+  demoRoleSwitching: DEMO_ROLE_SWITCHING,
   health: () => request<{ ok: boolean }>("/health"),
   permissionsMe: () => request<PermissionsMe>("/permissions/me"),
   permissionsRoles: () => request<PermissionsRole[]>("/permissions/roles"),
@@ -145,10 +159,11 @@ export const api = {
     fd.append("category", input.category);
     fd.append("recordId", input.recordId);
     if (input.notes) fd.append("notes", input.notes);
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const headers: Record<string, string> = {};
+    if (DEMO_ROLE_SWITCHING) headers["X-Demo-Role"] = demoRole;
     const res = await fetch(`${API_URL}/documents/upload`, {
       method: "POST",
-      headers: { "X-Demo-Role": demoRole },
+      headers,
       body: fd,
     });
     if (!res.ok) {
@@ -164,13 +179,14 @@ export const api = {
     return res.json() as Promise<DocumentAsset>;
   },
   documentDownloadUrl: (id: string) =>
-    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/documents/${encodeURIComponent(id)}/download`,
+    `${API_URL}/documents/${encodeURIComponent(id)}/download`,
   documentDownloadBlob: async (id: string) => {
-    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
-    const res = await fetch(
-      `${API_URL}/documents/${encodeURIComponent(id)}/download`,
-      { headers: { "X-Demo-Role": demoRole }, cache: "no-store" },
-    );
+    const headers: Record<string, string> = {};
+    if (DEMO_ROLE_SWITCHING) headers["X-Demo-Role"] = demoRole;
+    const res = await fetch(`${API_URL}/documents/${encodeURIComponent(id)}/download`, {
+      headers,
+      cache: "no-store",
+    });
     if (!res.ok) throw new Error(`Download failed (${res.status})`);
     return res.blob();
   },

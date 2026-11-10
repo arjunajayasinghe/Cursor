@@ -155,7 +155,14 @@ npm run start:dev -w @alumex/api   # http://localhost:4000/health
 npm run dev -w @alumex/web         # http://localhost:3000
 ```
 
-Switch roles with the demo selector in the header. API calls send `X-Demo-Role`.
+### Auth (local vs published)
+
+- **Local:** set `NEXT_PUBLIC_DEMO_ROLE_SWITCHING=true` (web) and `DEMO_ROLE_SWITCHING=true` (API). Header role selector may send `X-Demo-Role`. Default role is **Management** (not Administrator).
+- **Published (private/team):** demo switching stays off. Browser never chooses a role; Next `/api/backend` proxy uses Cursor identity and pins **Management**. Administrator requires server-side `ADMIN_DEMO_SECRET` + `X-Admin-Demo-Secret` (not available from the UI).
+
+### Map tiles
+
+Vessel tracking uses **OpenStreetMap** raster tiles (`tile.openstreetmap.org`) via Leaflet. Attribution is shown on the map. Keep OSM attribution if you change providers.
 
 ## Sample import
 

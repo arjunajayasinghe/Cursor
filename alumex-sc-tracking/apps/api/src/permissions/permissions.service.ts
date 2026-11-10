@@ -126,7 +126,7 @@ export class PermissionsService implements OnModuleInit {
         level: this.level(ctx, key),
       })),
       assignments: ctx.assignedOnly ? ctx.assignments : [],
-      note: "Demo auth via X-Demo-Role header. Entra ID deferred.",
+      note: switchingNote(),
     };
   }
 
@@ -245,4 +245,11 @@ export class PermissionsService implements OnModuleInit {
     await this.refreshCache();
     return row;
   }
+}
+
+function switchingNote() {
+  if (process.env.DEMO_ROLE_SWITCHING === "true") {
+    return "Local demo: X-Demo-Role switching enabled (DEMO_ROLE_SWITCHING=true).";
+  }
+  return "Published/safe mode: role pinned to Management unless X-Admin-Demo-Secret matches. Cursor identity via Next proxy.";
 }

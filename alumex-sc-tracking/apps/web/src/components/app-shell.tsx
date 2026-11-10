@@ -30,6 +30,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { SourceTag } from "@/components/ui/badge";
 import { SOURCE_CODES } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { SWITCHABLE_ROLES } from "@/lib/demo-mode";
 
 const nav = [
   { href: "/", label: "Overview", icon: LayoutGrid, group: "Workspace", moduleKey: "overview" },
@@ -55,28 +56,18 @@ const nav = [
 
 const titles: Record<string, string> = Object.fromEntries(nav.map((n) => [n.href, n.label]));
 
-const ROLE_OPTIONS = [
-  "Administrator",
-  "Management",
-  "Requester",
-  "Procurement",
-  "Finance",
-  "Import Team",
-  "Stores",
-  "Technical 1",
-  "Technical 2",
-  "Supplier",
-  "Clearing Agent",
-];
-
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { role, setRole, canView, me, loading } = useAuth();
+  const { role, setRole, canView, me, loading, demoRoleSwitching } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const crumb = titles[pathname] || "Module";
-  const roles = me?.availableRoles?.length ? me.availableRoles : ROLE_OPTIONS;
+  const roles = demoRoleSwitching
+    ? me?.availableRoles?.length
+      ? me.availableRoles
+      : [...SWITCHABLE_ROLES]
+    : [role];
 
   const visibleNav = useMemo(
     () =>
@@ -202,18 +193,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="grid h-[29px] min-w-[29px] place-items-center rounded-full bg-[#e4effe] text-[11px] font-bold text-[#0c57a2]">
                 {avatar}
               </span>
-              <select
-                aria-label="Demo role"
-                className="max-w-[155px] border-0 bg-white px-1 py-1 text-xs font-semibold text-[#213a55]"
-                value={role}
-                onChange={(e) => setRole(e.target.value)}
-              >
-                {roles.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+              {demoRoleSwitching ? (
+                <select
+                  aria-label="Demo role (local only)"
+                  className="max-w-[155px] border-0 bg-white px-1 py-1 text-xs font-semibold text-[#213a55]"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                >
+                  {roles.map((r) => (
+                    <option key={r} value={r}>
+                      {r}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <span className="max-w-[155px] px-1 py-1 text-xs font-semibold text-[#213a55]" title="Signed-in role pinned server-side">
+                  {role}
+                </span>
+              )}
             </div>
           </div>
         </header>
@@ -228,8 +225,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         footer={<Button onClick={() => setSourcesOpen(false)}>Close</Button>}
       >
         <div className="mb-4 flex gap-2 rounded-md border border-[#d7e7fb] bg-[#eef6ff] p-3 text-xs text-[#244c74]">
-          Field tags identify where data originates and how it can be sourced later. Access is enforced by the API
-          using the demo role selector (X-Demo-Role).
+          Field tags identify where data originates and how it can be sourced later. Published builds pin access via
+          Cursor sign-in (Management). Local demo may enable role switching with NEXT_PUBLIC_DEMO_ROLE_SWITCHING.
         </div>
         <div className="space-y-2">
           {Object.entries(SOURCE_CODES).map(([code, [name, desc]]) => (

@@ -6,7 +6,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
     origin: true,
-    allowedHeaders: ["Content-Type", "Authorization", "X-Demo-Role"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Demo-Role", "X-Admin-Demo-Secret", "X-Cursor-Viewer"],
     exposedHeaders: ["X-Demo-Role"],
   });
   app.useGlobalPipes(

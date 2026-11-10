@@ -1,5 +1,7 @@
 export const DEMO_ROLE_HEADER = "x-demo-role";
-export const DEFAULT_DEMO_ROLE = "Administrator";
+export const ADMIN_DEMO_SECRET_HEADER = "x-admin-demo-secret";
+/** Safe default — never Administrator on first resolve. */
+export const DEFAULT_DEMO_ROLE = "Management";
 
 export const MODULE_OWNERS: Record<string, string> = {
   pr: "Requesting Dept. / Procurement",
