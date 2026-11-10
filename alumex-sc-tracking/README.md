@@ -158,7 +158,7 @@ npm run dev -w @alumex/web         # http://localhost:3000
 ### Auth (local vs published)
 
 - **Local:** set `NEXT_PUBLIC_DEMO_ROLE_SWITCHING=true` (web) and `DEMO_ROLE_SWITCHING=true` (API). Header role selector may send `X-Demo-Role`. Default role is **Management** (not Administrator).
-- **Published (private/team):** demo switching stays off. Browser never chooses a role; Next `/api/backend` proxy uses Cursor identity and pins **Management**. Administrator requires server-side `ADMIN_DEMO_SECRET` + `X-Admin-Demo-Secret` (not available from the UI).
+- **Published (private/team):** demo switching stays off. Browser never chooses a role. Next `/api/backend` requires Cursor identity, maps **Management** (read-only) by default, and elevates to **Administrator** only when the viewer email is listed in server env `ADMIN_EMAILS` (comma-separated). GET is allowed for view modules; POST/PUT/PATCH/DELETE only for Administrator (or create/edit). Client `X-Demo-Role` is ignored.
 
 ### Map tiles
 
