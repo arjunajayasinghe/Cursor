@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
+import { AttachmentsPanel } from "@/components/attachments-panel";
 
 export default function PrPage() {
   const { canEdit } = useAuth();
@@ -380,7 +381,12 @@ export default function PrPage() {
                 ))}
               </div>
             ) : (
-              <FieldGrid fields={PR_FIELDS} values={selected as unknown as Record<string, unknown>} />
+              <>
+                <FieldGrid fields={PR_FIELDS} values={selected as unknown as Record<string, unknown>} />
+                {selected.recordId ? (
+                  <AttachmentsPanel moduleKey="pr" category="pr" recordId={selected.recordId} />
+                ) : null}
+              </>
             )}
           </div>
         ) : null}

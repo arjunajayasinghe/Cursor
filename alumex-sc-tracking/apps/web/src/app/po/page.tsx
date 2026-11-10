@@ -8,6 +8,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { useAuth } from "@/lib/auth";
+import { AttachmentsPanel } from "@/components/attachments-panel";
 
 export default function PoPage() {
   const { canEdit } = useAuth();
@@ -228,7 +229,12 @@ export default function PoPage() {
                 ))}
               </div>
             ) : (
-              <FieldGrid fields={PO_FIELDS} values={selected as unknown as Record<string, unknown>} />
+              <>
+                <FieldGrid fields={PO_FIELDS} values={selected as unknown as Record<string, unknown>} />
+                {selected.recordId ? (
+                  <AttachmentsPanel moduleKey="po" category="po" recordId={selected.recordId} />
+                ) : null}
+              </>
             )}
           </div>
         ) : null}

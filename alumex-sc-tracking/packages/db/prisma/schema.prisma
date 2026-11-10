@@ -265,20 +265,86 @@ model VesselTracking {
   shipment      Shipment? @relation(fields: [shipmentId], references: [id])
   vessel        String?
   imo           String?
+  mmsi          String?
   voyage        String?
   position      String?
-  updated       DateTime? @db.Date
+  latitude      Float?
+  longitude     Float?
+  speedKnots    Float?
+  courseDeg     Float?
+  destination   String?
+  /// Supplier / operational original ETA — never overwritten by API
   eta           DateTime? @db.Date
+  /// Revised supplier ETA (manual / supplier) — never overwritten by API
   etaRevised    DateTime? @db.Date
+  /// Latest ETA from vessel API provider (separate from supplier ETAs)
+  apiEta        DateTime? @db.Date
   arrived       DateTime? @db.Date
+  lastAisAt     DateTime?
+  trackingProvider String?
+  lastPollAt    DateTime?
   reason        String?
   tracking      String?
   notes         String?
+  updated       DateTime? @db.Date
   status        String   @default("Awaiting departure")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  events VesselTrackingEvent[]
+
+  @@index([imo])
+  @@index([mmsi])
   @@map("vessel_trackings")
+}
+
+/// Immutable AIS / provider snapshots (functional-spec vessel_tracking_events)
+model VesselTrackingEvent {
+  id               String   @id @default(cuid())
+  vesselTrackingId String
+  vesselTracking   VesselTracking @relation(fields: [vesselTrackingId], references: [id], onDelete: Cascade)
+  provider         String
+  imo              String?
+  mmsi             String?
+  vesselName       String?
+  latitude         Float?
+  longitude        Float?
+  speedKnots       Float?
+  courseDeg        Float?
+  destination      String?
+  apiEta           DateTime?
+  aisTimestamp     DateTime?
+  rawPayload       Json?
+  createdAt        DateTime @default(now())
+
+  @@index([vesselTrackingId, createdAt])
+  @@index([imo])
+  @@index([mmsi])
+  @@map("vessel_tracking_events")
+}
+
+/// Document register — metadata; bytes live in S3-compatible or local storage
+model DocumentAsset {
+  id           String   @id @default(cuid())
+  /// pr | quotes | po | pay | ship | customs | grn | eval | confirm | vessel | delivery
+  category     String
+  moduleKey    String
+  recordId     String
+  fileName     String
+  contentType  String   @default("application/octet-stream")
+  sizeBytes    Int      @default(0)
+  /// local | s3
+  storageBackend String @default("local")
+  /// Relative key / object path
+  storageKey   String
+  checksum     String?
+  uploadedBy   String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@index([category])
+  @@map("document_assets")
 }
 
 model CustomsClearance {

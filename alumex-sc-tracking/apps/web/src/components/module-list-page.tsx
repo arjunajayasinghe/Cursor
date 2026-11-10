@@ -9,6 +9,7 @@ import { FieldGrid } from "@/components/field-grid";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
+import { AttachmentsPanel } from "@/components/attachments-panel";
 
 type Row = Record<string, unknown> & { id: string; recordId: string; status: string };
 
@@ -287,6 +288,9 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
                       )}
                     </div>
                   </div>
+                ) : null}
+                {selected.recordId ? (
+                  <AttachmentsPanel moduleKey={def.key} category={def.key} recordId={String(selected.recordId)} />
                 ) : null}
               </>
             )}

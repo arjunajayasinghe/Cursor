@@ -111,6 +111,71 @@ export const api = {
       method: "POST",
       body: "{}",
     }),
+  vesselTrackingList: () => request<VesselTrackingDetail[]>("/vessel-tracking"),
+  vesselTrackingGet: (id: string) =>
+    request<VesselTrackingDetail>(`/vessel-tracking/${encodeURIComponent(id)}`),
+  vesselTrackingEvents: (vesselTrackingId?: string) =>
+    request<VesselTrackingEvent[]>(
+      `/vessel-tracking/events${vesselTrackingId ? `?vesselTrackingId=${encodeURIComponent(vesselTrackingId)}` : ""}`,
+    ),
+  vesselTrackingPollAll: () =>
+    request<{ polled: number; updated: number; at: string }>("/vessel-tracking/poll", {
+      method: "POST",
+      body: "{}",
+    }),
+  vesselTrackingPollOne: (id: string) =>
+    request<VesselTrackingDetail>(`/vessel-tracking/${encodeURIComponent(id)}/poll`, {
+      method: "POST",
+      body: "{}",
+    }),
+  documentsList: (moduleKey: string, recordId: string) =>
+    request<DocumentAsset[]>(
+      `/documents?moduleKey=${encodeURIComponent(moduleKey)}&recordId=${encodeURIComponent(recordId)}`,
+    ),
+  documentUpload: async (input: {
+    file: File;
+    moduleKey: string;
+    category: string;
+    recordId: string;
+    notes?: string;
+  }) => {
+    const fd = new FormData();
+    fd.append("file", input.file);
+    fd.append("moduleKey", input.moduleKey);
+    fd.append("category", input.category);
+    fd.append("recordId", input.recordId);
+    if (input.notes) fd.append("notes", input.notes);
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const res = await fetch(`${API_URL}/documents/upload`, {
+      method: "POST",
+      headers: { "X-Demo-Role": demoRole },
+      body: fd,
+    });
+    if (!res.ok) {
+      const body = await res.text();
+      let message = body || `Upload failed (${res.status})`;
+      try {
+        message = JSON.parse(body).message || message;
+      } catch {
+        /* */
+      }
+      throw new Error(Array.isArray(message) ? message.join(", ") : message);
+    }
+    return res.json() as Promise<DocumentAsset>;
+  },
+  documentDownloadUrl: (id: string) =>
+    `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"}/documents/${encodeURIComponent(id)}/download`,
+  documentDownloadBlob: async (id: string) => {
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+    const res = await fetch(
+      `${API_URL}/documents/${encodeURIComponent(id)}/download`,
+      { headers: { "X-Demo-Role": demoRole }, cache: "no-store" },
+    );
+    if (!res.ok) throw new Error(`Download failed (${res.status})`);
+    return res.blob();
+  },
+  documentDelete: (id: string) =>
+    request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
 };
 
 export type ReportPayload = {
@@ -450,3 +515,56 @@ export const PO_FIELDS: Array<{ key: keyof PoItem | string; label: string; sourc
   { key: "notes", label: "PO remarks", source: "W" },
   { key: "status", label: "Status", source: "W" },
 ];
+
+
+export type VesselTrackingEvent = {
+  id: string;
+  provider: string;
+  imo?: string | null;
+  mmsi?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  speedKnots?: number | null;
+  courseDeg?: number | null;
+  apiEta?: string | null;
+  aisTimestamp?: string | null;
+  createdAt: string;
+};
+
+export type VesselTrackingDetail = {
+  id: string;
+  recordId: string;
+  vessel?: string | null;
+  imo?: string | null;
+  mmsi?: string | null;
+  voyage?: string | null;
+  position?: string | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  speedKnots?: number | null;
+  courseDeg?: number | null;
+  eta?: string | null;
+  etaRevised?: string | null;
+  apiEta?: string | null;
+  etaVarianceDays?: number | null;
+  trackingProvider?: string | null;
+  lastAisAt?: string | null;
+  status: string;
+  events?: VesselTrackingEvent[];
+  [key: string]: unknown;
+};
+
+export type DocumentAsset = {
+  id: string;
+  category: string;
+  moduleKey: string;
+  recordId: string;
+  fileName: string;
+  contentType: string;
+  sizeBytes: number;
+  storageBackend: string;
+  storageKey: string;
+  uploadedBy?: string | null;
+  notes?: string | null;
+  createdAt: string;
+};

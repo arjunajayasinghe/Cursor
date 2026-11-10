@@ -44,6 +44,26 @@ Settings UI: `/settings` (SLA targets, §12 notification rules, open alerts, exc
 
 Engine: `POST /automation/evaluate` detects overdue quotation/evaluation/payment, ETA revised, vessel arrived, clearance overdue, GRN pending, etc. Events are **deduplicated** in `notification_events`; email is written to `email_outbox` as `stubbed`. Overview **Needs attention** and KPI strip read from the same rules.
 
+## Vessel tracking (6C)
+
+Provider-neutral adapter under `/vessel-tracking`:
+
+- **Mock** AIS provider (default) + optional **REST** stub (`VESSEL_API_URL` / `VESSEL_API_KEY`)
+- Match by **IMO / MMSI** (not name alone)
+- Nest `@Interval` poll every 5 minutes (`VESSEL_POLL_DISABLED=1` to pause)
+- Persists immutable `vessel_tracking_events`
+- **Never overwrites** supplier `eta` / `etaRevised` — API ETA stored in `apiEta`
+- Vessel screen map: Leaflet + OpenStreetMap last-known position
+
+## Documents
+
+S3-compatible interface with **local filesystem fallback** (`DOCUMENT_STORAGE_PATH`, default `storage/documents/`).
+
+- Register in `document_assets`
+- Upload / list / download for PR, quotation, PO/PI, payment, shipping, clearance, GRN (and other modules)
+- Drawers include an **Attachments** panel
+- Optional S3: set `S3_ENDPOINT` + `S3_BUCKET`
+
 ## Modules
 
 | Screen | Route | API |
@@ -56,13 +76,14 @@ Engine: `POST /automation/evaluate` detects overdue quotation/evaluation/payment
 | Payments | `/payments` | `/pay` |
 | Supplier confirmation | `/confirmations` | `/confirm` |
 | Shipping | `/shipping` | `/ship` |
-| Vessel tracking | `/vessel` | `/vessel` |
+| Vessel tracking | `/vessel` | `/vessel`, `/vessel-tracking` |
 | Customs clearance | `/customs` | `/customs` |
 | Delivery & landed cost | `/delivery` | `/delivery` |
 | GRN & closure | `/grn` | `/grn` |
 | Reports (pipeline / action / cost / closure + CSV) | `/reports` | `GET /reports?type=` |
 | Role administration | `/admin` | `/permissions/*` |
 | SLA & notifications | `/settings` | `/automation/*` |
+| Documents | (drawer attachments) | `/documents` |
 
 Each operational module uses the shared list + detail drawer pattern with source tags. Demo records are seeded from the GUI handoff `schema.js` cases.
 
@@ -73,6 +94,7 @@ alumex-sc-tracking/
   apps/web          Next.js UI (port 3000)
   apps/api          NestJS REST API (port 4000)
   packages/db       Prisma schema, migrations, seed
+  storage/documents Local document blobs (gitignored)
   docker-compose.yml
   samples/          Example SAP PR TSV for import stub
 ```
