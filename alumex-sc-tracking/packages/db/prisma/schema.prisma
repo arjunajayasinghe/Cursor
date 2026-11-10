@@ -1,0 +1,806 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Field source tags used across modules: S / W / A / E / M
+enum FieldSource {
+  S
+  W
+  A
+  E
+  M
+}
+
+model PurchaseRequisition {
+  id              String   @id @default(cuid())
+  recordId        String   @unique
+  prNo            String
+  line            String
+  date            DateTime? @db.Date
+  purchasingGroup String?
+  createdBy       String?
+  requester       String?
+  changed         DateTime? @db.Date
+  reportReceived  DateTime? @db.Date
+  reportDate      DateTime? @db.Date
+  reportDelay     Int?
+  delayBand       String?
+  sourcing        String?
+  stockType       String?
+  department      String?
+  plant           String?
+  materialCode    String?
+  material        String?
+  materialGroup   String?
+  quantity        Decimal  @db.Decimal(18, 3)
+  uom             String?
+  brand           String?
+  need            DateTime? @db.Date
+  approved        DateTime? @db.Date
+  release         String?
+  handler         String?
+  buyer           String?
+  priority        String?  @default("Normal")
+  notes           String?
+  status          String   @default("Draft")
+  imported        Boolean  @default(false)
+  /// SAP system / client id used on last sync (phase 3)
+  sapClient       String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  quotations Quotation[]
+  evaluations Evaluation[]
+  purchaseOrders PurchaseOrder[]
+
+  @@unique([prNo, line])
+  @@index([prNo])
+  @@index([status])
+  @@map("purchase_requisitions")
+}
+
+model Quotation {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  rfq           String?
+  called        DateTime? @db.Date
+  supplierCode  String?
+  supplier      String?
+  received      DateTime? @db.Date
+  quoteRef      String?
+  email         String?
+  currency      String?
+  unitPrice     Decimal? @db.Decimal(18, 4)
+  quantity      Decimal? @db.Decimal(18, 3)
+  paymentTerms  String?
+  incoterm      String?
+  lead          Int?
+  validity      DateTime? @db.Date
+  technical     String?
+  exception     String?
+  notes         String?
+  status        String   @default("Requested")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@map("quotations")
+}
+
+model Evaluation {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  start         DateTime? @db.Date
+  evaluator     String?
+  due           DateTime? @db.Date
+  compliance    String?
+  recommended   String?
+  compare       String?
+  technical     String?
+  reason        String?
+  notes         String?
+  decisions     Json?
+  status        String   @default("Draft")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@map("evaluations")
+}
+
+model PurchaseOrder {
+  id              String   @id @default(cuid())
+  recordId        String   @unique
+  prId            String?
+  purchaseRequisitionId String?
+  purchaseRequisition   PurchaseRequisition? @relation(fields: [purchaseRequisitionId], references: [id])
+  poNo            String
+  line            String
+  date            DateTime? @db.Date
+  supplierCode    String?
+  supplier        String?
+  materialCode    String?
+  material        String?
+  quantity        Decimal  @db.Decimal(18, 3)
+  uom             String?
+  currency        String?
+  unitPrice       Decimal? @db.Decimal(18, 4)
+  paymentTerms    String?
+  incoterm        String?
+  approval        String?
+  approved        DateTime? @db.Date
+  sapNeed         DateTime? @db.Date
+  sent            DateTime? @db.Date
+  importNo        String?
+  piNo            String?
+  piDate          DateTime? @db.Date
+  piAmount        Decimal? @db.Decimal(18, 2)
+  production      Int?
+  transit         Int?
+  supplierEta     DateTime? @db.Date
+  notes           String?
+  status          String   @default("Draft")
+  /// Cover / covering PO umbrella (ops grouping; commercial key stays poNo+line)
+  coverPoNo       String?
+  sapClient       String?
+  lastSyncAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  payments Payment[]
+  confirmations SupplierConfirmation[]
+  shipments Shipment[]
+  shipmentAllocations ShipmentLineAllocation[]
+
+  @@unique([poNo, line])
+  @@index([poNo])
+  @@index([coverPoNo])
+  @@index([prId])
+  @@index([status])
+  @@map("purchase_orders")
+}
+
+model Payment {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  poId          String?
+  purchaseOrderId String?
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  method        String?
+  due           DateTime? @db.Date
+  currency      String?
+  amount        Decimal? @db.Decimal(18, 2)
+  bank          String?
+  bankDate      DateTime? @db.Date
+  reference     String?
+  lcNo          String?
+  lcDate        DateTime? @db.Date
+  maturity      DateTime? @db.Date
+  completed     DateTime? @db.Date
+  paid          Decimal? @db.Decimal(18, 2)
+  notes         String?
+  status        String   @default("Scheduled")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([poId])
+  @@map("payments")
+}
+
+model SupplierConfirmation {
+  id                 String   @id @default(cuid())
+  recordId           String   @unique
+  poId               String?
+  purchaseOrderId    String?
+  purchaseOrder      PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  supplier           String?
+  contact            String?
+  acknowledged       DateTime? @db.Date
+  confirmedQuantity  Decimal? @db.Decimal(18, 3)
+  production         DateTime? @db.Date
+  ready              DateTime? @db.Date
+  shipBy             DateTime? @db.Date
+  revised            DateTime? @db.Date
+  reason             String?
+  notes              String?
+  status             String   @default("Awaiting response")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([poId])
+  @@map("supplier_confirmations")
+}
+
+model Shipment {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  poId          String?
+  purchaseOrderId String?
+  purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  /// Cover PO this shipment rolls up under (optional)
+  coverPoNo     String?
+  /// Air | Sea | Courier | FCL | LCL
+  mode          String?
+  importNo      String?
+  booking       String?
+  booked        DateTime? @db.Date
+  forwarder     String?
+  carrier       String?
+  vessel        String?
+  voyage        String?
+  bl            String?
+  blDate        DateTime? @db.Date
+  container     String?
+  seal          String?
+  weight        Decimal? @db.Decimal(18, 3)
+  packages      Int?
+  loading       String?
+  destination   String?
+  etd           DateTime? @db.Date
+  atd           DateTime? @db.Date
+  eta           DateTime? @db.Date
+  etaRevised    DateTime? @db.Date
+  arrived       DateTime? @db.Date
+  invoice       String?
+  packing       String?
+  origin        String?
+  insurance     String?
+  notes         String?
+  status        String   @default("Booking pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  vesselTrackings VesselTracking[]
+  customsClearances CustomsClearance[]
+  deliveries DeliveryLandedCost[]
+  lineAllocations ShipmentLineAllocation[]
+
+  @@index([poId])
+  @@index([coverPoNo])
+  @@index([importNo])
+  @@index([mode])
+  @@map("shipments")
+}
+
+/// Qty allocation of a PO line onto a shipment (supports split / partial / multi-mode)
+model ShipmentLineAllocation {
+  id                String   @id @default(cuid())
+  shipmentId        String
+  shipment          Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  poNo              String
+  line              String
+  /// Allocated qty on this shipment
+  quantity          Decimal  @db.Decimal(18, 3)
+  /// Air | Sea | Courier | FCL | LCL — may differ from sibling allocations on same line
+  mode              String?
+  /// allocated | shipped | short-shipped | balance_pending | closed
+  status            String   @default("allocated")
+  /// Qty actually shipped when short-shipped (≤ quantity)
+  shippedQty        Decimal? @db.Decimal(18, 3)
+  shortQty          Decimal? @db.Decimal(18, 3)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([poNo, line])
+  @@index([shipmentId])
+  @@index([purchaseOrderId])
+  @@index([status])
+  @@map("shipment_line_allocations")
+}
+
+model VesselTracking {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  vessel        String?
+  imo           String?
+  mmsi          String?
+  voyage        String?
+  position      String?
+  latitude      Float?
+  longitude     Float?
+  speedKnots    Float?
+  courseDeg     Float?
+  destination   String?
+  /// Supplier / operational original ETA — never overwritten by API
+  eta           DateTime? @db.Date
+  /// Revised supplier ETA (manual / supplier) — never overwritten by API
+  etaRevised    DateTime? @db.Date
+  /// Latest ETA from vessel API provider (separate from supplier ETAs)
+  apiEta        DateTime? @db.Date
+  arrived       DateTime? @db.Date
+  lastAisAt     DateTime?
+  trackingProvider String?
+  lastPollAt    DateTime?
+  reason        String?
+  tracking      String?
+  notes         String?
+  updated       DateTime? @db.Date
+  status        String   @default("Awaiting departure")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  events VesselTrackingEvent[]
+
+  @@index([imo])
+  @@index([mmsi])
+  @@map("vessel_trackings")
+}
+
+/// Immutable AIS / provider snapshots (functional-spec vessel_tracking_events)
+model VesselTrackingEvent {
+  id               String   @id @default(cuid())
+  vesselTrackingId String
+  vesselTracking   VesselTracking @relation(fields: [vesselTrackingId], references: [id], onDelete: Cascade)
+  provider         String
+  imo              String?
+  mmsi             String?
+  vesselName       String?
+  latitude         Float?
+  longitude        Float?
+  speedKnots       Float?
+  courseDeg        Float?
+  destination      String?
+  apiEta           DateTime?
+  aisTimestamp     DateTime?
+  rawPayload       Json?
+  createdAt        DateTime @default(now())
+
+  @@index([vesselTrackingId, createdAt])
+  @@index([imo])
+  @@index([mmsi])
+  @@map("vessel_tracking_events")
+}
+
+/// Document register — metadata; bytes live in S3-compatible or local storage
+model DocumentAsset {
+  id           String   @id @default(cuid())
+  /// pr | quotes | po | pay | ship | customs | grn | eval | confirm | vessel | delivery
+  category     String
+  moduleKey    String
+  recordId     String
+  fileName     String
+  contentType  String   @default("application/octet-stream")
+  sizeBytes    Int      @default(0)
+  /// local | s3
+  storageBackend String @default("local")
+  /// Relative key / object path
+  storageKey   String
+  checksum     String?
+  uploadedBy   String?
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@index([category])
+  @@map("document_assets")
+}
+
+model CustomsClearance {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  broker        String?
+  declaration   String?
+  filed         DateTime? @db.Date
+  hs            String?
+  assessment    String?
+  value         Decimal? @db.Decimal(18, 2)
+  duty          Decimal? @db.Decimal(18, 2)
+  tax           Decimal? @db.Decimal(18, 2)
+  paidDate      DateTime? @db.Date
+  inspection    DateTime? @db.Date
+  permit        String?
+  order         String?
+  released      DateTime? @db.Date
+  notes         String?
+  status        String   @default("Awaiting documents")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("customs_clearances")
+}
+
+model DeliveryLandedCost {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  shipmentId    String?
+  shipment      Shipment? @relation(fields: [shipmentId], references: [id])
+  site          String?
+  transport     String?
+  vehicle       String?
+  dispatch      DateTime? @db.Date
+  delivered     DateTime? @db.Date
+  quantity      Decimal? @db.Decimal(18, 3)
+  uom           String?
+  currency      String?
+  goods         Decimal? @db.Decimal(18, 2)
+  fx            Decimal? @db.Decimal(18, 6)
+  freight       Decimal? @db.Decimal(18, 2)
+  insurance     Decimal? @db.Decimal(18, 2)
+  duty          Decimal? @db.Decimal(18, 2)
+  handling      Decimal? @db.Decimal(18, 2)
+  demurrage     Decimal? @db.Decimal(18, 2)
+  local         Decimal? @db.Decimal(18, 2)
+  other         Decimal? @db.Decimal(18, 2)
+  notes         String?
+  status        String   @default("Dispatch pending")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("delivery_landed_costs")
+}
+
+model GoodsReceipt {
+  id            String   @id @default(cuid())
+  recordId      String   @unique
+  prId          String?
+  poId          String?
+  grnNo         String?
+  year          Int?
+  item          String?
+  movement      String?
+  posted        DateTime? @db.Date
+  plant         String?
+  location      String?
+  received      Decimal? @db.Decimal(18, 3)
+  accepted      Decimal? @db.Decimal(18, 3)
+  uom           String?
+  quality       String?
+  closed        DateTime? @db.Date
+  closedBy      String?
+  notes         String?
+  status        String   @default("Awaiting posting")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([prId])
+  @@index([poId])
+  @@map("goods_receipts")
+}
+
+model AuditEvent {
+  id         String   @id @default(cuid())
+  moduleKey  String
+  recordId   String
+  actor      String
+  action     String
+  detail     String?
+  /// JSON snapshot of previous values
+  oldValue   String?
+  /// JSON snapshot of new values
+  newValue   String?
+  reason     String?
+  /// manual | api | import | system | provider
+  source     String   @default("manual")
+  createdAt  DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@index([createdAt])
+  @@map("audit_events")
+}
+
+/// Master data catalogues (plants, currencies, UOM, Incoterms, delay reasons, suppliers)
+model MasterDataEntry {
+  id        String   @id @default(cuid())
+  /// plant | currency | uom | incoterm | delay_reason | supplier
+  category  String
+  code      String
+  name      String
+  extra     String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, code])
+  @@index([category, active])
+  @@map("master_data_entries")
+}
+
+/// Future SAP / external connector registry
+model IntegrationRegister {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  kind            String   @default("sap_import")
+  /// csv | xlsx | api | manual
+  channel         String   @default("csv")
+  status          String   @default("stub")
+  /// stub | configured | active | paused
+  description     String?
+  /// JSON map of field -> preferred source (S/W/A/E/M)
+  fieldPriority   Json?
+  /// SAP client / system id for API sync jobs (phase 3)
+  sapClient       String?
+  lastRunAt       DateTime?
+  lastSyncAt      DateTime?
+  lastResult      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  batches         ImportBatch[]
+  syncJobs        IntegrationSyncJob[]
+
+  @@map("integration_register")
+}
+
+/// Phase 3 scheduled / on-demand API sync job (stub runner uses sample extracts)
+model IntegrationSyncJob {
+  id              String   @id @default(cuid())
+  integrationKey  String
+  integration     IntegrationRegister @relation(fields: [integrationKey], references: [key], onDelete: Cascade)
+  name            String
+  /// Cron-style schedule label (demo; runner is on-demand)
+  schedule        String   @default("0 */6 * * *")
+  enabled         Boolean  @default(true)
+  /// idle | running | paused | error
+  status          String   @default("idle")
+  sapClient       String?
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  lastResult      String?
+  lastError       String?
+  runCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([integrationKey, enabled])
+  @@map("integration_sync_jobs")
+}
+
+/// Phase 4 live field mismatch highlighting (import / sync conflicts)
+model FieldMismatch {
+  id              String   @id @default(cuid())
+  moduleKey       String
+  recordId        String
+  field           String
+  existingValue   String?
+  incomingValue   String?
+  /// Preferred source tag S/W/A/E/M
+  preferredSource String   @default("S")
+  /// keep_existing | apply_incoming | exception
+  action          String   @default("exception")
+  /// open | resolved | dismissed
+  status          String   @default("open")
+  integrationKey  String?
+  batchId         String?
+  detail          String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([moduleKey, recordId, status])
+  @@index([status, createdAt])
+  @@map("field_mismatches")
+}
+
+/// Immutable authorized CSV/XLSX import history (phase 2)
+model ImportBatch {
+  id              String   @id @default(cuid())
+  integrationKey  String
+  integration     IntegrationRegister @relation(fields: [integrationKey], references: [key])
+  /// preview | reconciled | rejected
+  status          String   @default("preview")
+  fileName        String?
+  /// csv | tsv | xlsx | text
+  format          String   @default("csv")
+  actor           String
+  rowCount        Int      @default(0)
+  createdCount    Int      @default(0)
+  updatedCount    Int      @default(0)
+  skippedCount    Int      @default(0)
+  mismatchCount   Int      @default(0)
+  errorCount      Int      @default(0)
+  /// Full preview/reconcile summary JSON (immutable after reconcile)
+  summary         Json?
+  /// Optional raw payload excerpt (not the whole file for large uploads)
+  payloadExcerpt  String?
+  createdAt       DateTime @default(now())
+  reconciledAt    DateTime?
+
+  @@index([integrationKey, createdAt])
+  @@map("import_batches")
+}
+
+/// Lightweight workflow transition log (independent stages)
+model WorkflowAction {
+  id         String   @id @default(cuid())
+  moduleKey  String
+  recordId   String
+  fromStatus String?
+  toStatus   String
+  actor      String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@map("workflow_actions")
+}
+
+/// Demo / production role. Access levels: 0 none · 1 view · 2 create/edit
+model Role {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  isSystem     Boolean  @default(false)
+  /// External parties (supplier / clearing agent) only see assigned records
+  assignedOnly Boolean  @default(false)
+  sortOrder    Int      @default(100)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  permissions RolePermission[]
+  assignments RecordAssignment[]
+
+  @@map("roles")
+}
+
+model RolePermission {
+  id        String   @id @default(cuid())
+  roleId    String
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  moduleKey String
+  /// 0 = no access, 1 = view, 2 = create and edit
+  level     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([roleId, moduleKey])
+  @@index([moduleKey])
+  @@map("role_permissions")
+}
+
+/// Record-level assignment for external / restricted roles
+model RecordAssignment {
+  id         String   @id @default(cuid())
+  roleId     String
+  role       Role     @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  moduleKey  String
+  recordId   String
+  partyLabel String?
+  notes      String?
+  createdAt  DateTime @default(now())
+
+  @@unique([roleId, moduleKey, recordId])
+  @@index([moduleKey, recordId])
+  @@map("record_assignments")
+}
+
+/// Configurable SLA / KPI targets (functional-spec §11.2)
+model SlaRule {
+  id          String   @id @default(cuid())
+  /// Stable key e.g. quotation_response, evaluation_turnaround, payment_due, clearance_fcl, clearance_lcl
+  key         String   @unique
+  name        String
+  description String?
+  moduleKey   String
+  /// hours | days
+  unit        String   @default("hours")
+  targetValue Int
+  /// Optional load-type master (FCL / LCL) for clearance targets
+  loadType    String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([moduleKey])
+  @@map("sla_rules")
+}
+
+/// Notification / escalation rule definitions (functional-spec §12)
+model NotificationRule {
+  id              String   @id @default(cuid())
+  /// Stable trigger key e.g. quotation_overdue, eta_revised
+  triggerKey      String   @unique
+  name            String
+  description     String?
+  moduleKey       String
+  /// Reminder | Escalation | Delay alert | Change notification | Follow-up | Clearance notification
+  action          String   @default("Reminder")
+  severity        String   @default("warning")
+  recipientRoles  String   @default("Procurement")
+  channels        String   @default("in_app,email")
+  /// Hours before re-emitting the same dedupe key
+  dedupeHours     Int      @default(24)
+  /// Optional link to SLA rule key
+  slaKey          String?
+  escalateAfterHours Int?
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(100)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@index([moduleKey])
+  @@map("notification_rules")
+}
+
+/// Deduplicated notification log + in-app alert feed
+model NotificationEvent {
+  id           String   @id @default(cuid())
+  /// Hash/key used for dedupe: triggerKey:moduleKey:recordId
+  dedupeKey    String
+  triggerKey   String
+  moduleKey    String
+  recordId     String
+  title        String
+  message      String
+  severity     String   @default("warning")
+  action       String   @default("Reminder")
+  recipientRoles String
+  status       String   @default("open")
+  /// open | acknowledged | resolved | suppressed
+  href         String?
+  ageHours     Int?
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  ackAt        DateTime?
+  ackBy        String?
+  resolvedAt   DateTime?
+  occurrenceCount Int   @default(1)
+
+  @@unique([dedupeKey])
+  @@index([status, lastSeenAt])
+  @@index([moduleKey, recordId])
+  @@index([triggerKey])
+  @@map("notification_events")
+}
+
+/// Email channel stub (outbox) — delivery can be wired later
+model EmailOutbox {
+  id             String   @id @default(cuid())
+  notificationId String?
+  toRoles        String
+  subject        String
+  body           String
+  status         String   @default("queued")
+  /// queued | sent | failed | stubbed
+  attempts       Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  sentAt         DateTime?
+
+  @@index([status, createdAt])
+  @@map("email_outbox")
+}
+
+/// Exception register for SLA breaches and authorized exceptions
+model ExceptionRegister {
+  id          String   @id @default(cuid())
+  moduleKey   String
+  recordId    String
+  triggerKey  String?
+  category    String   @default("SLA")
+  title       String
+  detail      String?
+  severity    String   @default("warning")
+  status      String   @default("open")
+  /// open | under_review | authorized | closed
+  ownerRole   String?
+  authorizedBy String?
+  authorizedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, moduleKey])
+  @@index([recordId])
+  @@map("exception_register")
+}

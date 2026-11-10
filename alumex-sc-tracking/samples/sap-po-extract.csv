@@ -1,0 +1,4 @@
+Purchasing Document,Item,Document Date,Vendor,Vendor Name,Material,Short Text,Quantity,Un,Currency,Net Price,Incoterms,PR,Notes
+450009901,10,2026-11-08,100352,Gulf Alloy Trading,ALX-901,Demo import billet 6063,25,MT,USD,2440,CIF,100009901,Do not overwrite operational notes
+450009901,20,2026-11-08,100352,Gulf Alloy Trading,ALX-902,Demo import billet 6060,10,MT,USD,2380,CIF,100009901,
+450009902,10,2026-11-07,100410,Meridian Coatings,ALX-903,Demo gasket strip,500,KG,USD,2.56,FOB,100009902,

@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+build
+.env
+.env.local
+*.log
+coverage
+.turbo
+.DS_Store
+
+# Local document storage blobs
+storage/documents/**
+!storage/documents/.gitkeep
