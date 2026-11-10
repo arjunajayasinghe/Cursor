@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import type { LayerGroup, Map as LeafletMap } from "leaflet";
 import "leaflet/dist/leaflet.css";
 
 type Marker = {
@@ -24,7 +25,7 @@ export function VesselMap({
   focus?: { lat: number; lng: number } | null;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<{ map: any; layer: any } | null>(null);
+  const mapRef = useRef<{ map: LeafletMap; layer: LayerGroup } | null>(null);
 
   useEffect(() => {
     let cancelled = false;

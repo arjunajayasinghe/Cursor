@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api, type ExceptionItem } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
@@ -13,19 +13,19 @@ export default function ExceptionsPage() {
   const [rows, setRows] = useState<ExceptionItem[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setError(null);
       setRows(await api.exceptionsList(status));
     } catch (e) {
       setError((e as Error).message);
     }
-  }
+  }, [status]);
 
   useEffect(() => {
     if (!canView("automation")) return;
     void load();
-  }, [status, canView, role]);
+  }, [load, canView, role]);
 
   if (!canView("automation")) {
     return (
