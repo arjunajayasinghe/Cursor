@@ -6,6 +6,7 @@ import {
   api,
   PR_FIELDS,
   PR_REPORT_COLUMNS,
+  type FieldMismatch,
   type PrGroup,
   type PrImportPreview,
   type PrItem,
@@ -36,6 +37,7 @@ export default function PrPage() {
   const [importBusy, setImportBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [mismatches, setMismatches] = useState<FieldMismatch[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -50,6 +52,25 @@ export default function PrPage() {
     const t = setTimeout(load, 150);
     return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    if (!selected?.recordId) {
+      setMismatches([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .mismatches("pr", selected.recordId, "open")
+      .then((rows) => {
+        if (!cancelled) setMismatches(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMismatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.recordId]);
 
   const statuses = useMemo(
     () => Array.from(new Set(groups.flatMap((g) => g.statuses))).sort(),
@@ -384,7 +405,11 @@ export default function PrPage() {
               </div>
             ) : (
               <>
-                <FieldGrid fields={PR_FIELDS} values={selected as unknown as Record<string, unknown>} />
+                <FieldGrid
+                  fields={PR_FIELDS}
+                  values={selected as unknown as Record<string, unknown>}
+                  mismatches={mismatches}
+                />
                 {selected.recordId ? (
                   <>
                     <StatusTransition

@@ -49,6 +49,9 @@ model PurchaseRequisition {
   notes           String?
   status          String   @default("Draft")
   imported        Boolean  @default(false)
+  /// SAP system / client id used on last sync (phase 3)
+  sapClient       String?
+  lastSyncAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -149,6 +152,8 @@ model PurchaseOrder {
   supplierEta     DateTime? @db.Date
   notes           String?
   status          String   @default("Draft")
+  sapClient       String?
+  lastSyncAt      DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -483,14 +488,69 @@ model IntegrationRegister {
   description     String?
   /// JSON map of field -> preferred source (S/W/A/E/M)
   fieldPriority   Json?
+  /// SAP client / system id for API sync jobs (phase 3)
+  sapClient       String?
   lastRunAt       DateTime?
+  lastSyncAt      DateTime?
   lastResult      String?
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   batches         ImportBatch[]
+  syncJobs        IntegrationSyncJob[]
 
   @@map("integration_register")
+}
+
+/// Phase 3 scheduled / on-demand API sync job (stub runner uses sample extracts)
+model IntegrationSyncJob {
+  id              String   @id @default(cuid())
+  integrationKey  String
+  integration     IntegrationRegister @relation(fields: [integrationKey], references: [key], onDelete: Cascade)
+  name            String
+  /// Cron-style schedule label (demo; runner is on-demand)
+  schedule        String   @default("0 */6 * * *")
+  enabled         Boolean  @default(true)
+  /// idle | running | paused | error
+  status          String   @default("idle")
+  sapClient       String?
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  lastResult      String?
+  lastError       String?
+  runCount        Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([integrationKey, enabled])
+  @@map("integration_sync_jobs")
+}
+
+/// Phase 4 live field mismatch highlighting (import / sync conflicts)
+model FieldMismatch {
+  id              String   @id @default(cuid())
+  moduleKey       String
+  recordId        String
+  field           String
+  existingValue   String?
+  incomingValue   String?
+  /// Preferred source tag S/W/A/E/M
+  preferredSource String   @default("S")
+  /// keep_existing | apply_incoming | exception
+  action          String   @default("exception")
+  /// open | resolved | dismissed
+  status          String   @default("open")
+  integrationKey  String?
+  batchId         String?
+  detail          String?
+  resolvedBy      String?
+  resolvedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([moduleKey, recordId, status])
+  @@index([status, createdAt])
+  @@map("field_mismatches")
 }
 
 /// Immutable authorized CSV/XLSX import history (phase 2)

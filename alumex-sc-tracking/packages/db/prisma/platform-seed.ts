@@ -119,6 +119,61 @@ const INTEGRATIONS = [
       etaRevised: "W",
     },
   },
+  {
+    key: "sap_pr_api",
+    name: "SAP PR data service (API sync)",
+    kind: "sap_api",
+    channel: "api",
+    status: "configured",
+    description: "Phase-3 scheduled/on-demand PR sync stub. Demo runner pulls samples/sap-pr-report.tsv.",
+    fieldPriority: {
+      prNo: "S",
+      line: "S",
+      materialCode: "S",
+      material: "S",
+      quantity: "S",
+      plant: "S",
+      requester: "S",
+      notes: "W",
+      priority: "W",
+      status: "W",
+    },
+    notes: "POST /platform/sync-jobs/:id/run · sapClient 100",
+    sapClient: "100",
+  },
+  {
+    key: "sap_po_api",
+    name: "SAP PO / PI data service (API sync)",
+    kind: "sap_api",
+    channel: "api",
+    status: "configured",
+    description: "Phase-3 PO sync stub using sample PO extract.",
+    fieldPriority: {
+      poNo: "S",
+      line: "S",
+      supplier: "S",
+      unitPrice: "S",
+      currency: "S",
+      piNo: "W",
+      notes: "W",
+    },
+    sapClient: "100",
+  },
+];
+
+const SYNC_JOBS = [
+  {
+    integrationKey: "sap_pr_api",
+    name: "PR released report · every 6h",
+    schedule: "0 */6 * * *",
+    sapClient: "100",
+  },
+  {
+    integrationKey: "sap_po_api",
+    name: "PO / PI extract · daily",
+    schedule: "0 2 * * *",
+    sapClient: "100",
+  },
 ];
 
 export async function seedPlatform(prisma: PrismaClient) {
@@ -142,6 +197,7 @@ export async function seedPlatform(prisma: PrismaClient) {
         description: i.description,
         fieldPriority: i.fieldPriority,
         notes: "notes" in i ? (i as { notes?: string }).notes : null,
+        sapClient: "sapClient" in i ? (i as { sapClient?: string }).sapClient : null,
       },
       update: {
         name: i.name,
@@ -149,8 +205,36 @@ export async function seedPlatform(prisma: PrismaClient) {
         fieldPriority: i.fieldPriority,
         channel: i.channel,
         status: i.status,
+        sapClient: "sapClient" in i ? (i as { sapClient?: string }).sapClient : null,
       },
     });
+  }
+
+  for (const job of SYNC_JOBS) {
+    const existing = await prisma.integrationSyncJob.findFirst({
+      where: { integrationKey: job.integrationKey, name: job.name },
+    });
+    if (existing) {
+      await prisma.integrationSyncJob.update({
+        where: { id: existing.id },
+        data: {
+          schedule: job.schedule,
+          sapClient: job.sapClient,
+          enabled: true,
+          status: "idle",
+          nextRunAt: new Date(Date.now() + 6 * 3600_000),
+        },
+      });
+    } else {
+      await prisma.integrationSyncJob.create({
+        data: {
+          ...job,
+          enabled: true,
+          status: "idle",
+          nextRunAt: new Date(Date.now() + 6 * 3600_000),
+        },
+      });
+    }
   }
 
   // Sample audit + workflow history for demo depth
@@ -165,6 +249,55 @@ export async function seedPlatform(prisma: PrismaClient) {
         detail: "Seed baseline",
         source: "import",
         newValue: JSON.stringify({ prNo: pr.prNo, line: pr.line, status: pr.status }),
+      },
+    });
+
+    await prisma.fieldMismatch.deleteMany({ where: { moduleKey: "pr", recordId: pr.recordId } });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "pr",
+        recordId: pr.recordId,
+        field: "quantity",
+        existingValue: String(pr.quantity),
+        incomingValue: String(Number(pr.quantity) + 5),
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_pr_api",
+        detail: "Demo mismatch — SAP quantity differs from web record",
+      },
+    });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "pr",
+        recordId: pr.recordId,
+        field: "plant",
+        existingValue: pr.plant || "",
+        incomingValue: "1100",
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_pr_api",
+        detail: "Demo mismatch — plant code from SAP sync",
+      },
+    });
+  }
+
+  const po = await prisma.purchaseOrder.findFirst({ orderBy: { recordId: "asc" } });
+  if (po) {
+    await prisma.fieldMismatch.deleteMany({ where: { moduleKey: "po", recordId: po.recordId } });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "po",
+        recordId: po.recordId,
+        field: "unitPrice",
+        existingValue: po.unitPrice != null ? String(po.unitPrice) : "",
+        incomingValue: "2499.00",
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_po_api",
+        detail: "Demo mismatch — SAP unit price vs web",
       },
     });
   }

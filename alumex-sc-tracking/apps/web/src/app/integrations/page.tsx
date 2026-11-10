@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { api, type ImportBatch, type IntegrationItem, type IntegrationPreview } from "@/lib/api";
+import {
+  api,
+  type FieldMismatch,
+  type ImportBatch,
+  type IntegrationItem,
+  type IntegrationPreview,
+  type SyncJob,
+} from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
@@ -24,6 +31,8 @@ export default function IntegrationsPage() {
   const editable = canEdit("integrations");
   const [rows, setRows] = useState<IntegrationItem[]>([]);
   const [batches, setBatches] = useState<ImportBatch[]>([]);
+  const [syncJobs, setSyncJobs] = useState<SyncJob[]>([]);
+  const [openMismatches, setOpenMismatches] = useState<FieldMismatch[]>([]);
   const [selected, setSelected] = useState<string>("sap_pr_tsv");
   const [text, setText] = useState("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -35,12 +44,16 @@ export default function IntegrationsPage() {
 
   const refresh = useCallback(async () => {
     if (!canView("integrations")) return;
-    const [list, hist] = await Promise.all([
+    const [list, hist, jobs, mismatches] = await Promise.all([
       api.integrationsList(),
       api.integrationBatches(selected || ""),
+      api.syncJobs(),
+      api.mismatches("", "", "open"),
     ]);
     setRows(list);
     setBatches(hist);
+    setSyncJobs(jobs);
+    setOpenMismatches(mismatches);
     if (!selected && list[0]) setSelected(list[0].key);
   }, [canView, selected]);
 
@@ -109,9 +122,9 @@ export default function IntegrationsPage() {
         </div>
         <h1 className="text-[30px] font-semibold tracking-[-0.85px]">Integration register</h1>
         <p className="mt-2 max-w-3xl text-[13px] text-sub">
-          Phase 2 authorized CSV/XLSX import: validate → preview → reconcile with field source priority
-          (S/W/A/E/M). Operational notes are never overwritten. Import batches are immutable after
-          reconcile.
+          Phase 2 CSV/XLSX import plus Phase 3 API sync jobs (sample runner) and Phase 4 open field
+          mismatches. Field source priority (S/W/A/E/M) keeps operational notes web-owned. Import
+          batches stay immutable after reconcile.
         </p>
       </div>
 
@@ -296,6 +309,142 @@ export default function IntegrationsPage() {
           )}
         </section>
       </div>
+
+      <section className="mb-4 rounded-panel border border-line bg-white shadow-panel">
+        <div className="border-b border-[#e7edf4] px-4 py-2.5 text-sm font-semibold">
+          Phase 3 · scheduled API sync
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full min-w-[760px] text-left text-xs">
+            <thead className="bg-[#f6f8fb] text-[#52657b]">
+              <tr>
+                {["Job", "Connector", "Schedule", "SAP client", "Status", "Last / next", "Runs", ""].map((h) => (
+                  <th key={h || "actions"} className="px-3 py-2 font-bold">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {syncJobs.map((job) => (
+                <tr key={job.id} className="border-t border-[#e8eef5]">
+                  <td className="px-3 py-2 font-semibold">{job.name}</td>
+                  <td className="px-3 py-2 font-mono text-[11px]">{job.integrationKey}</td>
+                  <td className="px-3 py-2 font-mono text-[11px]">{job.schedule}</td>
+                  <td className="px-3 py-2">{job.sapClient || "—"}</td>
+                  <td className="px-3 py-2">
+                    <StatusBadge status={job.enabled ? job.status : "paused"} />
+                  </td>
+                  <td className="px-3 py-2 text-muted">
+                    <div>{job.lastResult || job.lastError || "—"}</div>
+                    <div className="text-[10px]">
+                      {job.lastRunAt
+                        ? `Last ${String(job.lastRunAt).replace("T", " ").slice(0, 19)}`
+                        : "Never run"}
+                      {job.nextRunAt
+                        ? ` · next ${String(job.nextRunAt).replace("T", " ").slice(0, 19)}`
+                        : ""}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2">{job.runCount}</td>
+                  <td className="px-3 py-2">
+                    <div className="flex flex-wrap gap-1">
+                      {editable ? (
+                        <>
+                          <Button
+                            disabled={busy || !job.enabled}
+                            onClick={async () => {
+                              setBusy(true);
+                              setError(null);
+                              try {
+                                const saved = await api.syncJobRun(job.id);
+                                setToast(saved.lastResult || "Sync finished");
+                                await refresh();
+                              } catch (e) {
+                                setError((e as Error).message);
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                          >
+                            Run now
+                          </Button>
+                          <Button
+                            onClick={async () => {
+                              await api.syncJobPatch(job.id, { enabled: !job.enabled });
+                              await refresh();
+                            }}
+                          >
+                            {job.enabled ? "Pause" : "Enable"}
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!syncJobs.length ? (
+                <tr>
+                  <td colSpan={8} className="px-3 py-8 text-center text-sub">
+                    No sync jobs seeded.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="mb-4 rounded-panel border border-line bg-white shadow-panel">
+        <div className="border-b border-[#e7edf4] px-4 py-2.5 text-sm font-semibold">
+          Phase 4 · open field mismatches
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full min-w-[720px] text-left text-xs">
+            <thead className="bg-[#f6f8fb] text-[#52657b]">
+              <tr>
+                {["Module", "Record", "Field", "Existing", "Incoming", "Preferred", ""].map((h) => (
+                  <th key={h || "act"} className="px-3 py-2 font-bold">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {openMismatches.map((m) => (
+                <tr key={m.id} className="border-t border-[#e8eef5]">
+                  <td className="px-3 py-2">{m.moduleKey}</td>
+                  <td className="px-3 py-2 font-mono text-[11px]">{m.recordId}</td>
+                  <td className="px-3 py-2 font-semibold">{m.field}</td>
+                  <td className="px-3 py-2">{m.existingValue || "—"}</td>
+                  <td className="px-3 py-2 text-[#9a5c12]">{m.incomingValue || "—"}</td>
+                  <td className="px-3 py-2">{m.preferredSource}</td>
+                  <td className="px-3 py-2">
+                    {editable ? (
+                      <Button
+                        onClick={async () => {
+                          await api.mismatchPatch(m.id, { status: "resolved" });
+                          setToast(`Resolved ${m.moduleKey}/${m.field}`);
+                          await refresh();
+                        }}
+                      >
+                        Resolve
+                      </Button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+              {!openMismatches.length ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-sub">
+                    No open mismatches — drawers stay clean until sync/import conflicts appear.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       <section className="rounded-panel border border-line bg-white shadow-panel">
         <div className="border-b border-[#e7edf4] px-4 py-2.5 text-sm font-semibold">

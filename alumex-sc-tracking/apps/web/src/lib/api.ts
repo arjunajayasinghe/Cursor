@@ -266,6 +266,31 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ moduleKey, fields }),
     }),
+  mismatches: (moduleKey = "", recordId = "", status = "open") => {
+    const q = new URLSearchParams();
+    if (moduleKey) q.set("moduleKey", moduleKey);
+    if (recordId) q.set("recordId", recordId);
+    if (status) q.set("status", status);
+    const qs = q.toString();
+    return request<FieldMismatch[]>(`/platform/mismatches${qs ? `?${qs}` : ""}`);
+  },
+  mismatchPatch: (id: string, body: { status?: string; detail?: string }) =>
+    request<FieldMismatch>(`/platform/mismatches/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  syncJobs: (key = "") =>
+    request<SyncJob[]>(`/platform/sync-jobs${key ? `?key=${encodeURIComponent(key)}` : ""}`),
+  syncJobPatch: (id: string, body: Partial<SyncJob>) =>
+    request<SyncJob>(`/platform/sync-jobs/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  syncJobRun: (id: string) =>
+    request<SyncJob>(`/platform/sync-jobs/${encodeURIComponent(id)}/run`, {
+      method: "POST",
+      body: "{}",
+    }),
 };
 
 export type ReportPayload = {
@@ -709,9 +734,43 @@ export type IntegrationItem = {
   status: string;
   description?: string | null;
   fieldPriority?: Record<string, string> | null;
+  sapClient?: string | null;
   lastRunAt?: string | null;
+  lastSyncAt?: string | null;
   lastResult?: string | null;
   notes?: string | null;
+};
+
+export type SyncJob = {
+  id: string;
+  integrationKey: string;
+  name: string;
+  schedule: string;
+  enabled: boolean;
+  status: string;
+  sapClient?: string | null;
+  lastRunAt?: string | null;
+  nextRunAt?: string | null;
+  lastResult?: string | null;
+  lastError?: string | null;
+  runCount: number;
+};
+
+export type FieldMismatch = {
+  id: string;
+  moduleKey: string;
+  recordId: string;
+  field: string;
+  existingValue?: string | null;
+  incomingValue?: string | null;
+  preferredSource: string;
+  action: string;
+  status: string;
+  integrationKey?: string | null;
+  batchId?: string | null;
+  detail?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
 };
 
 export type IntegrationPreview = {

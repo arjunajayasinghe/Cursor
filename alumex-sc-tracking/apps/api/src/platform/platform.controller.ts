@@ -183,6 +183,49 @@ export class PlatformController {
     return this.platform.getImportBatch(id);
   }
 
+  // Phase 3 sync jobs
+  @Get("sync-jobs")
+  @RequireAccess("integrations", 1)
+  syncJobs(@Query("key") key?: string) {
+    return this.platform.listSyncJobs(key);
+  }
+
+  @Patch("sync-jobs/:id")
+  @RequireAccess("integrations", 2)
+  patchSyncJob(
+    @Param("id") id: string,
+    @Body()
+    body: Partial<{ enabled: boolean; schedule: string; status: string; sapClient: string; name: string }>,
+  ) {
+    return this.platform.updateSyncJob(id, body);
+  }
+
+  @Post("sync-jobs/:id/run")
+  @RequireAccess("integrations", 2)
+  runSyncJob(@Param("id") id: string, @CurrentRole() role: RoleContext) {
+    return this.platform.runSyncJob(id, role.role);
+  }
+
+  // Phase 4 field mismatches (any signed-in demo role may view for drawers)
+  @Get("mismatches")
+  mismatches(
+    @Query("moduleKey") moduleKey?: string,
+    @Query("recordId") recordId?: string,
+    @Query("status") status?: string,
+  ) {
+    return this.platform.listMismatches({ moduleKey, recordId, status });
+  }
+
+  @Patch("mismatches/:id")
+  @RequireAccess("integrations", 2)
+  patchMismatch(
+    @Param("id") id: string,
+    @CurrentRole() role: RoleContext,
+    @Body() body: { status?: string; detail?: string },
+  ) {
+    return this.platform.updateMismatch(id, body, role.role);
+  }
+
   // Monitoring
   @Get("monitoring")
   @RequireAccess("reports", 1)

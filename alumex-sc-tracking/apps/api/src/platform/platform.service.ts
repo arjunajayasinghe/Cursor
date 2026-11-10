@@ -1,5 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { Prisma } from "@prisma/client";
+import { promises as fs } from "fs";
+import * as path from "path";
 import { PrismaService } from "../prisma/prisma.service";
 import { machineByKey, STATUS_MACHINES } from "./workflow.constants";
 import {
@@ -10,6 +12,15 @@ import {
   parseTabularPayload,
   type AnalyzePlan,
 } from "./import-pipeline";
+
+const SAMPLE_BY_INTEGRATION: Record<string, { file: string; formatHint: string }> = {
+  sap_pr_tsv: { file: "sap-pr-report.tsv", formatHint: "tsv" },
+  sap_pr_api: { file: "sap-pr-report.tsv", formatHint: "tsv" },
+  sap_po_xlsx: { file: "sap-po-extract.csv", formatHint: "csv" },
+  sap_po_api: { file: "sap-po-extract.csv", formatHint: "csv" },
+  sap_grn_movements: { file: "sap-grn-extract.csv", formatHint: "csv" },
+  sap_grn_api: { file: "sap-grn-extract.csv", formatHint: "csv" },
+};
 
 const PRISMA_BY_MODULE: Record<string, string> = {
   pr: "purchaseRequisition",
@@ -515,10 +526,11 @@ export class PlatformService {
       }
 
       for (const m of row.mismatches.filter((x) => x.action === "exception")) {
+        const recordId = row.recordId || row.key;
         await this.prisma.exceptionRegister.create({
           data: {
             moduleKey: plan.moduleKey,
-            recordId: row.recordId || row.key,
+            recordId,
             triggerKey: "import_mismatch",
             category: "Integration",
             title: `Import mismatch · ${m.field} · ${row.key}`,
@@ -526,6 +538,21 @@ export class PlatformService {
             severity: "warning",
             status: "open",
             ownerRole: "Procurement",
+          },
+        });
+        await this.prisma.fieldMismatch.create({
+          data: {
+            moduleKey: plan.moduleKey,
+            recordId,
+            field: m.field,
+            existingValue: m.existing,
+            incomingValue: m.incoming,
+            preferredSource: m.preferred,
+            action: m.action,
+            status: "open",
+            integrationKey: batch.integrationKey,
+            batchId,
+            detail: `Existing "${m.existing}" vs incoming "${m.incoming}"`,
           },
         });
       }
@@ -551,12 +578,148 @@ export class PlatformService {
       where: { key: batch.integrationKey },
       data: {
         lastRunAt: new Date(),
+        lastSyncAt: new Date(),
         lastResult: `Reconciled ${batchId}: +${created} / ~${updated} / skip ${skipped} / mismatch ${mismatches}`,
         status: "active",
       },
     });
 
     return saved;
+  }
+
+  // —— Phase 4 field mismatches ——
+  listMismatches(opts: { moduleKey?: string; recordId?: string; status?: string; limit?: number }) {
+    return this.prisma.fieldMismatch.findMany({
+      where: {
+        ...(opts.moduleKey ? { moduleKey: opts.moduleKey } : {}),
+        ...(opts.recordId ? { recordId: opts.recordId } : {}),
+        ...(opts.status ? { status: opts.status } : { status: "open" }),
+      },
+      orderBy: { createdAt: "desc" },
+      take: opts.limit ?? 200,
+    });
+  }
+
+  async updateMismatch(
+    id: string,
+    body: { status?: string; detail?: string },
+    actor: string,
+  ) {
+    const row = await this.prisma.fieldMismatch.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException("Mismatch not found");
+    const status = body.status || row.status;
+    return this.prisma.fieldMismatch.update({
+      where: { id },
+      data: {
+        status,
+        detail: body.detail ?? row.detail,
+        resolvedBy: status === "open" ? null : actor,
+        resolvedAt: status === "open" ? null : new Date(),
+      },
+    });
+  }
+
+  // —— Phase 3 sync jobs ——
+  listSyncJobs(integrationKey?: string) {
+    return this.prisma.integrationSyncJob.findMany({
+      where: integrationKey ? { integrationKey } : undefined,
+      orderBy: [{ enabled: "desc" }, { name: "asc" }],
+    });
+  }
+
+  async updateSyncJob(
+    id: string,
+    body: Partial<{ enabled: boolean; schedule: string; status: string; sapClient: string; name: string }>,
+  ) {
+    const row = await this.prisma.integrationSyncJob.findUnique({ where: { id } });
+    if (!row) throw new NotFoundException("Sync job not found");
+    const enabled = body.enabled ?? row.enabled;
+    return this.prisma.integrationSyncJob.update({
+      where: { id },
+      data: {
+        enabled,
+        schedule: body.schedule ?? row.schedule,
+        status: body.status ?? (enabled ? (row.status === "paused" ? "idle" : row.status) : "paused"),
+        sapClient: body.sapClient ?? row.sapClient,
+        name: body.name ?? row.name,
+        nextRunAt: enabled ? row.nextRunAt || nextRunFromNow(row.schedule) : null,
+      },
+    });
+  }
+
+  async runSyncJob(id: string, actor: string) {
+    const job = await this.prisma.integrationSyncJob.findUnique({ where: { id } });
+    if (!job) throw new NotFoundException("Sync job not found");
+    if (!job.enabled) throw new BadRequestException("Sync job is paused");
+
+    await this.prisma.integrationSyncJob.update({
+      where: { id },
+      data: { status: "running", lastError: null },
+    });
+
+    try {
+      const sample = SAMPLE_BY_INTEGRATION[job.integrationKey];
+      if (!sample) {
+        throw new BadRequestException(`No sample connector payload for ${job.integrationKey}`);
+      }
+      const root = path.resolve(__dirname, "..", "..", "..", "..", "samples");
+      const text = await fs.readFile(path.join(root, sample.file), "utf8");
+      const analyzed = await this.analyzeImport(
+        job.integrationKey,
+        { text, fileName: `sync-${sample.file}`, formatHint: sample.formatHint },
+        `sync:${actor}`,
+      );
+      const batchId = analyzed.batchId as string;
+      const reconciled = await this.reconcileImport(batchId, `sync:${actor}`);
+      const sapClient = job.sapClient || "100";
+      const moduleKey = integrationModule(job.integrationKey);
+      if (moduleKey === "pr") {
+        await this.prisma.purchaseRequisition.updateMany({
+          data: { lastSyncAt: new Date(), sapClient },
+        });
+      } else if (moduleKey === "po") {
+        await this.prisma.purchaseOrder.updateMany({
+          data: { lastSyncAt: new Date(), sapClient },
+        });
+      }
+
+      await this.prisma.integrationRegister.update({
+        where: { key: job.integrationKey },
+        data: {
+          lastSyncAt: new Date(),
+          lastRunAt: new Date(),
+          sapClient,
+          lastResult: `Sync ${job.name}: batch ${batchId} reconciled (+${reconciled.createdCount}/~${reconciled.updatedCount}/mismatch ${reconciled.mismatchCount})`,
+          status: "active",
+          ...(job.integrationKey.includes("_api") ? { channel: "api" } : {}),
+        },
+      });
+
+      return this.prisma.integrationSyncJob.update({
+        where: { id },
+        data: {
+          status: "idle",
+          lastRunAt: new Date(),
+          nextRunAt: nextRunFromNow(job.schedule),
+          runCount: { increment: 1 },
+          lastResult: `Reconciled ${batchId}: +${reconciled.createdCount} / ~${reconciled.updatedCount} / mismatch ${reconciled.mismatchCount}`,
+          lastError: null,
+          sapClient,
+        },
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      await this.prisma.integrationSyncJob.update({
+        where: { id },
+        data: {
+          status: "error",
+          lastRunAt: new Date(),
+          lastError: message,
+          lastResult: null,
+        },
+      });
+      throw err;
+    }
   }
 
   // —— Monitoring report ——
@@ -863,4 +1026,10 @@ function stageOwner(stage: string) {
     GRN: "Stores",
   };
   return map[stage] || "—";
+}
+
+// Demo next-run: +6h when schedule contains "*/6", otherwise +24h.
+function nextRunFromNow(schedule: string): Date {
+  const hours = schedule.includes("*/6") ? 6 : 24;
+  return new Date(Date.now() + hours * 3600_000);
 }

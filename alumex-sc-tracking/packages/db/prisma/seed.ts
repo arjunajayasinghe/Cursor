@@ -53,6 +53,9 @@ const completed = [
 ];
 
 async function main() {
+  await prisma.fieldMismatch.deleteMany();
+  await prisma.integrationSyncJob.deleteMany();
+  await prisma.importBatch.deleteMany();
   await prisma.workflowAction.deleteMany();
   await prisma.masterDataEntry.deleteMany();
   await prisma.integrationRegister.deleteMany();

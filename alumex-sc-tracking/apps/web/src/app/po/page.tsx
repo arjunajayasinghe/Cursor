@@ -2,7 +2,7 @@
 
 import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, PO_FIELDS, type PoItem } from "@/lib/api";
+import { api, PO_FIELDS, type FieldMismatch, type PoItem } from "@/lib/api";
 import { FieldGrid } from "@/components/field-grid";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ export default function PoPage() {
   const [selected, setSelected] = useState<PoItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [mismatches, setMismatches] = useState<FieldMismatch[]>([]);
 
   const load = useCallback(async () => {
     try {
@@ -35,6 +36,25 @@ export default function PoPage() {
     const t = setTimeout(load, 150);
     return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    if (!selected?.recordId) {
+      setMismatches([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .mismatches("po", selected.recordId, "open")
+      .then((list) => {
+        if (!cancelled) setMismatches(list);
+      })
+      .catch(() => {
+        if (!cancelled) setMismatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.recordId]);
 
   const statuses = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
 
@@ -232,7 +252,11 @@ export default function PoPage() {
               </div>
             ) : (
               <>
-                <FieldGrid fields={PO_FIELDS} values={selected as unknown as Record<string, unknown>} />
+                <FieldGrid
+                  fields={PO_FIELDS}
+                  values={selected as unknown as Record<string, unknown>}
+                  mismatches={mismatches}
+                />
                 {selected.recordId ? (
                   <>
                     <StatusTransition

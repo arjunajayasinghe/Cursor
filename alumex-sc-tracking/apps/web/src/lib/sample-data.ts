@@ -151,6 +151,35 @@ export function sampleForPath(segments: string[]): unknown | null {
     if (sub === "masters")
       return [{ id: "1", category: "plant", code: "1100", name: "Sapugaskanda", active: true, sortOrder: 10 }];
     if (sub === "exceptions" || sub === "integrations" || sub === "audit") return [];
+    if (sub === "sync-jobs")
+      return [
+        {
+          id: "sample-sync-pr",
+          integrationKey: "sap_pr_api",
+          name: "PR released report · every 6h",
+          schedule: "0 */6 * * *",
+          enabled: true,
+          status: "idle",
+          sapClient: "100",
+          runCount: 0,
+          lastResult: "Sample mode — Nest offline",
+        },
+      ];
+    if (sub === "mismatches")
+      return [
+        {
+          id: "sample-mm-1",
+          moduleKey: "pr",
+          recordId: "PR-DEMO-1",
+          field: "quantity",
+          existingValue: "25",
+          incomingValue: "30",
+          preferredSource: "S",
+          action: "exception",
+          status: "open",
+          detail: "Sample mismatch (Nest offline)",
+        },
+      ];
     if (sub === "monitoring")
       return {
         type: "monitoring",

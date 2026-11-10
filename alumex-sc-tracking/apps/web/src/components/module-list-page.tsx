@@ -2,7 +2,7 @@
 
 import { Plus, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "@/lib/api";
+import { api, type FieldMismatch } from "@/lib/api";
 import type { ModuleUiDef } from "@/lib/modules";
 import { useAuth } from "@/lib/auth";
 import { FieldGrid } from "@/components/field-grid";
@@ -25,6 +25,7 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [mismatches, setMismatches] = useState<FieldMismatch[]>([]);
 
   const load = useCallback(async () => {
     if (!canView(def.key)) {
@@ -51,6 +52,25 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
     const t = setTimeout(() => setToast(null), 3200);
     return () => clearTimeout(t);
   }, [toast]);
+
+  useEffect(() => {
+    if (!selected?.recordId || creating) {
+      setMismatches([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .mismatches(def.key, selected.recordId, "open")
+      .then((rows) => {
+        if (!cancelled) setMismatches(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setMismatches([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected?.recordId, creating, def.key]);
 
   const statuses = useMemo(() => Array.from(new Set(rows.map((r) => r.status))).sort(), [rows]);
 
@@ -266,7 +286,7 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
               </div>
             ) : (
               <>
-                <FieldGrid fields={def.fields} values={selected} />
+                <FieldGrid fields={def.fields} values={selected} mismatches={mismatches} />
                 {def.key === "eval" && selected.decisions ? (
                   <div>
                     <h3 className="mb-2 text-sm font-semibold text-[#334c66]">Review decisions</h3>

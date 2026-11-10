@@ -107,6 +107,8 @@ Each operational module uses the shared list + detail drawer pattern with source
 | Master data | Plants, currencies, UOM, Incoterms, delay reasons, suppliers |
 | Integrations | SAP import register + CSV/XLSX validate → preview → reconcile + field source priority |
 | Import history | Immutable `import_batches` with mismatch exceptions; notes never overwritten |
+| Phase 3 sync | `IntegrationSyncJob` + on-demand runner (`POST /platform/sync-jobs/:id/run`) using sample extracts; `sapClient` / `lastSyncAt` on PR/PO |
+| Phase 4 mismatches | `FieldMismatch` rows + drawer highlighting in `FieldGrid`; resolve from Integrations |
 | Hardening | Duplicate checks (PR/PO/GRN keys), validation on uploads/transitions, seed completeness |
 
 ## Structure
@@ -171,6 +173,8 @@ Vessel tracking uses **OpenStreetMap** raster tiles (`tile.openstreetmap.org`) v
 - GRN CSV: `samples/sap-grn-extract.csv` — Integrations → SAP GRN
 
 Phase 2 flow: upload/paste → validate/preview (creates immutable preview batch) → reconcile (applies creates/updates per field priority, logs mismatches to exception register).
+
+Phase 3: Integrations → **Run now** on a sync job (demo pulls the matching sample file as an API stand-in). Phase 4: open mismatches highlight on PR/PO/module drawers; resolve from the Integrations register.
 
 ## Design notes
 
