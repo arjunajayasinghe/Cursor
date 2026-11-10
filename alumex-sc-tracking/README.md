@@ -105,7 +105,8 @@ Each operational module uses the shared list + detail drawer pattern with source
 | Workflow | Per-module status machines (independent stages), transition API + drawer controls |
 | Audit | Record history with old/new JSON, source tags (manual/import/provider) |
 | Master data | Plants, currencies, UOM, Incoterms, delay reasons, suppliers |
-| Integrations | SAP import register stubs + CSV/TSV preview + field source priority |
+| Integrations | SAP import register + CSV/XLSX validate → preview → reconcile + field source priority |
+| Import history | Immutable `import_batches` with mismatch exceptions; notes never overwritten |
 | Hardening | Duplicate checks (PR/PO/GRN keys), validation on uploads/transitions, seed completeness |
 
 ## Structure
@@ -158,7 +159,11 @@ Switch roles with the demo selector in the header. API calls send `X-Demo-Role`.
 
 ## Sample import
 
-Use `samples/sap-pr-report.tsv` on **Purchase requisitions → Import SAP PR file**.
+- PR TSV: `samples/sap-pr-report.tsv` — Purchase requisitions import **or** Integrations → SAP PR → Validate / Reconcile
+- PO CSV: `samples/sap-po-extract.csv` — Integrations → SAP PO
+- GRN CSV: `samples/sap-grn-extract.csv` — Integrations → SAP GRN
+
+Phase 2 flow: upload/paste → validate/preview (creates immutable preview batch) → reconcile (applies creates/updates per field priority, logs mismatches to exception register).
 
 ## Design notes
 

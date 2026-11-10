@@ -129,8 +129,58 @@ export class PlatformController {
 
   @Post("integrations/:key/preview")
   @RequireAccess("integrations", 1)
-  preview(@Param("key") key: string, @Body() body: { text: string }) {
-    return this.platform.previewSapImport(key, body.text || "");
+  preview(
+    @Param("key") key: string,
+    @Body() body: { text?: string; base64?: string; fileName?: string; formatHint?: string },
+    @CurrentRole() role: RoleContext,
+  ) {
+    return this.platform.analyzeImport(
+      key,
+      {
+        text: body.text,
+        base64: body.base64,
+        fileName: body.fileName,
+        formatHint: body.formatHint,
+      },
+      role.role,
+    );
+  }
+
+  @Post("integrations/:key/analyze")
+  @RequireAccess("integrations", 2)
+  analyze(
+    @Param("key") key: string,
+    @Body() body: { text?: string; base64?: string; fileName?: string; formatHint?: string },
+    @CurrentRole() role: RoleContext,
+  ) {
+    return this.platform.analyzeImport(
+      key,
+      {
+        text: body.text,
+        base64: body.base64,
+        fileName: body.fileName,
+        formatHint: body.formatHint,
+      },
+      role.role,
+    );
+  }
+
+  @Post("integrations/batches/:batchId/reconcile")
+  @RequireAccess("integrations", 2)
+  reconcile(@Param("batchId") batchId: string, @CurrentRole() role: RoleContext) {
+    return this.platform.reconcileImport(batchId, role.role);
+  }
+
+  @Get("integrations/batches")
+  @RequireAccess("integrations", 1)
+  batches(@Query("key") key?: string) {
+    return this.platform.listImportBatches(key);
+  }
+
+  @Get("integrations/batches/:id")
+  @RequireAccess("integrations", 1)
+  batch(@Param("id") id: string) {
+    return this.platform.getImportBatch(id);
   }
 
   // Monitoring

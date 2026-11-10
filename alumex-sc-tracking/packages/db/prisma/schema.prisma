@@ -488,8 +488,37 @@ model IntegrationRegister {
   notes           String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  batches         ImportBatch[]
 
   @@map("integration_register")
+}
+
+/// Immutable authorized CSV/XLSX import history (phase 2)
+model ImportBatch {
+  id              String   @id @default(cuid())
+  integrationKey  String
+  integration     IntegrationRegister @relation(fields: [integrationKey], references: [key])
+  /// preview | reconciled | rejected
+  status          String   @default("preview")
+  fileName        String?
+  /// csv | tsv | xlsx | text
+  format          String   @default("csv")
+  actor           String
+  rowCount        Int      @default(0)
+  createdCount    Int      @default(0)
+  updatedCount    Int      @default(0)
+  skippedCount    Int      @default(0)
+  mismatchCount   Int      @default(0)
+  errorCount      Int      @default(0)
+  /// Full preview/reconcile summary JSON (immutable after reconcile)
+  summary         Json?
+  /// Optional raw payload excerpt (not the whole file for large uploads)
+  payloadExcerpt  String?
+  createdAt       DateTime @default(now())
+  reconciledAt    DateTime?
+
+  @@index([integrationKey, createdAt])
+  @@map("import_batches")
 }
 
 /// Lightweight workflow transition log (independent stages)

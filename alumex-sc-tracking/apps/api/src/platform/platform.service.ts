@@ -2,6 +2,14 @@ import { BadRequestException, Injectable, NotFoundException } from "@nestjs/comm
 import { Prisma } from "@prisma/client";
 import { PrismaService } from "../prisma/prisma.service";
 import { machineByKey, STATUS_MACHINES } from "./workflow.constants";
+import {
+  analyzeGrnAgainstExisting,
+  analyzePoAgainstExisting,
+  analyzePrAgainstExisting,
+  integrationModule,
+  parseTabularPayload,
+  type AnalyzePlan,
+} from "./import-pipeline";
 
 const PRISMA_BY_MODULE: Record<string, string> = {
   pr: "purchaseRequisition",
@@ -240,50 +248,315 @@ export class PlatformService {
   }
 
   async previewSapImport(key: string, text: string) {
+    return this.analyzeImport(key, { text }, "system");
+  }
+
+  async analyzeImport(
+    key: string,
+    input: { text?: string; base64?: string; fileName?: string; formatHint?: string },
+    actor: string,
+  ) {
     const integration = await this.prisma.integrationRegister.findUnique({ where: { key } });
     if (!integration) throw new NotFoundException(`Integration ${key} not found`);
-    const lines = text
-      .replace(/^\uFEFF/, "")
-      .split(/\r?\n/)
-      .filter((l) => l.trim());
-    if (lines.length < 2) {
-      return {
-        key,
-        headers: [],
-        preview: [],
-        errors: ["Need a header row and at least one data row"],
-        fieldPriority: integration.fieldPriority,
-      };
+    const moduleKey = integrationModule(key);
+    if (!moduleKey) {
+      throw new BadRequestException("This connector does not support tabular reconcile yet");
     }
-    const delim = lines[0].includes("\t") ? "\t" : ",";
-    const headers = lines[0].split(delim).map((h) => h.trim());
-    const preview = lines.slice(1, 21).map((line) => {
-      const cols = line.split(delim);
-      return Object.fromEntries(headers.map((h, i) => [h, cols[i]?.trim() ?? ""]));
+
+    const table = parseTabularPayload(input);
+    if (table.rows.length < 1) {
+      throw new BadRequestException("Need a header row and at least one data row");
+    }
+
+    const priority = (integration.fieldPriority as Record<string, string>) || {};
+    let plan: AnalyzePlan;
+    if (moduleKey === "pr") {
+      const existing = await this.prisma.purchaseRequisition.findMany();
+      plan = analyzePrAgainstExisting(table, existing, priority);
+    } else if (moduleKey === "po") {
+      const existing = await this.prisma.purchaseOrder.findMany();
+      plan = analyzePoAgainstExisting(table, existing as unknown as Array<Record<string, unknown>>, priority);
+    } else {
+      const existing = await this.prisma.goodsReceipt.findMany();
+      plan = analyzeGrnAgainstExisting(table, existing as unknown as Array<Record<string, unknown>>, priority);
+    }
+
+    const batch = await this.prisma.importBatch.create({
+      data: {
+        integrationKey: key,
+        status: "preview",
+        fileName: input.fileName || null,
+        format: table.format,
+        actor,
+        rowCount: plan.rowCount,
+        createdCount: plan.createCount,
+        updatedCount: plan.updateCount,
+        skippedCount: plan.skipCount,
+        mismatchCount: plan.mismatchCount,
+        errorCount: plan.errors.length,
+        summary: plan as unknown as Prisma.InputJsonValue,
+        payloadExcerpt: (input.text || "").slice(0, 4000) || null,
+      },
     });
-    const duplicates = new Set<string>();
-    const seen = new Set<string>();
-    for (const row of preview) {
-      const id = `${row["PR"] || row["PR Number"] || row["prNo"] || ""}|${row["Item"] || row["Line"] || row["line"] || ""}`;
-      if (id !== "|" && seen.has(id)) duplicates.add(id);
-      seen.add(id);
-    }
+
     await this.prisma.integrationRegister.update({
       where: { key },
       data: {
         lastRunAt: new Date(),
-        lastResult: `Preview ${preview.length} rows · ${duplicates.size} duplicate keys in sample`,
+        lastResult: `Preview batch ${batch.id}: +${plan.createCount} / ~${plan.updateCount} / skip ${plan.skipCount} / mismatch ${plan.mismatchCount}`,
+        status: integration.status === "stub" ? "configured" : integration.status,
       },
     });
+
     return {
       key,
-      headers,
-      preview,
-      rowCount: lines.length - 1,
-      duplicateKeys: Array.from(duplicates),
-      fieldPriority: integration.fieldPriority,
-      note: "Phase-1 stub — validate/preview only. Commit uses module-specific importers (e.g. PR TSV).",
+      batchId: batch.id,
+      headers: plan.headers,
+      preview: plan.preview,
+      rowCount: plan.rowCount,
+      duplicateKeys: plan.plan.filter((p) => p.action === "skip").map((p) => p.key).slice(0, 20),
+      fieldPriority: plan.fieldPriority,
+      errors: plan.errors.map((e) => e.message),
+      createCount: plan.createCount,
+      updateCount: plan.updateCount,
+      skipCount: plan.skipCount,
+      mismatchCount: plan.mismatchCount,
+      plan: plan.plan.slice(0, 100),
+      note: "Phase 2 — validate/preview with field-priority reconcile. Call reconcile to commit.",
     };
+  }
+
+  listImportBatches(integrationKey?: string) {
+    return this.prisma.importBatch.findMany({
+      where: integrationKey ? { integrationKey } : undefined,
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+  }
+
+  getImportBatch(id: string) {
+    return this.prisma.importBatch.findUnique({ where: { id } });
+  }
+
+  async reconcileImport(batchId: string, actor: string) {
+    const batch = await this.prisma.importBatch.findUnique({ where: { id: batchId } });
+    if (!batch) throw new NotFoundException(`Import batch ${batchId} not found`);
+    if (batch.status === "reconciled") {
+      throw new BadRequestException("Batch already reconciled (immutable history)");
+    }
+    const plan = batch.summary as unknown as AnalyzePlan;
+    if (!plan?.plan) throw new BadRequestException("Batch has no reconcile plan");
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    let mismatches = 0;
+
+    for (const row of plan.plan) {
+      mismatches += row.mismatches.filter((m) => m.action === "exception").length;
+      if (row.action === "skip") {
+        skipped++;
+        continue;
+      }
+      if (plan.moduleKey === "pr") {
+        if (row.action === "create") {
+          const p = row.payload;
+          await this.prisma.purchaseRequisition.create({
+            data: {
+              recordId: `PR-IMP-${String(p.prNo)}-${String(p.line)}`,
+              prNo: String(p.prNo),
+              line: String(p.line),
+              date: p.date ? new Date(String(p.date)) : null,
+              purchasingGroup: p.purchasingGroup ? String(p.purchasingGroup) : null,
+              createdBy: p.createdBy ? String(p.createdBy) : null,
+              changed: p.changed ? new Date(String(p.changed)) : null,
+              reportReceived: p.reportReceived ? new Date(String(p.reportReceived)) : null,
+              reportDate: p.reportDate ? new Date(String(p.reportDate)) : null,
+              reportDelay: typeof p.reportDelay === "number" ? p.reportDelay : null,
+              delayBand: p.delayBand ? String(p.delayBand) : null,
+              sourcing: p.sourcing ? String(p.sourcing) : null,
+              stockType: p.stockType ? String(p.stockType) : null,
+              plant: p.plant ? String(p.plant) : null,
+              materialCode: p.materialCode ? String(p.materialCode) : null,
+              material: p.material ? String(p.material) : null,
+              materialGroup: p.materialGroup ? String(p.materialGroup) : null,
+              quantity: Number(p.quantity || 0),
+              uom: p.uom ? String(p.uom) : null,
+              approved: p.approved ? new Date(String(p.approved)) : null,
+              status: String(p.status || "Released"),
+              imported: true,
+              requester: "SAP import",
+              department: "Imported",
+              buyer: "Unassigned",
+            },
+          });
+          await this.prisma.auditEvent.create({
+            data: {
+              moduleKey: "pr",
+              recordId: `PR-IMP-${String(p.prNo)}-${String(p.line)}`,
+              actor,
+              action: "Import create",
+              source: "import",
+              newValue: JSON.stringify(p),
+            },
+          });
+          created++;
+        } else if (row.action === "update" && row.recordId) {
+          const data: Record<string, unknown> = { ...row.payload };
+          if (data.quantity != null) data.quantity = Number(data.quantity);
+          await this.prisma.purchaseRequisition.update({
+            where: { recordId: row.recordId },
+            data,
+          });
+          await this.prisma.auditEvent.create({
+            data: {
+              moduleKey: "pr",
+              recordId: row.recordId,
+              actor,
+              action: "Import reconcile",
+              source: "import",
+              newValue: JSON.stringify(row.payload),
+              detail: row.mismatches.map((m) => `${m.field}:${m.action}`).join(", "),
+            },
+          });
+          updated++;
+        }
+      } else if (plan.moduleKey === "po") {
+        if (row.action === "create") {
+          const p = row.payload;
+          const recordId = `PO-IMP-${String(p.poNo)}-${String(p.line)}`;
+          await this.prisma.purchaseOrder.create({
+            data: {
+              recordId,
+              poNo: String(p.poNo),
+              line: String(p.line),
+              prId: p.prId ? String(p.prId) : null,
+              date: p.date ? new Date(String(p.date)) : null,
+              supplierCode: p.supplierCode ? String(p.supplierCode) : null,
+              supplier: p.supplier ? String(p.supplier) : "Unknown",
+              materialCode: p.materialCode ? String(p.materialCode) : null,
+              material: p.material ? String(p.material) : null,
+              quantity: Number(p.quantity || 0),
+              uom: p.uom ? String(p.uom) : null,
+              currency: p.currency ? String(p.currency) : "USD",
+              unitPrice: p.unitPrice != null ? Number(p.unitPrice) : null,
+              incoterm: p.incoterm ? String(p.incoterm) : null,
+              piNo: p.piNo ? String(p.piNo) : null,
+              notes: null,
+              status: "Released",
+            },
+          });
+          await this.prisma.auditEvent.create({
+            data: {
+              moduleKey: "po",
+              recordId,
+              actor,
+              action: "Import create",
+              source: "import",
+              newValue: JSON.stringify(p),
+            },
+          });
+          created++;
+        } else if (row.action === "update" && row.recordId) {
+          const data: Record<string, unknown> = { ...row.payload };
+          delete data.notes;
+          await this.prisma.purchaseOrder.update({ where: { recordId: row.recordId }, data });
+          await this.prisma.auditEvent.create({
+            data: {
+              moduleKey: "po",
+              recordId: row.recordId,
+              actor,
+              action: "Import reconcile",
+              source: "import",
+              newValue: JSON.stringify(row.payload),
+            },
+          });
+          updated++;
+        }
+      } else if (plan.moduleKey === "grn") {
+        if (row.action === "create") {
+          const p = row.payload;
+          const recordId = `GRN-IMP-${String(p.grnNo)}-${String(p.year)}-${String(p.item)}`;
+          await this.prisma.goodsReceipt.create({
+            data: {
+              recordId,
+              grnNo: String(p.grnNo),
+              year: Number(p.year),
+              item: String(p.item),
+              movement: p.movement ? String(p.movement) : null,
+              posted: p.posted ? new Date(String(p.posted)) : null,
+              plant: p.plant ? String(p.plant) : null,
+              location: p.location ? String(p.location) : null,
+              received: p.received != null ? Number(p.received) : null,
+              uom: p.uom ? String(p.uom) : null,
+              poId: p.poId ? String(p.poId) : null,
+              prId: p.prId ? String(p.prId) : null,
+              notes: null,
+              status: "Posted",
+            },
+          });
+          await this.prisma.auditEvent.create({
+            data: {
+              moduleKey: "grn",
+              recordId,
+              actor,
+              action: "Import create",
+              source: "import",
+              newValue: JSON.stringify(p),
+            },
+          });
+          created++;
+        } else if (row.action === "update" && row.recordId) {
+          const data: Record<string, unknown> = { ...row.payload };
+          delete data.notes;
+          await this.prisma.goodsReceipt.update({ where: { recordId: row.recordId }, data });
+          updated++;
+        }
+      }
+
+      for (const m of row.mismatches.filter((x) => x.action === "exception")) {
+        await this.prisma.exceptionRegister.create({
+          data: {
+            moduleKey: plan.moduleKey,
+            recordId: row.recordId || row.key,
+            triggerKey: "import_mismatch",
+            category: "Integration",
+            title: `Import mismatch · ${m.field} · ${row.key}`,
+            detail: `Existing "${m.existing}" vs incoming "${m.incoming}" (priority ${m.preferred})`,
+            severity: "warning",
+            status: "open",
+            ownerRole: "Procurement",
+          },
+        });
+      }
+    }
+
+    const saved = await this.prisma.importBatch.update({
+      where: { id: batchId },
+      data: {
+        status: "reconciled",
+        createdCount: created,
+        updatedCount: updated,
+        skippedCount: skipped,
+        mismatchCount: mismatches,
+        reconciledAt: new Date(),
+        summary: {
+          ...plan,
+          reconciled: { created, updated, skipped, mismatches, actor, at: new Date().toISOString() },
+        } as unknown as Prisma.InputJsonValue,
+      },
+    });
+
+    await this.prisma.integrationRegister.update({
+      where: { key: batch.integrationKey },
+      data: {
+        lastRunAt: new Date(),
+        lastResult: `Reconciled ${batchId}: +${created} / ~${updated} / skip ${skipped} / mismatch ${mismatches}`,
+        status: "active",
+      },
+    });
+
+    return saved;
   }
 
   // —— Monitoring report ——

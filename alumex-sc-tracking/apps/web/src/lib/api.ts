@@ -216,11 +216,31 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  integrationPreview: (key: string, text: string) =>
+  integrationPreview: (
+    key: string,
+    body: { text?: string; base64?: string; fileName?: string; formatHint?: string } | string,
+  ) =>
     request<IntegrationPreview>(`/platform/integrations/${encodeURIComponent(key)}/preview`, {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(typeof body === "string" ? { text: body } : body),
     }),
+  integrationAnalyze: (
+    key: string,
+    body: { text?: string; base64?: string; fileName?: string; formatHint?: string },
+  ) =>
+    request<IntegrationPreview>(`/platform/integrations/${encodeURIComponent(key)}/analyze`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  integrationReconcile: (batchId: string) =>
+    request<ImportBatch>(`/platform/integrations/batches/${encodeURIComponent(batchId)}/reconcile`, {
+      method: "POST",
+      body: "{}",
+    }),
+  integrationBatches: (key = "") =>
+    request<ImportBatch[]>(
+      `/platform/integrations/batches${key ? `?key=${encodeURIComponent(key)}` : ""}`,
+    ),
   monitoringReport: (params: Record<string, string> = {}) => {
     const q = new URLSearchParams(params).toString();
     return request<MonitoringReport>(`/platform/monitoring${q ? `?${q}` : ""}`);
@@ -680,6 +700,7 @@ export type IntegrationItem = {
 
 export type IntegrationPreview = {
   key: string;
+  batchId?: string;
   headers: string[];
   preview: Array<Record<string, string>>;
   rowCount?: number;
@@ -687,6 +708,34 @@ export type IntegrationPreview = {
   fieldPriority?: Record<string, string> | null;
   errors?: string[];
   note?: string;
+  createCount?: number;
+  updateCount?: number;
+  skipCount?: number;
+  mismatchCount?: number;
+  plan?: Array<{
+    action: string;
+    key: string;
+    recordId?: string;
+    mismatches: Array<{ field: string; existing: string; incoming: string; action: string }>;
+  }>;
+};
+
+export type ImportBatch = {
+  id: string;
+  integrationKey: string;
+  status: string;
+  fileName?: string | null;
+  format: string;
+  actor: string;
+  rowCount: number;
+  createdCount: number;
+  updatedCount: number;
+  skippedCount: number;
+  mismatchCount: number;
+  errorCount: number;
+  createdAt: string;
+  reconciledAt?: string | null;
+  lastResult?: string | null;
 };
 
 export type MonitoringReport = {

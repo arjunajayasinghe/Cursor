@@ -1,33 +1,97 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { api, type IntegrationItem, type IntegrationPreview } from "@/lib/api";
+import { useCallback, useEffect, useState } from "react";
+import { api, type ImportBatch, type IntegrationItem, type IntegrationPreview } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/ui/badge";
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = String(reader.result || "");
+      const idx = result.indexOf(",");
+      resolve(idx >= 0 ? result.slice(idx + 1) : result);
+    };
+    reader.onerror = () => reject(reader.error || new Error("read failed"));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function IntegrationsPage() {
   const { canView, canEdit, role } = useAuth();
   const editable = canEdit("integrations");
   const [rows, setRows] = useState<IntegrationItem[]>([]);
+  const [batches, setBatches] = useState<ImportBatch[]>([]);
   const [selected, setSelected] = useState<string>("sap_pr_tsv");
   const [text, setText] = useState("");
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [base64, setBase64] = useState<string | null>(null);
   const [preview, setPreview] = useState<IntegrationPreview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!canView("integrations")) return;
+    const [list, hist] = await Promise.all([
+      api.integrationsList(),
+      api.integrationBatches(selected || ""),
+    ]);
+    setRows(list);
+    setBatches(hist);
+    if (!selected && list[0]) setSelected(list[0].key);
+  }, [canView, selected]);
 
   useEffect(() => {
-    if (!canView("integrations")) return;
-    api
-      .integrationsList()
-      .then((list) => {
-        setRows(list);
-        if (list[0]) setSelected(list[0].key);
-      })
-      .catch((e) => setError(e.message));
-  }, [canView, role]);
+    refresh().catch((e) => setError(e.message));
+  }, [refresh, role]);
 
   const current = rows.find((r) => r.key === selected);
+
+  async function runAnalyze() {
+    setBusy(true);
+    setError(null);
+    try {
+      const body =
+        base64 && fileName
+          ? {
+              base64,
+              fileName,
+              formatHint: fileName.endsWith(".xlsx") || fileName.endsWith(".xls") ? "xlsx" : undefined,
+              text: text || undefined,
+            }
+          : { text };
+      const result = editable
+        ? await api.integrationAnalyze(selected, body)
+        : await api.integrationPreview(selected, body);
+      setPreview(result);
+      await refresh();
+      setToast(`Preview batch ${result.batchId?.slice(0, 8) || ""} · +${result.createCount || 0}`);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runReconcile() {
+    if (!preview?.batchId) return;
+    setBusy(true);
+    try {
+      const saved = await api.integrationReconcile(preview.batchId);
+      setToast(
+        `Reconciled +${saved.createdCount} / ~${saved.updatedCount} / skip ${saved.skippedCount} / mismatch ${saved.mismatchCount}`,
+      );
+      setPreview(null);
+      await refresh();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   if (!canView("integrations")) {
     return (
@@ -45,8 +109,9 @@ export default function IntegrationsPage() {
         </div>
         <h1 className="text-[30px] font-semibold tracking-[-0.85px]">Integration register</h1>
         <p className="mt-2 max-w-3xl text-[13px] text-sub">
-          Stubs for future SAP CSV/XLSX connectors with field source priority (S/W/A/E/M). Phase 1 supports
-          validate/preview; PR commit remains on the Purchase requisitions import path.
+          Phase 2 authorized CSV/XLSX import: validate → preview → reconcile with field source priority
+          (S/W/A/E/M). Operational notes are never overwritten. Import batches are immutable after
+          reconcile.
         </p>
       </div>
 
@@ -68,6 +133,9 @@ export default function IntegrationsPage() {
                 onClick={() => {
                   setSelected(r.key);
                   setPreview(null);
+                  setText("");
+                  setBase64(null);
+                  setFileName(null);
                 }}
               >
                 <div className="font-semibold">{r.name}</div>
@@ -87,17 +155,20 @@ export default function IntegrationsPage() {
                 <div>
                   <h2 className="text-[17px] font-semibold">{current.name}</h2>
                   <p className="text-[12px] text-sub">{current.description}</p>
+                  {current.lastResult ? (
+                    <p className="mt-1 text-[11px] text-muted">Last: {current.lastResult}</p>
+                  ) : null}
                 </div>
                 {editable ? (
                   <Button
                     onClick={async () => {
-                      const next = current.status === "stub" ? "configured" : "stub";
+                      const next = current.status === "stub" ? "configured" : current.status === "configured" ? "active" : "stub";
                       const saved = await api.integrationPatch(current.key, { status: next });
                       setRows((prev) => prev.map((r) => (r.key === saved.key ? saved : r)));
                       setToast(`Status → ${saved.status}`);
                     }}
                   >
-                    Toggle stub/configured
+                    Cycle status
                   </Button>
                 ) : null}
               </div>
@@ -112,34 +183,87 @@ export default function IntegrationsPage() {
               </div>
 
               <label className="mb-2 block text-xs font-semibold text-[#465d74]">
-                Paste CSV/TSV sample for preview
-                <textarea
-                  className="mt-1 min-h-[120px] w-full rounded-[5px] border border-[#cdd8e4] p-2 font-mono text-[11px]"
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  placeholder={"PR\tItem\tMaterial\n100002481\t00010\tDemo"}
+                Upload CSV / TSV / XLSX
+                <input
+                  className="mt-1 block w-full text-xs"
+                  type="file"
+                  accept=".csv,.tsv,.txt,.xlsx,.xls"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setFileName(file.name);
+                    if (file.name.match(/\.xlsx?$/i)) {
+                      setBase64(await fileToBase64(file));
+                      setText("");
+                    } else {
+                      setBase64(null);
+                      setText(await file.text());
+                    }
+                  }}
                 />
               </label>
-              <Button
-                variant="primary"
-                onClick={async () => {
-                  try {
-                    setPreview(await api.integrationPreview(selected, text));
-                  } catch (e) {
-                    setToast((e as Error).message);
-                  }
-                }}
-              >
-                Validate / preview
-              </Button>
+
+              <label className="mb-2 block text-xs font-semibold text-[#465d74]">
+                Or paste CSV/TSV
+                <textarea
+                  className="mt-1 min-h-[100px] w-full rounded-[5px] border border-[#cdd8e4] p-2 font-mono text-[11px]"
+                  value={text}
+                  onChange={(e) => {
+                    setText(e.target.value);
+                    setBase64(null);
+                    setFileName(null);
+                  }}
+                  placeholder={"Header row + data…"}
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <Button variant="primary" disabled={busy || (!text && !base64)} onClick={runAnalyze}>
+                  {busy ? "Working…" : "Validate / preview"}
+                </Button>
+                {editable && preview?.batchId ? (
+                  <Button disabled={busy || (preview.errors && preview.errors.length > 0)} onClick={runReconcile}>
+                    Reconcile batch
+                  </Button>
+                ) : null}
+              </div>
 
               {preview ? (
-                <div className="mt-4">
-                  <div className="mb-2 text-xs text-sub">
-                    {preview.rowCount ?? preview.preview.length} rows · duplicates in sample:{" "}
-                    {(preview.duplicateKeys || []).length}
-                    {preview.note ? ` · ${preview.note}` : ""}
+                <div className="mt-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {[
+                      ["Rows", preview.rowCount ?? preview.preview.length],
+                      ["Create", preview.createCount ?? 0],
+                      ["Update", preview.updateCount ?? 0],
+                      ["Skip", preview.skipCount ?? 0],
+                      ["Mismatch", preview.mismatchCount ?? 0],
+                    ].map(([label, value]) => (
+                      <div key={String(label)} className="rounded-md border border-line px-2 py-1.5 text-center">
+                        <div className="text-[10px] uppercase text-muted">{label}</div>
+                        <strong className="text-sm">{value}</strong>
+                      </div>
+                    ))}
                   </div>
+                  {preview.errors?.length ? (
+                    <ul className="list-disc pl-4 text-[11px] text-red-ink">
+                      {preview.errors.slice(0, 8).map((err) => (
+                        <li key={err}>{err}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {preview.plan?.some((p) => p.mismatches?.length) ? (
+                    <div className="rounded-md border border-[#f0e0c8] bg-[#fff8ef] p-2 text-[11px]">
+                      <div className="mb-1 font-semibold">Field mismatches (priority applied)</div>
+                      {preview.plan
+                        .flatMap((p) => p.mismatches.map((m) => ({ ...m, key: p.key })))
+                        .slice(0, 12)
+                        .map((m, i) => (
+                          <div key={`${m.key}-${m.field}-${i}`}>
+                            {m.key} · {m.field}: “{m.existing}” → “{m.incoming}” ({m.action})
+                          </div>
+                        ))}
+                    </div>
+                  ) : null}
                   <div className="overflow-auto rounded-md border border-line">
                     <table className="w-full min-w-[480px] text-left text-[11px]">
                       <thead className="bg-[#f6f8fb]">
@@ -172,6 +296,55 @@ export default function IntegrationsPage() {
           )}
         </section>
       </div>
+
+      <section className="rounded-panel border border-line bg-white shadow-panel">
+        <div className="border-b border-[#e7edf4] px-4 py-2.5 text-sm font-semibold">
+          Import history (immutable)
+        </div>
+        <div className="overflow-auto">
+          <table className="w-full min-w-[720px] text-left text-xs">
+            <thead className="bg-[#f6f8fb] text-[#52657b]">
+              <tr>
+                {["Batch", "Connector", "Status", "File", "Actor", "Rows", "+ / ~ / skip", "Mismatch", "When"].map(
+                  (h) => (
+                    <th key={h} className="px-3 py-2 font-bold">
+                      {h}
+                    </th>
+                  ),
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {batches.map((b) => (
+                <tr key={b.id} className="border-t border-[#e8eef5]">
+                  <td className="px-3 py-2 font-mono text-[11px]">{b.id.slice(0, 10)}</td>
+                  <td className="px-3 py-2">{b.integrationKey}</td>
+                  <td className="px-3 py-2">
+                    <StatusBadge status={b.status} />
+                  </td>
+                  <td className="px-3 py-2">{b.fileName || b.format}</td>
+                  <td className="px-3 py-2">{b.actor}</td>
+                  <td className="px-3 py-2">{b.rowCount}</td>
+                  <td className="px-3 py-2">
+                    {b.createdCount} / {b.updatedCount} / {b.skippedCount}
+                  </td>
+                  <td className="px-3 py-2">{b.mismatchCount}</td>
+                  <td className="px-3 py-2 text-muted">
+                    {String(b.reconciledAt || b.createdAt).replace("T", " ").slice(0, 19)}
+                  </td>
+                </tr>
+              ))}
+              {!batches.length ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-8 text-center text-sub">
+                    No import batches yet — validate a file to create a preview batch.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      </section>
 
       {toast ? (
         <div className="fixed bottom-4 right-5 z-50 rounded-md bg-[#183954] px-4 py-2.5 text-sm text-white">{toast}</div>

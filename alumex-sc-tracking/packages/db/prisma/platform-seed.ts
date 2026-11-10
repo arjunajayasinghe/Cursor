@@ -53,7 +53,7 @@ const INTEGRATIONS = [
     kind: "sap_import",
     channel: "csv",
     status: "stub",
-    description: "Phase-1 preview path aligned with PR import stub. Field priority prefers SAP for identity fields.",
+    description: "Phase-2 authorized PR CSV/TSV import with validate → preview → reconcile.",
     fieldPriority: {
       prNo: "S",
       line: "S",
@@ -66,7 +66,7 @@ const INTEGRATIONS = [
       priority: "W",
       status: "W",
     },
-    notes: "Use samples/sap-pr-report.tsv or POST /platform/integrations/sap_pr_tsv/preview",
+    notes: "samples/sap-pr-report.tsv · POST /platform/integrations/sap_pr_tsv/analyze then …/batches/:id/reconcile",
   },
   {
     key: "sap_po_xlsx",
@@ -74,7 +74,7 @@ const INTEGRATIONS = [
     kind: "sap_import",
     channel: "xlsx",
     status: "stub",
-    description: "Future connector for PO headers and lines. Preview accepts CSV/TSV text for phase 1.",
+    description: "Phase-2 PO CSV/XLSX import. Field priority keeps PI/notes web-owned.",
     fieldPriority: {
       poNo: "S",
       line: "S",
@@ -84,6 +84,7 @@ const INTEGRATIONS = [
       piNo: "W",
       notes: "W",
     },
+    notes: "samples/sap-po-extract.csv (XLSX also accepted as base64 upload)",
   },
   {
     key: "sap_grn_movements",
@@ -91,7 +92,7 @@ const INTEGRATIONS = [
     kind: "sap_import",
     channel: "csv",
     status: "stub",
-    description: "Material document + year + item identity. Operational notes stay web-owned.",
+    description: "Phase-2 GRN import on material document + year + item. Notes stay web-owned.",
     fieldPriority: {
       grnNo: "S",
       year: "S",
@@ -101,6 +102,7 @@ const INTEGRATIONS = [
       notes: "W",
       quality: "W",
     },
+    notes: "samples/sap-grn-extract.csv",
   },
   {
     key: "vessel_ais",
