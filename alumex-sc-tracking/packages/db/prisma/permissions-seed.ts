@@ -16,6 +16,8 @@ export const PERMISSION_MODULES = [
   "reports",
   "roles",
   "automation",
+  "masters",
+  "integrations",
 ] as const;
 
 export type PermModule = (typeof PERMISSION_MODULES)[number];

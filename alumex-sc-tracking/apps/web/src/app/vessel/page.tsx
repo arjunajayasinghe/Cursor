@@ -6,6 +6,8 @@ import { api, type VesselTrackingDetail } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { FieldGrid } from "@/components/field-grid";
 import { AttachmentsPanel } from "@/components/attachments-panel";
+import { HistoryPanel } from "@/components/history-panel";
+import { StatusTransition } from "@/components/status-transition";
 import { VesselMap } from "@/components/vessel-map";
 import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -283,7 +285,13 @@ export default function VesselPage() {
                 </div>
               </div>
             ) : null}
+            <StatusTransition
+              moduleKey="vessel"
+              recordId={selected.recordId}
+              onChanged={(status) => setSelected({ ...selected, status })}
+            />
             <AttachmentsPanel moduleKey="vessel" category="vessel" recordId={selected.recordId} />
+            <HistoryPanel moduleKey="vessel" recordId={selected.recordId} />
           </div>
         ) : null}
       </Drawer>

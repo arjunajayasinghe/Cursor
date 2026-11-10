@@ -2,6 +2,7 @@ import { PrismaClient, Prisma } from "@prisma/client";
 import { seedPermissions } from "./permissions-seed";
 import { seedAutomation } from "./automation-seed";
 import { seedIntegrations } from "./integrations-seed";
+import { seedPlatform } from "./platform-seed";
 
 const prisma = new PrismaClient();
 
@@ -52,6 +53,9 @@ const completed = [
 ];
 
 async function main() {
+  await prisma.workflowAction.deleteMany();
+  await prisma.masterDataEntry.deleteMany();
+  await prisma.integrationRegister.deleteMany();
   await prisma.auditEvent.deleteMany();
   await prisma.goodsReceipt.deleteMany();
   await prisma.deliveryLandedCost.deleteMany();
@@ -420,7 +424,8 @@ async function main() {
   await seedPermissions(prisma);
   await seedAutomation(prisma);
   await seedIntegrations(prisma);
-  console.log("Seeded Alumex demo data + SLA/notifications + vessel/docs integrations.");
+  await seedPlatform(prisma);
+  console.log("Seeded Alumex phase-1 demo (modules, RBAC, SLA, vessel/docs, masters, integrations).");
 }
 
 main()

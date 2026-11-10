@@ -17,6 +17,10 @@ import {
   Shield,
   ChartColumn,
   Bell,
+  Database,
+  AlertTriangle,
+  Plug,
+  Table2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -41,8 +45,12 @@ const nav = [
   { href: "/delivery", label: "Delivery & landed cost", icon: Truck, group: "Import", moduleKey: "delivery" },
   { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores", moduleKey: "grn" },
   { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights", moduleKey: "reports" },
+  { href: "/monitoring", label: "Monitoring report", icon: Table2, group: "Insights", moduleKey: "reports" },
+  { href: "/exceptions", label: "Exception register", icon: AlertTriangle, group: "Insights", moduleKey: "automation" },
   { href: "/admin", label: "Role administration", icon: Users, group: "Admin", moduleKey: "roles" },
   { href: "/settings", label: "SLA & notifications", icon: Bell, group: "Admin", moduleKey: "automation" },
+  { href: "/masters", label: "Master data", icon: Database, group: "Admin", moduleKey: "masters" },
+  { href: "/integrations", label: "Integrations", icon: Plug, group: "Admin", moduleKey: "integrations" },
 ];
 
 const titles: Record<string, string> = Object.fromEntries(nav.map((n) => [n.href, n.label]));

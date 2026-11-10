@@ -83,9 +83,30 @@ S3-compatible interface with **local filesystem fallback** (`DOCUMENT_STORAGE_PA
 | Reports (pipeline / action / cost / closure + CSV) | `/reports` | `GET /reports?type=` |
 | Role administration | `/admin` | `/permissions/*` |
 | SLA & notifications | `/settings` | `/automation/*` |
+| Master data | `/masters` | `/platform/masters` |
+| Integrations | `/integrations` | `/platform/integrations` |
+| Exception register | `/exceptions` | `/platform/exceptions` |
+| Monitoring report | `/monitoring` | `/platform/monitoring` |
 | Documents | (drawer attachments) | `/documents` |
+| Audit / workflow | (drawer History + status) | `/platform/audit`, `/platform/workflow` |
 
-Each operational module uses the shared list + detail drawer pattern with source tags. Demo records are seeded from the GUI handoff `schema.js` cases.
+Each operational module uses the shared list + detail drawer pattern with source tags, attachments, status transitions and history. Demo records are seeded from the GUI handoff `schema.js` cases.
+
+## Phase 1 inventory
+
+| Area | Ships in this demo |
+| --- | --- |
+| Core modules 01–07 | PR, quotations, evaluation, PO/PI, payments, confirmation, shipping, vessel, customs, delivery, GRN |
+| Overview + reports | KPIs, pipeline, attention, cost, closure, **master monitoring spreadsheet columns** |
+| RBAC | Demo role selector, Nest enforcement, role matrix, assigned-only external stubs |
+| Automation | Configurable SLA masters, §12 notification engine, email outbox stub, exception register |
+| Vessel 6C | Mock/REST adapter, IMO/MMSI match, poll interval, events, Leaflet map, supplier ETA preserved |
+| Documents | Local/S3 storage interface, document_assets, drawer upload/list/download |
+| Workflow | Per-module status machines (independent stages), transition API + drawer controls |
+| Audit | Record history with old/new JSON, source tags (manual/import/provider) |
+| Master data | Plants, currencies, UOM, Incoterms, delay reasons, suppliers |
+| Integrations | SAP import register stubs + CSV/TSV preview + field source priority |
+| Hardening | Duplicate checks (PR/PO/GRN keys), validation on uploads/transitions, seed completeness |
 
 ## Structure
 

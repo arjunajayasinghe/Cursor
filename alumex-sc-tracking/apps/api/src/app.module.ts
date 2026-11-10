@@ -5,6 +5,7 @@ import { PermissionsModule } from "./permissions/permissions.module";
 import { AutomationModule } from "./automation/automation.module";
 import { VesselTrackingModule } from "./vessel-tracking/vessel-tracking.module";
 import { DocumentsModule } from "./documents/documents.module";
+import { PlatformModule } from "./platform/platform.module";
 import { PrModule } from "./pr/pr.module";
 import { PoModule } from "./po/po.module";
 import { OverviewModule } from "./overview/overview.module";
@@ -19,6 +20,7 @@ import { HealthController } from "./health.controller";
     AutomationModule,
     VesselTrackingModule,
     DocumentsModule,
+    PlatformModule,
     PrModule,
     PoModule,
     OverviewModule,

@@ -10,6 +10,8 @@ import { StatusBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { AttachmentsPanel } from "@/components/attachments-panel";
+import { HistoryPanel } from "@/components/history-panel";
+import { StatusTransition } from "@/components/status-transition";
 
 type Row = Record<string, unknown> & { id: string; recordId: string; status: string };
 
@@ -290,7 +292,15 @@ export function ModuleListPage({ def }: { def: ModuleUiDef }) {
                   </div>
                 ) : null}
                 {selected.recordId ? (
-                  <AttachmentsPanel moduleKey={def.key} category={def.key} recordId={String(selected.recordId)} />
+                  <>
+                    <StatusTransition
+                      moduleKey={def.key}
+                      recordId={String(selected.recordId)}
+                      onChanged={(status) => setSelected({ ...selected, status })}
+                    />
+                    <AttachmentsPanel moduleKey={def.key} category={def.key} recordId={String(selected.recordId)} />
+                    <HistoryPanel moduleKey={def.key} recordId={String(selected.recordId)} />
+                  </>
                 ) : null}
               </>
             )}

@@ -147,12 +147,19 @@ export class ModulesService {
     if (!current) throw new NotFoundException(`${def.title} record not found`);
     const data = await this.buildData(def, dto, false);
     const row = await this.model(def).update({ where: { id: current.id }, data });
+    const changed: Record<string, unknown> = {};
+    for (const k of Object.keys(data)) {
+      if (String((current as any)[k]) !== String((row as any)[k])) changed[k] = (row as any)[k];
+    }
     await this.prisma.auditEvent.create({
       data: {
         moduleKey: def.key,
         recordId: String(row.recordId),
         actor: "Demo user",
         action: "Updated",
+        oldValue: JSON.stringify(Object.fromEntries(Object.keys(changed).map((k) => [k, (current as any)[k]]))),
+        newValue: JSON.stringify(changed),
+        source: "manual",
       },
     });
     return serialize(def, row);

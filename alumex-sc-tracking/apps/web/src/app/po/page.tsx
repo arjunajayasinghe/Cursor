@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { useAuth } from "@/lib/auth";
 import { AttachmentsPanel } from "@/components/attachments-panel";
+import { HistoryPanel } from "@/components/history-panel";
+import { StatusTransition } from "@/components/status-transition";
 
 export default function PoPage() {
   const { canEdit } = useAuth();
@@ -232,7 +234,15 @@ export default function PoPage() {
               <>
                 <FieldGrid fields={PO_FIELDS} values={selected as unknown as Record<string, unknown>} />
                 {selected.recordId ? (
-                  <AttachmentsPanel moduleKey="po" category="po" recordId={selected.recordId} />
+                  <>
+                    <StatusTransition
+                      moduleKey="po"
+                      recordId={selected.recordId}
+                      onChanged={(status) => setSelected({ ...selected, status })}
+                    />
+                    <AttachmentsPanel moduleKey="po" category="po" recordId={selected.recordId} />
+                    <HistoryPanel moduleKey="po" recordId={selected.recordId} />
+                  </>
                 ) : null}
               </>
             )}

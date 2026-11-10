@@ -176,6 +176,60 @@ export const api = {
   },
   documentDelete: (id: string) =>
     request<{ ok: boolean }>(`/documents/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  auditHistory: (moduleKey: string, recordId: string) =>
+    request<AuditEvent[]>(
+      `/platform/audit/${encodeURIComponent(moduleKey)}/${encodeURIComponent(recordId)}`,
+    ),
+  workflowState: (moduleKey: string, recordId: string) =>
+    request<WorkflowState>(
+      `/platform/workflow/${encodeURIComponent(moduleKey)}/${encodeURIComponent(recordId)}`,
+    ),
+  workflowHistory: (moduleKey: string, recordId: string) =>
+    request<WorkflowHistoryItem[]>(
+      `/platform/workflow/${encodeURIComponent(moduleKey)}/${encodeURIComponent(recordId)}/history`,
+    ),
+  workflowTransition: (moduleKey: string, recordId: string, toStatus: string, note?: string) =>
+    request<Record<string, unknown>>(
+      `/platform/workflow/${encodeURIComponent(moduleKey)}/${encodeURIComponent(recordId)}/transition`,
+      { method: "POST", body: JSON.stringify({ toStatus, note }) },
+    ),
+  mastersList: (category = "") =>
+    request<MasterDataEntry[]>(
+      `/platform/masters${category ? `?category=${encodeURIComponent(category)}` : ""}`,
+    ),
+  mastersUpsert: (body: Partial<MasterDataEntry> & { category: string; code: string; name: string }) =>
+    request<MasterDataEntry>("/platform/masters", { method: "PUT", body: JSON.stringify(body) }),
+  mastersDelete: (id: string) =>
+    request<{ ok: boolean }>(`/platform/masters/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  exceptionsList: (status = "") =>
+    request<ExceptionItem[]>(
+      `/platform/exceptions${status ? `?status=${encodeURIComponent(status)}` : ""}`,
+    ),
+  exceptionPatch: (id: string, body: { status?: string; detail?: string }) =>
+    request<ExceptionItem>(`/platform/exceptions/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  integrationsList: () => request<IntegrationItem[]>("/platform/integrations"),
+  integrationPatch: (key: string, body: Partial<IntegrationItem>) =>
+    request<IntegrationItem>(`/platform/integrations/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  integrationPreview: (key: string, text: string) =>
+    request<IntegrationPreview>(`/platform/integrations/${encodeURIComponent(key)}/preview`, {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  monitoringReport: (params: Record<string, string> = {}) => {
+    const q = new URLSearchParams(params).toString();
+    return request<MonitoringReport>(`/platform/monitoring${q ? `?${q}` : ""}`);
+  },
+  checkDuplicate: (moduleKey: string, fields: Record<string, string>) =>
+    request<{ duplicate: boolean; existingId: string | null }>("/platform/validate/duplicate", {
+      method: "POST",
+      body: JSON.stringify({ moduleKey, fields }),
+    }),
 };
 
 export type ReportPayload = {
@@ -567,4 +621,77 @@ export type DocumentAsset = {
   uploadedBy?: string | null;
   notes?: string | null;
   createdAt: string;
+};
+
+
+export type AuditEvent = {
+  id: string;
+  moduleKey: string;
+  recordId: string;
+  actor: string;
+  action: string;
+  detail?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
+  reason?: string | null;
+  source?: string | null;
+  createdAt: string;
+};
+
+export type WorkflowState = {
+  moduleKey: string;
+  recordId: string;
+  current: string;
+  next: string[];
+  statuses: string[];
+};
+
+export type WorkflowHistoryItem = {
+  fromStatus?: string | null;
+  toStatus: string;
+  actor: string;
+  note?: string | null;
+  createdAt: string;
+};
+
+export type MasterDataEntry = {
+  id: string;
+  category: string;
+  code: string;
+  name: string;
+  extra?: string | null;
+  active: boolean;
+  sortOrder: number;
+};
+
+export type IntegrationItem = {
+  id: string;
+  key: string;
+  name: string;
+  kind: string;
+  channel: string;
+  status: string;
+  description?: string | null;
+  fieldPriority?: Record<string, string> | null;
+  lastRunAt?: string | null;
+  lastResult?: string | null;
+  notes?: string | null;
+};
+
+export type IntegrationPreview = {
+  key: string;
+  headers: string[];
+  preview: Array<Record<string, string>>;
+  rowCount?: number;
+  duplicateKeys?: string[];
+  fieldPriority?: Record<string, string> | null;
+  errors?: string[];
+  note?: string;
+};
+
+export type MonitoringReport = {
+  type: string;
+  headers: string[];
+  rows: Array<Record<string, unknown>>;
+  counts: { total: number; overdue: number; byStage: Array<{ stage: string; count: number }> };
 };

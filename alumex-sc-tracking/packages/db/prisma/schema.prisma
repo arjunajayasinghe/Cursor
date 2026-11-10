@@ -438,10 +438,73 @@ model AuditEvent {
   actor      String
   action     String
   detail     String?
+  /// JSON snapshot of previous values
+  oldValue   String?
+  /// JSON snapshot of new values
+  newValue   String?
+  reason     String?
+  /// manual | api | import | system | provider
+  source     String   @default("manual")
   createdAt  DateTime @default(now())
 
   @@index([moduleKey, recordId])
+  @@index([createdAt])
   @@map("audit_events")
+}
+
+/// Master data catalogues (plants, currencies, UOM, Incoterms, delay reasons, suppliers)
+model MasterDataEntry {
+  id        String   @id @default(cuid())
+  /// plant | currency | uom | incoterm | delay_reason | supplier
+  category  String
+  code      String
+  name      String
+  extra     String?
+  active    Boolean  @default(true)
+  sortOrder Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([category, code])
+  @@index([category, active])
+  @@map("master_data_entries")
+}
+
+/// Future SAP / external connector registry
+model IntegrationRegister {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  kind            String   @default("sap_import")
+  /// csv | xlsx | api | manual
+  channel         String   @default("csv")
+  status          String   @default("stub")
+  /// stub | configured | active | paused
+  description     String?
+  /// JSON map of field -> preferred source (S/W/A/E/M)
+  fieldPriority   Json?
+  lastRunAt       DateTime?
+  lastResult      String?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("integration_register")
+}
+
+/// Lightweight workflow transition log (independent stages)
+model WorkflowAction {
+  id         String   @id @default(cuid())
+  moduleKey  String
+  recordId   String
+  fromStatus String?
+  toStatus   String
+  actor      String
+  note       String?
+  createdAt  DateTime @default(now())
+
+  @@index([moduleKey, recordId])
+  @@map("workflow_actions")
 }
 
 /// Demo / production role. Access levels: 0 none · 1 view · 2 create/edit
