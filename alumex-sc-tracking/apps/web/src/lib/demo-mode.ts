@@ -1,5 +1,9 @@
-/** Local-only demo role switching. Must stay false in published builds. */
-export const DEMO_ROLE_SWITCHING = process.env.NEXT_PUBLIC_DEMO_ROLE_SWITCHING === "true";
+/**
+ * Local-only demo role switching.
+ * Hard-disabled in production builds even if NEXT_PUBLIC_DEMO_ROLE_SWITCHING was set at build time.
+ */
+export const DEMO_ROLE_SWITCHING =
+  process.env.NODE_ENV !== "production" && process.env.NEXT_PUBLIC_DEMO_ROLE_SWITCHING === "true";
 
 /** Safe default for first paint and published private preview. */
 export const DEFAULT_SAFE_ROLE = "Management";

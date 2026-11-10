@@ -50,7 +50,8 @@ export default function OverviewPage() {
 
       {error ? (
         <div className="rounded-panel border border-red-soft bg-red-soft p-4 text-sm text-red-ink">
-          API unavailable: {error}. Start the Nest API on port 4000.
+          API unavailable: {error}. Use http://localhost:3000 with Nest on :4000, or wait for sample-mode
+          republish / API_BACKEND_URL.
         </div>
       ) : null}
 

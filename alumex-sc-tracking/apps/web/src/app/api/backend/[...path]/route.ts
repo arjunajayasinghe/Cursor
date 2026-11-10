@@ -1,4 +1,5 @@
 import { requireIdentity, type VerifiedIdentity } from "../../../../../cursor/identity";
+import { sampleForPath } from "@/lib/sample-data";
 import {
   allowMethod,
   moduleKeyFromPath,
@@ -70,10 +71,24 @@ async function proxy(request: Request, pathSegments: string[]) {
     out.set("cache-control", "private, no-store");
     return new Response(body, { status: upstream.status, headers: out });
   } catch {
+    // Published host often has no Nest — serve sample GET payloads so menus/overview work.
+    if (method === "GET" || method === "HEAD") {
+      const sample = sampleForPath(pathSegments);
+      if (sample != null) {
+        return Response.json(sample, {
+          status: 200,
+          headers: {
+            "cache-control": "private, no-store",
+            "x-alumex-mode": "sample",
+          },
+        });
+      }
+    }
     return Response.json(
       {
         message: "Backend API unreachable from app host",
-        hint: "Local demo: set NEXT_PUBLIC_DEMO_ROLE_SWITCHING=true and call Nest on :4000 directly.",
+        hint: "Add API_BACKEND_URL secret, or use localhost with Nest on :4000.",
+        mode: "offline",
       },
       { status: 502, headers: { "cache-control": "private, no-store" } },
     );

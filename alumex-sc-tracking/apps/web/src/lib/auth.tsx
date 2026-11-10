@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { api, type PermissionsMe } from "@/lib/api";
 import { DEFAULT_SAFE_ROLE, DEMO_ROLE_SWITCHING } from "@/lib/demo-mode";
+import { managementFallbackMe } from "@/lib/sample-data";
 
 const STORAGE_KEY = "alumex-demo-role";
 
@@ -51,7 +52,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setMe(data);
       setRoleState(data.role || DEFAULT_SAFE_ROLE);
     } catch {
-      setMe(null);
+      // Keep menus usable when Nest is down (published sample mode).
+      const fallback = managementFallbackMe();
+      setMe(fallback);
+      setRoleState(fallback.role);
     } finally {
       setLoading(false);
     }
