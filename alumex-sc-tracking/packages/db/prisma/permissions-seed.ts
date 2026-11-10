@@ -15,6 +15,7 @@ export const PERMISSION_MODULES = [
   "grn",
   "reports",
   "roles",
+  "automation",
 ] as const;
 
 export type PermModule = (typeof PERMISSION_MODULES)[number];
@@ -79,6 +80,7 @@ export const ROLE_MATRIX: Array<{
       delivery: 1,
       grn: 1,
       reports: 1,
+      automation: 1,
     },
   },
   {
@@ -96,6 +98,7 @@ export const ROLE_MATRIX: Array<{
       customs: 1,
       grn: 1,
       reports: 1,
+      automation: 1,
     },
   },
   {
@@ -113,6 +116,7 @@ export const ROLE_MATRIX: Array<{
       delivery: 2,
       grn: 1,
       reports: 1,
+      automation: 1,
     },
   },
   {
@@ -129,6 +133,7 @@ export const ROLE_MATRIX: Array<{
       delivery: 1,
       grn: 2,
       reports: 1,
+      automation: 1,
     },
   },
   {

@@ -15,6 +15,7 @@ export const MODULE_OWNERS: Record<string, string> = {
   grn: "Stores",
   reports: "Management",
   roles: "Administrator",
+  automation: "Administrator / Management",
 };
 
 export const MODULE_LABELS: Record<string, string> = {
@@ -31,6 +32,7 @@ export const MODULE_LABELS: Record<string, string> = {
   grn: "GRN & closure",
   reports: "Reports",
   roles: "Role administration",
+  automation: "SLA & notifications",
 };
 
 export type AccessLevel = 0 | 1 | 2;

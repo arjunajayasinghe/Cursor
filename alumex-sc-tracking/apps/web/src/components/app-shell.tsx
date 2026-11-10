@@ -16,6 +16,7 @@ import {
   Wallet,
   Shield,
   ChartColumn,
+  Bell,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -41,6 +42,7 @@ const nav = [
   { href: "/grn", label: "GRN & closure", icon: Box, group: "Stores", moduleKey: "grn" },
   { href: "/reports", label: "Reports", icon: ChartColumn, group: "Insights", moduleKey: "reports" },
   { href: "/admin", label: "Role administration", icon: Users, group: "Admin", moduleKey: "roles" },
+  { href: "/settings", label: "SLA & notifications", icon: Bell, group: "Admin", moduleKey: "automation" },
 ];
 
 const titles: Record<string, string> = Object.fromEntries(nav.map((n) => [n.href, n.label]));

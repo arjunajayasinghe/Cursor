@@ -82,6 +82,35 @@ export const api = {
     }),
   reports: (type = "pipeline") =>
     request<ReportPayload>(`/reports?type=${encodeURIComponent(type)}`),
+  automationSlaRules: () => request<SlaRule[]>("/automation/sla-rules"),
+  updateSlaRule: (key: string, body: Partial<SlaRule>) =>
+    request<SlaRule>(`/automation/sla-rules/${encodeURIComponent(key)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  automationNotificationRules: () => request<NotificationRule[]>("/automation/notification-rules"),
+  updateNotificationRule: (triggerKey: string, body: Partial<NotificationRule>) =>
+    request<NotificationRule>(`/automation/notification-rules/${encodeURIComponent(triggerKey)}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  automationEvents: (status = "open") =>
+    request<NotificationEvent[]>(`/automation/events?status=${encodeURIComponent(status)}`),
+  automationOutbox: () => request<EmailOutboxItem[]>("/automation/outbox"),
+  automationExceptions: (status = "open") =>
+    request<ExceptionItem[]>(`/automation/exceptions?status=${encodeURIComponent(status)}`),
+  automationEvaluate: () =>
+    request<AutomationEvalResult>("/automation/evaluate", { method: "POST", body: "{}" }),
+  automationAck: (id: string) =>
+    request<NotificationEvent>(`/automation/events/${encodeURIComponent(id)}/ack`, {
+      method: "POST",
+      body: "{}",
+    }),
+  automationResolve: (id: string) =>
+    request<NotificationEvent>(`/automation/events/${encodeURIComponent(id)}/resolve`, {
+      method: "POST",
+      body: "{}",
+    }),
 };
 
 export type ReportPayload = {
@@ -133,10 +162,103 @@ export type RecordAssignment = {
 
 export type OverviewData = {
   kpis: Array<{ label: string; value: number; detail: string; tone: string; icon: string }>;
+  kpiDetail?: Array<{ label: string; value: number; detail: string; tone: string; icon: string }>;
   pipeline: Array<{ key: string; label: string; count: number; pct: number }>;
-  attention: Array<{ module: string; id: string; title: string; subtitle: string; tone: string }>;
+  attention: Array<{
+    module: string;
+    id: string;
+    title: string;
+    subtitle: string;
+    tone: string;
+    href?: string;
+    triggerKey?: string;
+  }>;
+  alertSummary?: Array<{ triggerKey: string; count: number }>;
   recentPr: Array<{ id: string; prNo: string; line: string; material?: string; status: string; plant?: string }>;
   recentPo: Array<{ id: string; poNo: string; supplier?: string; material?: string; status: string; piNo?: string }>;
+};
+
+export type SlaRule = {
+  id: string;
+  key: string;
+  name: string;
+  description?: string | null;
+  moduleKey: string;
+  unit: string;
+  targetValue: number;
+  loadType?: string | null;
+  active: boolean;
+  sortOrder: number;
+};
+
+export type NotificationRule = {
+  id: string;
+  triggerKey: string;
+  name: string;
+  description?: string | null;
+  moduleKey: string;
+  action: string;
+  severity: string;
+  recipientRoles: string;
+  channels: string;
+  dedupeHours: number;
+  slaKey?: string | null;
+  escalateAfterHours?: number | null;
+  active: boolean;
+  sortOrder: number;
+};
+
+export type NotificationEvent = {
+  id: string;
+  dedupeKey: string;
+  triggerKey: string;
+  moduleKey: string;
+  recordId: string;
+  title: string;
+  message: string;
+  severity: string;
+  action: string;
+  recipientRoles: string;
+  status: string;
+  href?: string | null;
+  ageHours?: number | null;
+  occurrenceCount: number;
+  lastSeenAt: string;
+};
+
+export type EmailOutboxItem = {
+  id: string;
+  notificationId?: string | null;
+  toRoles: string;
+  subject: string;
+  body: string;
+  status: string;
+  createdAt: string;
+  sentAt?: string | null;
+};
+
+export type ExceptionItem = {
+  id: string;
+  moduleKey: string;
+  recordId: string;
+  triggerKey?: string | null;
+  category: string;
+  title: string;
+  detail?: string | null;
+  severity: string;
+  status: string;
+  ownerRole?: string | null;
+};
+
+export type AutomationEvalResult = {
+  detected: number;
+  created: number;
+  refreshed: number;
+  emailsQueued: number;
+  exceptionsOpened: number;
+  autoResolved: number;
+  actor: string;
+  at: string;
 };
 
 export type PrItem = {

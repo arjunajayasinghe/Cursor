@@ -425,3 +425,124 @@ model RecordAssignment {
   @@index([moduleKey, recordId])
   @@map("record_assignments")
 }
+
+/// Configurable SLA / KPI targets (functional-spec §11.2)
+model SlaRule {
+  id          String   @id @default(cuid())
+  /// Stable key e.g. quotation_response, evaluation_turnaround, payment_due, clearance_fcl, clearance_lcl
+  key         String   @unique
+  name        String
+  description String?
+  moduleKey   String
+  /// hours | days
+  unit        String   @default("hours")
+  targetValue Int
+  /// Optional load-type master (FCL / LCL) for clearance targets
+  loadType    String?
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(100)
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@index([moduleKey])
+  @@map("sla_rules")
+}
+
+/// Notification / escalation rule definitions (functional-spec §12)
+model NotificationRule {
+  id              String   @id @default(cuid())
+  /// Stable trigger key e.g. quotation_overdue, eta_revised
+  triggerKey      String   @unique
+  name            String
+  description     String?
+  moduleKey       String
+  /// Reminder | Escalation | Delay alert | Change notification | Follow-up | Clearance notification
+  action          String   @default("Reminder")
+  severity        String   @default("warning")
+  recipientRoles  String   @default("Procurement")
+  channels        String   @default("in_app,email")
+  /// Hours before re-emitting the same dedupe key
+  dedupeHours     Int      @default(24)
+  /// Optional link to SLA rule key
+  slaKey          String?
+  escalateAfterHours Int?
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(100)
+  updatedAt       DateTime @updatedAt
+  createdAt       DateTime @default(now())
+
+  @@index([moduleKey])
+  @@map("notification_rules")
+}
+
+/// Deduplicated notification log + in-app alert feed
+model NotificationEvent {
+  id           String   @id @default(cuid())
+  /// Hash/key used for dedupe: triggerKey:moduleKey:recordId
+  dedupeKey    String
+  triggerKey   String
+  moduleKey    String
+  recordId     String
+  title        String
+  message      String
+  severity     String   @default("warning")
+  action       String   @default("Reminder")
+  recipientRoles String
+  status       String   @default("open")
+  /// open | acknowledged | resolved | suppressed
+  href         String?
+  ageHours     Int?
+  firstSeenAt  DateTime @default(now())
+  lastSeenAt   DateTime @default(now())
+  ackAt        DateTime?
+  ackBy        String?
+  resolvedAt   DateTime?
+  occurrenceCount Int   @default(1)
+
+  @@unique([dedupeKey])
+  @@index([status, lastSeenAt])
+  @@index([moduleKey, recordId])
+  @@index([triggerKey])
+  @@map("notification_events")
+}
+
+/// Email channel stub (outbox) — delivery can be wired later
+model EmailOutbox {
+  id             String   @id @default(cuid())
+  notificationId String?
+  toRoles        String
+  subject        String
+  body           String
+  status         String   @default("queued")
+  /// queued | sent | failed | stubbed
+  attempts       Int      @default(0)
+  lastError      String?
+  createdAt      DateTime @default(now())
+  sentAt         DateTime?
+
+  @@index([status, createdAt])
+  @@map("email_outbox")
+}
+
+/// Exception register for SLA breaches and authorized exceptions
+model ExceptionRegister {
+  id          String   @id @default(cuid())
+  moduleKey   String
+  recordId    String
+  triggerKey  String?
+  category    String   @default("SLA")
+  title       String
+  detail      String?
+  severity    String   @default("warning")
+  status      String   @default("open")
+  /// open | under_review | authorized | closed
+  ownerRole   String?
+  authorizedBy String?
+  authorizedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status, moduleKey])
+  @@index([recordId])
+  @@map("exception_register")
+}

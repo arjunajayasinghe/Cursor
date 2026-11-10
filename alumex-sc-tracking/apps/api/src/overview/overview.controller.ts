@@ -20,6 +20,6 @@ export class OverviewController {
     if (!canSee) {
       throw new ForbiddenException(`${role.role} has no module access for the overview`);
     }
-    return this.overview.dashboard();
+    return this.overview.dashboard(role.role);
   }
 }

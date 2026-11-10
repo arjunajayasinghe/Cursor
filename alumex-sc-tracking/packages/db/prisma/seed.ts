@@ -1,5 +1,6 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { seedPermissions } from "./permissions-seed";
+import { seedAutomation } from "./automation-seed";
 
 const prisma = new PrismaClient();
 
@@ -414,7 +415,8 @@ async function main() {
   }
 
   await seedPermissions(prisma);
-  console.log("Seeded Alumex demo data from GUI schema + role matrix.");
+  await seedAutomation(prisma);
+  console.log("Seeded Alumex demo data from GUI schema + role matrix + SLA/notifications.");
 }
 
 main()

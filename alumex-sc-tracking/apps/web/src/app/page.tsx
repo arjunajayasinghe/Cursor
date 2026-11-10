@@ -131,28 +131,44 @@ export default function OverviewPage() {
           <div className="flex items-center justify-between border-b border-[#e7edf4] px-4 py-3.5">
             <div>
               <h2 className="text-[17px] font-semibold">Needs attention</h2>
-              <p className="text-[11px] text-muted">Exceptions and decisions to review</p>
+              <p className="text-[11px] text-muted">Live SLA / notification engine alerts</p>
             </div>
-            <span className="rounded-[5px] border border-[#dae6f2] bg-[#edf3fa] px-2 py-1 text-[11px] font-semibold text-[#365470]">
-              {data?.attention.length || 0}
-            </span>
+            <div className="flex items-center gap-2">
+              <Link
+                href="/settings"
+                className="rounded-[5px] border border-[#dae6f2] bg-white px-2 py-1 text-[11px] font-semibold text-[#365470] hover:border-[#075bb3] hover:text-[#075bb3]"
+              >
+                Rules
+              </Link>
+              <span className="rounded-[5px] border border-[#dae6f2] bg-[#edf3fa] px-2 py-1 text-[11px] font-semibold text-[#365470]">
+                {data?.attention.length || 0}
+              </span>
+            </div>
           </div>
           <div className="px-3 pb-2">
             {(data?.attention || []).length === 0 ? (
-              <p className="p-7 text-center text-sub">No visible exceptions.</p>
+              <p className="p-7 text-center text-sub">No open alerts from current SLA rules.</p>
             ) : (
               data?.attention.map((item) => (
                 <Link
-                  key={`${item.module}-${item.id}`}
+                  key={`${item.triggerKey || item.module}-${item.id}-${item.title}`}
                   href={
+                    item.href ||
                     (
                       {
                         pr: "/pr",
+                        quotes: "/quotations",
+                        eval: "/evaluation",
                         po: "/po",
-                        vessel: "/vessel",
                         pay: "/payments",
+                        confirm: "/confirmations",
+                        ship: "/shipping",
+                        vessel: "/vessel",
+                        customs: "/customs",
+                        grn: "/grn",
                       } as Record<string, string>
-                    )[item.module] || "/reports"
+                    )[item.module] ||
+                    "/settings"
                   }
                   className="flex min-h-[49px] items-center gap-2.5 border-b border-[#edf1f6] px-1 py-2.5 last:border-0 hover:text-blue"
                 >
@@ -174,6 +190,24 @@ export default function OverviewPage() {
           </div>
         </section>
       </div>
+
+      {(data?.kpiDetail || []).length ? (
+        <section className="mb-4 rounded-panel border border-line bg-white shadow-panel">
+          <div className="border-b border-[#e7edf4] px-4 py-3.5">
+            <h2 className="text-[17px] font-semibold">KPI strip</h2>
+            <p className="text-[11px] text-muted">Functional-spec §11.2 monitoring measures</p>
+          </div>
+          <div className="grid grid-cols-2 gap-px bg-[#e7edf4] sm:grid-cols-5">
+            {(data?.kpiDetail || []).map((k) => (
+              <div key={k.label} className="bg-white px-3 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.6px] text-[#52657b]">{k.label}</div>
+                <strong className="mt-1 block text-[22px] tabular-nums tracking-[-0.4px]">{k.value}</strong>
+                <small className="text-[10px] text-muted">{k.detail}</small>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-panel border border-line bg-white shadow-panel">

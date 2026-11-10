@@ -1,34 +1,42 @@
 import { Injectable } from "@nestjs/common";
+import { AutomationService } from "../automation/automation.service";
 import { PrismaService } from "../prisma/prisma.service";
 
 @Injectable()
 export class OverviewService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly automation: AutomationService,
+  ) {}
 
-  async dashboard() {
-    const [prCount, poCount, openPr, openPo, delayedVessel, pendingPayments, recentPr, recentPo] =
-      await Promise.all([
-        this.prisma.purchaseRequisition.count(),
-        this.prisma.purchaseOrder.count(),
-        this.prisma.purchaseRequisition.count({
-          where: { status: { notIn: ["Cancelled", "Closed"] } },
-        }),
-        this.prisma.purchaseOrder.count({
-          where: { status: { notIn: ["Cancelled", "Closed"] } },
-        }),
-        this.prisma.vesselTracking.count({ where: { status: "Delayed" } }),
-        this.prisma.payment.count({
-          where: { status: { in: ["Scheduled", "Submitted to bank", "Part paid"] } },
-        }),
-        this.prisma.purchaseRequisition.findMany({
-          take: 6,
-          orderBy: { updatedAt: "desc" },
-        }),
-        this.prisma.purchaseOrder.findMany({
-          take: 6,
-          orderBy: { updatedAt: "desc" },
-        }),
-      ]);
+  async dashboard(roleName?: string) {
+    // Ensure alerts reflect current SLA/notification rules
+    try {
+      await this.automation.evaluate(roleName || "system");
+    } catch {
+      /* first boot before seed is ok */
+    }
+
+    const [prCount, poCount, openPr, openPo, recentPr, recentPo, slice, kpiRows] = await Promise.all([
+      this.prisma.purchaseRequisition.count(),
+      this.prisma.purchaseOrder.count(),
+      this.prisma.purchaseRequisition.count({
+        where: { status: { notIn: ["Cancelled", "Closed"] } },
+      }),
+      this.prisma.purchaseOrder.count({
+        where: { status: { notIn: ["Cancelled", "Closed"] } },
+      }),
+      this.prisma.purchaseRequisition.findMany({
+        take: 6,
+        orderBy: { updatedAt: "desc" },
+      }),
+      this.prisma.purchaseOrder.findMany({
+        take: 6,
+        orderBy: { updatedAt: "desc" },
+      }),
+      this.automation.dashboardSlice(roleName),
+      this.automation.kpisFromRules(),
+    ]);
 
     const pipeline = [
       { key: "pr", label: "Purchase requisitions", count: await this.prisma.purchaseRequisition.count() },
@@ -45,54 +53,52 @@ export class OverviewService {
     ];
 
     const max = Math.max(...pipeline.map((p) => p.count), 1);
-    const attention = [
-      ...(
-        await this.prisma.vesselTracking.findMany({
-          where: { status: "Delayed" },
-          take: 3,
-        })
-      ).map((r) => ({
-        module: "vessel",
-        id: r.recordId,
-        title: `${r.vessel || "Vessel"} delayed`,
-        subtitle: r.reason || r.position || "ETA slip",
-        tone: "amber" as const,
-      })),
-      ...(
-        await this.prisma.purchaseRequisition.findMany({
-          where: { status: { in: ["Pending release", "Draft"] } },
-          take: 3,
-        })
-      ).map((r) => ({
-        module: "pr",
-        id: r.recordId,
-        title: `PR ${r.prNo} · ${r.line}`,
-        subtitle: `${r.material || "Item"} · ${r.status}`,
-        tone: "blue" as const,
-      })),
-      ...(
-        await this.prisma.purchaseOrder.findMany({
-          where: { status: "Pending SAP release" },
-          take: 2,
-        })
-      ).map((r) => ({
-        module: "po",
-        id: r.recordId,
-        title: `PO ${r.poNo}`,
-        subtitle: `${r.supplier || "Supplier"} · awaiting SAP release`,
-        tone: "amber" as const,
-      })),
+
+    const topKpis = [
+      {
+        label: "Open cases",
+        value: openPr + openPo,
+        detail: `${prCount} PR lines · ${poCount} PO lines`,
+        tone: "blue",
+        icon: "grid",
+      },
+      {
+        label: "Open alerts",
+        value: slice.openAlerts,
+        detail: `${slice.openExceptions} exceptions on register`,
+        tone: "amber",
+        icon: "alert",
+      },
+      {
+        label: "In transit",
+        value: await this.prisma.vesselTracking.count({ where: { status: { in: ["In transit", "Delayed"] } } }),
+        detail: "Active vessel tracks",
+        tone: "blue",
+        icon: "ship",
+      },
+      {
+        label: "Closed files",
+        value: await this.prisma.goodsReceipt.count({ where: { status: "Closed" } }),
+        detail: "GRN completed",
+        tone: "green",
+        icon: "check",
+      },
     ];
 
     return {
-      kpis: [
-        { label: "Open cases", value: openPr + openPo, detail: `${prCount} PR lines · ${poCount} PO lines`, tone: "blue", icon: "grid" },
-        { label: "Exceptions", value: delayedVessel + pendingPayments, detail: "Delays and finance actions", tone: "amber", icon: "alert" },
-        { label: "In transit", value: await this.prisma.vesselTracking.count({ where: { status: { in: ["In transit", "Delayed"] } } }), detail: "Active vessel tracks", tone: "blue", icon: "ship" },
-        { label: "Closed files", value: await this.prisma.goodsReceipt.count({ where: { status: "Closed" } }), detail: "GRN completed", tone: "green", icon: "check" },
-      ],
+      kpis: topKpis,
+      kpiDetail: kpiRows,
       pipeline: pipeline.map((p) => ({ ...p, pct: Math.round((p.count / max) * 100) })),
-      attention: attention.slice(0, 6),
+      attention: slice.attention.slice(0, 8).map((a) => ({
+        module: a.module,
+        id: a.id,
+        title: a.title,
+        subtitle: a.subtitle,
+        tone: a.tone,
+        href: a.href,
+        triggerKey: a.triggerKey,
+      })),
+      alertSummary: slice.byTrigger,
       recentPr: recentPr.map((r) => ({
         id: r.recordId,
         prNo: r.prNo,

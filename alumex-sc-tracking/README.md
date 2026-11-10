@@ -32,6 +32,18 @@ Role matrix UI: `/admin`. Assignment hooks: `GET/POST /permissions/assignments`.
 
 Entra ID / production SSO remains out of scope for this demo.
 
+## SLA & notifications (automation)
+
+Configurable masters (not hardcoded):
+
+- Quotation / evaluation / payment targets default **48 hours**
+- Customs clearance **FCL 3 days** / **LCL 5 days**
+- Additional GRN and supplier-ack day targets
+
+Settings UI: `/settings` (SLA targets, §12 notification rules, open alerts, exception register, email outbox stub).
+
+Engine: `POST /automation/evaluate` detects overdue quotation/evaluation/payment, ETA revised, vessel arrived, clearance overdue, GRN pending, etc. Events are **deduplicated** in `notification_events`; email is written to `email_outbox` as `stubbed`. Overview **Needs attention** and KPI strip read from the same rules.
+
 ## Modules
 
 | Screen | Route | API |
@@ -50,6 +62,7 @@ Entra ID / production SSO remains out of scope for this demo.
 | GRN & closure | `/grn` | `/grn` |
 | Reports (pipeline / action / cost / closure + CSV) | `/reports` | `GET /reports?type=` |
 | Role administration | `/admin` | `/permissions/*` |
+| SLA & notifications | `/settings` | `/automation/*` |
 
 Each operational module uses the shared list + detail drawer pattern with source tags. Demo records are seeded from the GUI handoff `schema.js` cases.
 
