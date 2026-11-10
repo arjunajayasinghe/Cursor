@@ -109,6 +109,7 @@ Each operational module uses the shared list + detail drawer pattern with source
 | Import history | Immutable `import_batches` with mismatch exceptions; notes never overwritten |
 | Phase 3 sync | `IntegrationSyncJob` + on-demand runner (`POST /platform/sync-jobs/:id/run`) using sample extracts; `sapClient` / `lastSyncAt` on PR/PO |
 | Phase 4 mismatches | `FieldMismatch` rows + drawer highlighting in `FieldGrid`; resolve from Integrations |
+| PO import workbench | `/workbench` — single Import hub (PO/cover-PO header, line qty, split Air/Sea, short-ship; tabs for Shipping/Vessel/Clearance/Delivery) |
 | Hardening | Duplicate checks (PR/PO/GRN keys), validation on uploads/transitions, seed completeness |
 
 ## Structure

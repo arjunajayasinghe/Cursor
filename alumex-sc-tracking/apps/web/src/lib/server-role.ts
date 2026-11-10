@@ -57,6 +57,7 @@ export function moduleKeyFromPath(segments: string[]): string | null {
     confirm: "confirm",
     shipping: "ship",
     ship: "ship",
+    workbench: "ship",
     "vessel-tracking": "vessel",
     vessel: "vessel",
     customs: "customs",

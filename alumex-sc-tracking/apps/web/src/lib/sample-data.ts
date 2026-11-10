@@ -145,6 +145,40 @@ export function sampleForPath(segments: string[]): unknown | null {
   ) {
     return [];
   }
+  if (root === "workbench") {
+    if (segments[1] === "dashboard") {
+      return {
+        poCount: 1,
+        withPending: 1,
+        withSplit: 1,
+        withShortShip: 1,
+        openShipments: 2,
+        attention: [{ poNo: "4500012987", coverPoNo: "COV-4500012987", flags: ["split", "multi-mode"], pendingQty: 0, modes: ["Sea", "Air"] }],
+      };
+    }
+    if (segments[1] === "pos" && !segments[2]) {
+      return [
+        {
+          poNo: "4500012987",
+          coverPoNo: "COV-4500012987",
+          supplier: "Gulf Alloy Trading",
+          importNo: "IMP-256",
+          currency: "USD",
+          status: "Sent to supplier",
+          lineCount: 1,
+          orderQty: 160,
+          allocatedQty: 160,
+          shippedQty: 158,
+          shortQty: 2,
+          pendingQty: 0,
+          modes: ["Sea", "Air"],
+          shipmentCount: 2,
+          flags: ["split", "multi-mode", "short-ship"],
+        },
+      ];
+    }
+    return { header: { poNo: segments[2] || "4500012987", status: [] }, lines: [], dashboard: { lineCount: 0, orderQty: 0, pendingQty: 0, allocatedQty: 0, shortQty: 0, shipmentCount: 0, modes: [], attention: [] } };
+  }
   if (root === "reports") return { type: "pipeline", headers: [], rows: [], counts: [] };
   if (root === "platform") {
     const sub = segments[1];

@@ -142,6 +142,24 @@ export const api = {
       method: "POST",
       body: "{}",
     }),
+  workbenchDashboard: () => request<WorkbenchDashboard>("/workbench/dashboard"),
+  workbenchPos: (q = "") =>
+    request<WorkbenchPoHeader[]>(`/workbench/pos?q=${encodeURIComponent(q)}`),
+  workbenchPo: (poNo: string) =>
+    request<WorkbenchPoDetail>(`/workbench/pos/${encodeURIComponent(poNo)}`),
+  workbenchSplit: (
+    poNo: string,
+    body: { line: string; quantity: number; mode: string; notes?: string; coverPoNo?: string },
+  ) =>
+    request<{ shipment: { recordId: string }; allocation: { id: string }; pendingAfter: number }>(
+      `/workbench/pos/${encodeURIComponent(poNo)}/split`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  workbenchShortShip: (allocationId: string, body: { shippedQty: number; notes?: string }) =>
+    request<unknown>(`/workbench/allocations/${encodeURIComponent(allocationId)}/short-ship`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   documentsList: (moduleKey: string, recordId: string) =>
     request<DocumentAsset[]>(
       `/documents?moduleKey=${encodeURIComponent(moduleKey)}&recordId=${encodeURIComponent(recordId)}`,
@@ -818,4 +836,101 @@ export type MonitoringReport = {
   headers: string[];
   rows: Array<Record<string, unknown>>;
   counts: { total: number; overdue: number; byStage: Array<{ stage: string; count: number }> };
+};
+
+export type WorkbenchPoHeader = {
+  poNo: string;
+  coverPoNo?: string | null;
+  supplier?: string | null;
+  importNo?: string | null;
+  currency?: string | null;
+  status: string;
+  lineCount: number;
+  orderQty: number;
+  allocatedQty: number;
+  shippedQty: number;
+  shortQty: number;
+  pendingQty: number;
+  modes: string[];
+  shipmentCount: number;
+  flags: string[];
+};
+
+export type WorkbenchDashboard = {
+  poCount: number;
+  withPending: number;
+  withSplit: number;
+  withShortShip: number;
+  openShipments: number;
+  attention: Array<{
+    poNo: string;
+    coverPoNo?: string | null;
+    flags: string[];
+    pendingQty: number;
+    modes: string[];
+  }>;
+};
+
+export type WorkbenchPoDetail = {
+  header: {
+    poNo: string;
+    coverPoNo?: string | null;
+    supplier?: string | null;
+    supplierCode?: string | null;
+    importNo?: string | null;
+    currency?: string | null;
+    paymentTerms?: string | null;
+    incoterm?: string | null;
+    status: string[];
+  };
+  lines: Array<{
+    id: string;
+    recordId: string;
+    line: string;
+    materialCode?: string | null;
+    material?: string | null;
+    quantity: number;
+    uom?: string | null;
+    unitPrice?: number | null;
+    status: string;
+    allocatedQty: number;
+    shippedQty: number;
+    shortQty: number;
+    pendingQty: number;
+    allocations: Array<{
+      id: string;
+      shipmentId: string;
+      shipmentRecordId: string;
+      quantity: number;
+      mode?: string | null;
+      status: string;
+      shippedQty?: number | null;
+      shortQty?: number | null;
+      notes?: string | null;
+      shipment: {
+        id: string;
+        recordId: string;
+        mode?: string | null;
+        status: string;
+        bl?: string | null;
+        vessel?: string | null;
+        etd?: string | null;
+        eta?: string | null;
+        forwarder?: string | null;
+        vesselTracking?: { recordId: string; status: string; eta?: string | null } | null;
+        customs?: { recordId: string; status: string } | null;
+        delivery?: { recordId: string; status: string } | null;
+      };
+    }>;
+  }>;
+  dashboard: {
+    lineCount: number;
+    orderQty: number;
+    pendingQty: number;
+    allocatedQty: number;
+    shortQty: number;
+    shipmentCount: number;
+    modes: string[];
+    attention: Array<{ type: string; line: string; title: string }>;
+  };
 };

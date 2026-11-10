@@ -56,6 +56,7 @@ async function main() {
   await prisma.fieldMismatch.deleteMany();
   await prisma.integrationSyncJob.deleteMany();
   await prisma.importBatch.deleteMany();
+  await prisma.shipmentLineAllocation.deleteMany();
   await prisma.workflowAction.deleteMany();
   await prisma.masterDataEntry.deleteMany();
   await prisma.integrationRegister.deleteMany();
@@ -215,6 +216,8 @@ async function main() {
           approved: stage > 3 ? day(poDate.toISOString().slice(0, 10), 1) : null,
           sent: stage > 3 ? day(poDate.toISOString().slice(0, 10), 2) : null,
           importNo,
+          // Demo cover PO for first Gulf Alloy billet case
+          coverPoNo: i === 0 ? `COV-${poNo}` : null,
           piNo: `PI-${732 + i}`,
           piDate: day(poDate.toISOString().slice(0, 10), 2),
           piAmount: new Prisma.Decimal(quantity * unitPrice),
@@ -265,11 +268,14 @@ async function main() {
 
     let shipmentId: string | undefined;
     if (stage >= 6 && poDbId) {
+      const mode = i === 0 ? "Sea" : i % 5 === 0 ? "Air" : "Sea";
       const shipment = await prisma.shipment.create({
         data: {
           recordId: `SHP-${n}`,
           poId,
           purchaseOrderId: poDbId,
+          coverPoNo: i === 0 ? `COV-${poNo}` : null,
+          mode,
           importNo,
           booking: `BKG-${5261 + i}`,
           booked: day(poDate.toISOString().slice(0, 10), 10),
@@ -291,6 +297,64 @@ async function main() {
         },
       });
       shipmentId = shipment.id;
+
+      // Baseline allocation: full line on primary shipment (except demo split case i===0)
+      const seaQty = i === 0 ? Math.max(1, quantity - 20) : quantity;
+      await prisma.shipmentLineAllocation.create({
+        data: {
+          shipmentId: shipment.id,
+          purchaseOrderId: poDbId,
+          poNo,
+          line: "00010",
+          quantity: new Prisma.Decimal(seaQty),
+          mode,
+          status: stage > 6 ? "shipped" : "allocated",
+          shippedQty: stage > 6 ? new Prisma.Decimal(seaQty) : null,
+        },
+      });
+
+      // Demo: urgent Air split of 20 MT on first PO line + short-ship example on second open case
+      if (i === 0 && quantity > 20) {
+        const air = await prisma.shipment.create({
+          data: {
+            recordId: `SHP-${n}-AIR`,
+            poId,
+            purchaseOrderId: poDbId,
+            coverPoNo: `COV-${poNo}`,
+            mode: "Air",
+            importNo,
+            booking: `AIR-${5261 + i}`,
+            booked: day(poDate.toISOString().slice(0, 10), 11),
+            forwarder: "Express Air Cargo",
+            carrier: "SriLankan Cargo",
+            bl: `AWB-${9000 + i}`,
+            destination: "Colombo",
+            etd: day(eta.toISOString().slice(0, 10), -3),
+            eta: day(eta.toISOString().slice(0, 10), -1),
+            status: "In transit",
+            notes: "Urgent air uplift — partial qty",
+          },
+        });
+        await prisma.shipmentLineAllocation.create({
+          data: {
+            shipmentId: air.id,
+            purchaseOrderId: poDbId,
+            poNo,
+            line: "00010",
+            quantity: new Prisma.Decimal(20),
+            mode: "Air",
+            status: "shipped",
+            shippedQty: new Prisma.Decimal(18),
+            shortQty: new Prisma.Decimal(2),
+            notes: "Short-shipped 2 MT on air allocation",
+          },
+        });
+        // Fix air allocation status
+        await prisma.shipmentLineAllocation.updateMany({
+          where: { shipmentId: air.id },
+          data: { status: "short-shipped" },
+        });
+      }
     }
 
     if (stage >= 7 && shipmentId) {

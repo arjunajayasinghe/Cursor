@@ -152,6 +152,8 @@ model PurchaseOrder {
   supplierEta     DateTime? @db.Date
   notes           String?
   status          String   @default("Draft")
+  /// Cover / covering PO umbrella (ops grouping; commercial key stays poNo+line)
+  coverPoNo       String?
   sapClient       String?
   lastSyncAt      DateTime?
   createdAt       DateTime @default(now())
@@ -160,9 +162,11 @@ model PurchaseOrder {
   payments Payment[]
   confirmations SupplierConfirmation[]
   shipments Shipment[]
+  shipmentAllocations ShipmentLineAllocation[]
 
   @@unique([poNo, line])
   @@index([poNo])
+  @@index([coverPoNo])
   @@index([prId])
   @@index([status])
   @@map("purchase_orders")
@@ -225,6 +229,10 @@ model Shipment {
   poId          String?
   purchaseOrderId String?
   purchaseOrder PurchaseOrder? @relation(fields: [purchaseOrderId], references: [id])
+  /// Cover PO this shipment rolls up under (optional)
+  coverPoNo     String?
+  /// Air | Sea | Courier | FCL | LCL
+  mode          String?
   importNo      String?
   booking       String?
   booked        DateTime? @db.Date
@@ -257,10 +265,42 @@ model Shipment {
   vesselTrackings VesselTracking[]
   customsClearances CustomsClearance[]
   deliveries DeliveryLandedCost[]
+  lineAllocations ShipmentLineAllocation[]
 
   @@index([poId])
+  @@index([coverPoNo])
   @@index([importNo])
+  @@index([mode])
   @@map("shipments")
+}
+
+/// Qty allocation of a PO line onto a shipment (supports split / partial / multi-mode)
+model ShipmentLineAllocation {
+  id                String   @id @default(cuid())
+  shipmentId        String
+  shipment          Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  purchaseOrderId   String
+  purchaseOrder     PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  poNo              String
+  line              String
+  /// Allocated qty on this shipment
+  quantity          Decimal  @db.Decimal(18, 3)
+  /// Air | Sea | Courier | FCL | LCL — may differ from sibling allocations on same line
+  mode              String?
+  /// allocated | shipped | short-shipped | balance_pending | closed
+  status            String   @default("allocated")
+  /// Qty actually shipped when short-shipped (≤ quantity)
+  shippedQty        Decimal? @db.Decimal(18, 3)
+  shortQty          Decimal? @db.Decimal(18, 3)
+  notes             String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([poNo, line])
+  @@index([shipmentId])
+  @@index([purchaseOrderId])
+  @@index([status])
+  @@map("shipment_line_allocations")
 }
 
 model VesselTracking {

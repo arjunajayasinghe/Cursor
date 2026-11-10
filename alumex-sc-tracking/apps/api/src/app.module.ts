@@ -10,6 +10,7 @@ import { PrModule } from "./pr/pr.module";
 import { PoModule } from "./po/po.module";
 import { OverviewModule } from "./overview/overview.module";
 import { ModulesModule } from "./modules/modules.module";
+import { WorkbenchModule } from "./workbench/workbench.module";
 import { HealthController } from "./health.controller";
 
 @Module({
@@ -25,6 +26,7 @@ import { HealthController } from "./health.controller";
     PoModule,
     OverviewModule,
     ModulesModule,
+    WorkbenchModule,
   ],
   controllers: [HealthController],
 })
