@@ -3,17 +3,35 @@ import { sampleForPath } from "@/lib/sample-data";
 import {
   allowMethod,
   moduleKeyFromPath,
+  normalizeProxyPath,
   roleFromIdentity,
 } from "@/lib/server-role";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function backendBaseUrl(): string {
+  return (process.env.API_BACKEND_URL || process.env.API_URL || "http://127.0.0.1:4000").replace(/\/$/, "");
+}
+
+/** Only same-origin host as configured backend may be followed on redirect. */
+function isAllowedUpstreamRedirect(location: string, backend: string): boolean {
+  try {
+    const base = new URL(backend);
+    const next = new URL(location, backend);
+    if (next.protocol !== "http:" && next.protocol !== "https:") return false;
+    return next.host === base.host;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Server-side Nest proxy for published private/team apps.
  * - Requires Cursor identity
  * - Maps role from viewer email (ADMIN_EMAILS) — never from the browser
- * - GET for viewers with module view; mutations only when role has create/edit
+ * - Path normalized before RBAC and upstream URL (blocks .. traversal)
+ * - Upstream fetch does not auto-follow redirects off the allowlisted host
  * - Does not forward client X-Demo-Role
  */
 async function proxy(request: Request, pathSegments: string[]) {
@@ -21,14 +39,23 @@ async function proxy(request: Request, pathSegments: string[]) {
   if (identityOrRes instanceof Response) return identityOrRes;
   const identity = identityOrRes as VerifiedIdentity;
 
+  const normalized = normalizeProxyPath(pathSegments || []);
+  if (!normalized.ok) {
+    return Response.json(
+      { message: normalized.reason },
+      { status: 400, headers: { "cache-control": "private, no-store" } },
+    );
+  }
+  const segments = normalized.segments;
+
   const role = roleFromIdentity(identity);
-  const moduleKey = moduleKeyFromPath(pathSegments);
+  const moduleKey = moduleKeyFromPath(segments);
   const method = request.method.toUpperCase();
 
   if (!allowMethod(role, method, moduleKey)) {
     return Response.json(
       {
-        message: `${role} cannot ${method} ${moduleKey || pathSegments.join("/") || "this resource"}`,
+        message: `${role} cannot ${method} ${moduleKey || segments.join("/") || "this resource"}`,
         role,
         moduleKey,
       },
@@ -36,11 +63,8 @@ async function proxy(request: Request, pathSegments: string[]) {
     );
   }
 
-  const backend = (process.env.API_BACKEND_URL || process.env.API_URL || "http://127.0.0.1:4000").replace(
-    /\/$/,
-    "",
-  );
-  const suffix = pathSegments.map(encodeURIComponent).join("/");
+  const backend = backendBaseUrl();
+  const suffix = segments.map(encodeURIComponent).join("/");
   const incoming = new URL(request.url);
   const target = `${backend}/${suffix}${incoming.search}`;
 
@@ -57,13 +81,36 @@ async function proxy(request: Request, pathSegments: string[]) {
     method: request.method,
     headers,
     cache: "no-store",
+    redirect: "manual",
   };
   if (method !== "GET" && method !== "HEAD") {
     init.body = await request.arrayBuffer();
   }
 
   try {
-    const upstream = await fetch(target, init);
+    let upstream = await fetch(target, init);
+    // At most one same-host redirect; never leave the configured backend host.
+    if ([301, 302, 303, 307, 308].includes(upstream.status)) {
+      const location = upstream.headers.get("location");
+      if (!location || !isAllowedUpstreamRedirect(location, backend)) {
+        return Response.json(
+          { message: "Upstream redirect blocked" },
+          { status: 502, headers: { "cache-control": "private, no-store" } },
+        );
+      }
+      const redirectUrl = new URL(location, backend).toString();
+      const redirectInit: RequestInit = {
+        method: method === "POST" && upstream.status === 303 ? "GET" : request.method,
+        headers,
+        cache: "no-store",
+        redirect: "error",
+      };
+      if (redirectInit.method !== "GET" && redirectInit.method !== "HEAD" && init.body) {
+        redirectInit.body = init.body;
+      }
+      upstream = await fetch(redirectUrl, redirectInit);
+    }
+
     const body = await upstream.arrayBuffer();
     const out = new Headers();
     const upstreamType = upstream.headers.get("content-type");
@@ -73,7 +120,7 @@ async function proxy(request: Request, pathSegments: string[]) {
   } catch {
     // Published host often has no Nest — serve sample GET payloads so menus/overview work.
     if (method === "GET" || method === "HEAD") {
-      const sample = sampleForPath(pathSegments);
+      const sample = sampleForPath(segments);
       if (sample != null) {
         return Response.json(sample, {
           status: 200,

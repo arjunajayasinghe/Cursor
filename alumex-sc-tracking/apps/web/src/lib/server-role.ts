@@ -40,6 +40,37 @@ export function roleFromIdentity(identity: VerifiedIdentity): string {
   return PUBLISHED_DEFAULT_ROLE;
 }
 
+/**
+ * Canonicalize proxy path segments so RBAC and upstream URL always agree.
+ * Rejects empty / `.` / `..` (including after decode) and backslash tricks.
+ */
+export function normalizeProxyPath(segments: string[]):
+  | { ok: true; segments: string[] }
+  | { ok: false; reason: string } {
+  const out: string[] = [];
+  for (const raw of segments || []) {
+    let part = String(raw ?? "");
+    try {
+      // Decode once so %2e%2e cannot bypass checks; reject nested encoding.
+      const decoded = decodeURIComponent(part.replace(/\+/g, " "));
+      if (decoded.includes("%")) {
+        return { ok: false, reason: "Encoded path segments are not allowed" };
+      }
+      part = decoded;
+    } catch {
+      return { ok: false, reason: "Invalid path encoding" };
+    }
+    if (!part || part === "." || part === "..") {
+      return { ok: false, reason: "Path traversal segments are not allowed" };
+    }
+    if (part.includes("/") || part.includes("\\") || part.includes("\0")) {
+      return { ok: false, reason: "Invalid path segment" };
+    }
+    out.push(part);
+  }
+  return { ok: true, segments: out };
+}
+
 /** Resolve Nest module key from `/api/backend/...` path segments. */
 export function moduleKeyFromPath(segments: string[]): string | null {
   if (!segments.length) return null;
