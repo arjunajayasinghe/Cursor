@@ -64,9 +64,21 @@ export function parseTabularPayload(input: {
   if (isXlsx && input.base64) {
     const buf = Buffer.from(input.base64, "base64");
     const wb = XLSX.read(buf, { type: "buffer" });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
+    // SAP backlog workbooks use Summary + Report — prefer Report / data sheets.
+    const preferred =
+      wb.SheetNames.find((n) => /^report$/i.test(n)) ||
+      wb.SheetNames.find((n) => /may\s*-?\s*2026/i.test(n)) ||
+      wb.SheetNames.find((n) => !/summary|sheet\d+/i.test(n)) ||
+      wb.SheetNames[0];
+    const sheet = wb.Sheets[preferred];
     const matrix = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, raw: false, defval: "" });
-    return matrixToTable(matrix as string[][], "xlsx");
+    // May smart sheet: row0 = owners, row1 = headers
+    const look = matrix.slice(0, 5) as string[][];
+    const headerIdx = look.findIndex((r) =>
+      r.some((c) => /^(pr number|purch\.?req\.?|po no\.?|purchasing document)$/i.test(String(c ?? "").trim())),
+    );
+    const sliced = headerIdx > 0 ? matrix.slice(headerIdx) : matrix;
+    return matrixToTable(sliced as string[][], "xlsx");
   }
 
   const text = (input.text || (input.base64 ? Buffer.from(input.base64, "base64").toString("utf8") : "")).replace(
@@ -130,25 +142,42 @@ export function tableToTsv(table: ParsedTable): string {
 const PO_MAP: Record<string, string> = {
   "Purchasing Document": "poNo",
   "PO Number": "poNo",
+  "PO No.": "poNo",
+  "PO No:": "poNo",
   poNo: "poNo",
   Item: "line",
   Line: "line",
+  "PO Line No.": "line",
   "Document Date": "date",
+  "PO Date": "date",
   Vendor: "supplierCode",
   "Vendor Name": "supplier",
   Supplier: "supplier",
+  "Supplier/Supplying Plant": "supplier",
+  Code: "supplierCode",
   Material: "materialCode",
   "Short Text": "material",
   Quantity: "quantity",
+  "Order Quantity": "quantity",
   Un: "uom",
   UOM: "uom",
+  "Order Unit": "uom",
   Currency: "currency",
+  "PO Line Currency": "currency",
   "Net Price": "unitPrice",
+  "Unit Price": "unitPrice",
   Incoterms: "incoterm",
+  "Delivery Term": "incoterm",
   PR: "prId",
+  "PR No.": "prId",
+  "PR number": "prId",
   "Purch.Req.": "prId",
+  Plant: "plant",
   Notes: "notes",
   PI: "piNo",
+  "IMPORT NUMBER": "importNo",
+  "Import No.": "importNo",
+  "Payment Term": "paymentTerms",
 };
 
 const GRN_MAP: Record<string, string> = {
@@ -253,14 +282,28 @@ export function analyzePrAgainstExisting(
   // Reconcile existing keys present in the file (duplicates / plant fills / field updates)
   const mapped = mapRows(table, {
     "Purch.Req.": "prNo",
+    "PR number": "prNo",
+    "PR Number": "prNo",
     Item: "line",
+    "PR Line No.": "line",
     "Short Text": "material",
+    "Item Description": "material",
     Quantity: "quantity",
+    "    Quantity": "quantity",
+    "Order Qty": "quantity",
     Un: "uom",
+    UOM: "uom",
     Plnt: "plant",
     Plant: "plant",
+    Material: "materialCode",
+    "Item Code": "materialCode",
     "Material Group Desc.": "materialGroup",
     "Created by": "createdBy",
+    "Requested By": "requester",
+    "Req.Date": "date",
+    "PR Date": "date",
+    "Local/Import": "sourcing",
+    "Stock/Non-Stock": "stockType",
     Notes: "notes",
   });
   for (const { payload } of mapped) {
@@ -310,8 +353,12 @@ export function analyzePoAgainstExisting(
   const errors: Array<{ line?: number; message: string }> = [];
   const seen = new Set<string>();
 
-  if (!table.headers.some((h) => ["purchasing document", "po number", "pono"].includes(normHeader(h)))) {
-    errors.push({ message: "PO file needs Purchasing Document / PO Number column" });
+  if (
+    !table.headers.some((h) =>
+      ["purchasing document", "po number", "pono", "po no.", "po no:"].includes(normHeader(h)),
+    )
+  ) {
+    errors.push({ message: "PO file needs Purchasing Document / PO Number / PO No. column" });
   }
 
   for (const { line, payload } of mapped) {

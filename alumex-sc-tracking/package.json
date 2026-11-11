@@ -14,6 +14,7 @@
     "db:generate": "npm run generate -w @alumex/db",
     "db:migrate": "npm run migrate -w @alumex/db",
     "db:seed": "npm run seed -w @alumex/db",
+    "db:seed:real": "npm run seed:real -w @alumex/api",
     "db:reset": "npm run reset -w @alumex/db"
   }
 }

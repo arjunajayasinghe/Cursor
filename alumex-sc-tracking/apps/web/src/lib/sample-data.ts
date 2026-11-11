@@ -1,5 +1,7 @@
 import type { OverviewData, PermissionsMe } from "@/lib/api";
 import { PUBLISHED_DEFAULT_ROLE } from "@/lib/server-role";
+import mayPrGroups from "@/lib/fixtures/may-2026-pr-groups.json";
+import mayPos from "@/lib/fixtures/may-2026-pos.json";
 
 const MODULES = [
   "pr",
@@ -109,76 +111,15 @@ export function sampleForPath(segments: string[]): unknown | null {
   if (root === "health") return { ok: true, service: "alumex-sample", mode: "sample" };
   if (root === "overview") return sampleOverview();
   if (root === "pr" && segments[1] === "groups") {
-    return [
-      {
-        prNo: "100009901",
-        lineCount: 1,
-        requester: "Demo requester",
-        department: "Manufacturing",
-        plant: "1100 · Sapugaskanda",
-        date: "2026-10-03",
-        buyer: "A. Jayasinghe",
-        priority: "High",
-        statuses: ["Released"],
-        material: "Demo billet 6063",
-        quantity: 25,
-        lines: [
-          {
-            id: "s1",
-            recordId: "PR-DEMO-1",
-            prNo: "100009901",
-            line: "00010",
-            date: "2026-10-03",
-            requester: "Demo requester",
-            department: "Manufacturing",
-            plant: "1100 · Sapugaskanda",
-            materialCode: "ALX-301",
-            material: "Demo billet 6063",
-            quantity: 25,
-            uom: "MT",
-            need: "2026-11-19",
-            buyer: "A. Jayasinghe",
-            priority: "High",
-            status: "Released",
-          },
-        ],
-      },
-      {
-        prNo: "100009902",
-        lineCount: 1,
-        requester: "Demo requester",
-        department: "Manufacturing",
-        plant: "1200 · Ekala",
-        date: "2026-10-08",
-        buyer: "A. Jayasinghe",
-        priority: "Normal",
-        statuses: ["Pending release"],
-        material: "Demo gasket strip",
-        quantity: 40,
-        lines: [
-          {
-            id: "s2",
-            recordId: "PR-DEMO-2",
-            prNo: "100009902",
-            line: "00010",
-            date: "2026-10-08",
-            requester: "Demo requester",
-            department: "Manufacturing",
-            plant: "1200 · Ekala",
-            materialCode: "GSK-014",
-            material: "Demo gasket strip",
-            quantity: 40,
-            uom: "EA",
-            need: "2026-11-30",
-            buyer: "A. Jayasinghe",
-            priority: "Normal",
-            status: "Pending release",
-          },
-        ],
-      },
-    ];
+    return mayPrGroups;
   }
-  if (["pr", "po", "quotations", "quotes", "evaluation", "eval", "payments", "pay"].includes(root)) {
+  if (root === "pr") {
+    return (mayPrGroups as Array<{ lines: unknown[] }>).flatMap((g) => g.lines || []);
+  }
+  if (root === "po") {
+    return mayPos;
+  }
+  if (["quotations", "quotes", "evaluation", "eval", "payments", "pay"].includes(root)) {
     return [];
   }
   if (
