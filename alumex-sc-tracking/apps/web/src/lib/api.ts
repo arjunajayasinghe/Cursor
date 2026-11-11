@@ -1,8 +1,12 @@
 import { DEFAULT_SAFE_ROLE, DEMO_ROLE_SWITCHING } from "@/lib/demo-mode";
 
-/** Local Nest when demo switching is on; otherwise same-origin Cursor-identity proxy. */
+/**
+ * Local demo: same-origin `/api/nest` so port-forward of :3000 alone works.
+ * Override with NEXT_PUBLIC_API_URL (e.g. http://localhost:4000) if desired.
+ * Published builds use Cursor-identity `/api/backend`.
+ */
 const API_URL = DEMO_ROLE_SWITCHING
-  ? process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000"
+  ? process.env.NEXT_PUBLIC_API_URL || "/api/nest"
   : "/api/backend";
 
 let demoRole = DEFAULT_SAFE_ROLE;

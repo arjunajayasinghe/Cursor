@@ -27,7 +27,7 @@ type TabKey = (typeof TABS)[number]["key"];
 const MODES = ["Sea", "Air", "Courier", "FCL", "LCL"];
 
 export default function WorkbenchPage() {
-  const { canView, canEdit, role } = useAuth();
+  const { canView, canEdit, role, loading } = useAuth();
   const editable = canEdit("ship");
   const [q, setQ] = useState("");
   const [headers, setHeaders] = useState<WorkbenchPoHeader[]>([]);
@@ -136,6 +136,10 @@ export default function WorkbenchPage() {
     } finally {
       setBusy(false);
     }
+  }
+
+  if (loading) {
+    return <div className="p-6 text-sm text-sub">Loading workbench…</div>;
   }
 
   if (!canView("ship") && !canView("po")) {

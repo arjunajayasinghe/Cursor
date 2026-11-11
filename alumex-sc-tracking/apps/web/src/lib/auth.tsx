@@ -92,8 +92,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setRole,
       refresh,
       level,
-      canView: (moduleKey: string) => level(moduleKey) >= 1,
-      canEdit: (moduleKey: string) => level(moduleKey) >= 2,
+      // Soft-allow nav during local demo auth load so port-forwarded UI is not empty.
+      canView: (moduleKey: string) =>
+        (loading || !hydrated) && DEMO_ROLE_SWITCHING ? true : level(moduleKey) >= 1,
+      canEdit: (moduleKey: string) =>
+        (loading || !hydrated) && DEMO_ROLE_SWITCHING ? false : level(moduleKey) >= 2,
     }),
     [role, me, loading, hydrated, setRole, refresh, level],
   );

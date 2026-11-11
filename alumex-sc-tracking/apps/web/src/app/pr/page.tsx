@@ -42,9 +42,23 @@ export default function PrPage() {
   const load = useCallback(async () => {
     try {
       setError(null);
-      setGroups(await api.prGroups(q, status));
+      const rows = await api.prGroups(q, status);
+      // Normalize incomplete sample/backend payloads so the table never throws.
+      setGroups(
+        (Array.isArray(rows) ? rows : []).map((g) => ({
+          ...g,
+          prNo: g.prNo || "—",
+          lineCount: g.lineCount ?? g.lines?.length ?? 0,
+          quantity: g.quantity ?? 0,
+          statuses: Array.isArray(g.statuses)
+            ? g.statuses
+            : Array.from(new Set((g.lines || []).map((l) => l.status).filter(Boolean) as string[])),
+          lines: Array.isArray(g.lines) ? g.lines : [],
+        })),
+      );
     } catch (e) {
       setError((e as Error).message);
+      setGroups([]);
     }
   }, [q, status]);
 
@@ -73,7 +87,7 @@ export default function PrPage() {
   }, [selected?.recordId]);
 
   const statuses = useMemo(
-    () => Array.from(new Set(groups.flatMap((g) => g.statuses))).sort(),
+    () => Array.from(new Set(groups.flatMap((g) => g.statuses || []))).sort(),
     [groups],
   );
 
@@ -223,7 +237,7 @@ export default function PrPage() {
                       <td className="px-3.5 py-2.5">{g.priority || "—"}</td>
                       <td className="px-3.5 py-2.5">
                         <div className="flex flex-wrap gap-1">
-                          {g.statuses.map((s) => (
+                          {(g.statuses || []).map((s) => (
                             <StatusBadge key={s} status={s} />
                           ))}
                         </div>
@@ -270,7 +284,7 @@ export default function PrPage() {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {g.lines.map((line) => (
+                                  {(g.lines || []).map((line) => (
                                     <tr key={line.id} className="border-t border-[#e8eef5] hover:bg-[#fafcff]">
                                       {(full
                                         ? PR_REPORT_COLUMNS
