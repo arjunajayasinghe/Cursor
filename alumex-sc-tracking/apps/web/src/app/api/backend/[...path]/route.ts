@@ -52,7 +52,7 @@ async function proxy(request: Request, pathSegments: string[]) {
   const moduleKey = moduleKeyFromPath(segments);
   const method = request.method.toUpperCase();
 
-  if (!allowMethod(role, method, moduleKey)) {
+  if (!allowMethod(role, method, moduleKey, segments)) {
     return Response.json(
       {
         message: `${role} cannot ${method} ${moduleKey || segments.join("/") || "this resource"}`,

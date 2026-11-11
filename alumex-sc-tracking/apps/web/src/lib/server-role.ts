@@ -20,13 +20,13 @@ const MANAGEMENT_READ = new Set([
   "automation",
   "masters",
   "integrations",
-  "roles",
   "documents",
 ]);
 
 /**
  * Map Cursor viewer → Nest demo role. Never trust the browser.
  * Only emails listed in ADMIN_EMAILS (comma-separated) get Administrator.
+ * Everyone else is Management: read operational modules, no role-admin APIs.
  */
 export function roleFromIdentity(identity: VerifiedIdentity): string {
   if (identity.kind !== "person") return PUBLISHED_DEFAULT_ROLE;
@@ -119,9 +119,17 @@ export function publishedAccessLevel(role: string, moduleKey: string): 0 | 1 | 2
   return 0;
 }
 
-export function allowMethod(role: string, method: string, moduleKey: string | null): boolean {
+export function allowMethod(
+  role: string,
+  method: string,
+  moduleKey: string | null,
+  segments: string[] = [],
+): boolean {
   const m = method.toUpperCase();
   if (m === "GET" || m === "HEAD" || m === "OPTIONS") {
+    // Signed-in viewers may read their own matrix. Role administration stays Administrator-only.
+    if (segments[0] === "permissions" && segments[1] === "me") return true;
+    if (moduleKey === "roles") return role === "Administrator";
     if (!moduleKey) return role === "Administrator";
     return publishedAccessLevel(role, moduleKey) >= 1;
   }
