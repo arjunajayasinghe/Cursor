@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/TeaAuction.Api/TeaAuction.Api.csproj" />
+    <Project Path="src/TeaAuction.Application/TeaAuction.Application.csproj" />
+    <Project Path="src/TeaAuction.Domain/TeaAuction.Domain.csproj" />
+    <Project Path="src/TeaAuction.Infrastructure/TeaAuction.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TeaAuction.Application.Tests/TeaAuction.Application.Tests.csproj" />
+  </Folder>
+</Solution>
