@@ -510,6 +510,141 @@ function summarize(
   };
 }
 
+const PR_DELTA_FIELDS = [
+  "material",
+  "materialCode",
+  "quantity",
+  "uom",
+  "plant",
+  "requester",
+  "purchasingGroup",
+  "createdBy",
+  "sourcing",
+  "stockType",
+  "delayBand",
+  "date",
+] as const;
+
+const PO_DELTA_FIELDS = [
+  "supplier",
+  "supplierCode",
+  "material",
+  "materialCode",
+  "quantity",
+  "uom",
+  "currency",
+  "unitPrice",
+  "date",
+  "prId",
+  "incoterm",
+  "importNo",
+] as const;
+
+function comparable(field: string, value: unknown): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const raw = String(value ?? "").trim();
+  if ((field === "date" || field === "unitPrice") && raw) {
+    const d = new Date(raw);
+    if (field === "date" && !Number.isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+  }
+  return raw.replace(/\.0$/, "");
+}
+
+function sameDeltaValue(field: string, existing: unknown, incoming: string): boolean {
+  const b = incoming.trim();
+  if (!b) return true;
+  if (field === "quantity" || field === "unitPrice") {
+    const na = Number(comparable(field, existing).replace(/,/g, ""));
+    const nb = Number(b.replace(/,/g, ""));
+    if (Number.isFinite(na) && Number.isFinite(nb)) return na === nb;
+  }
+  return comparable(field, existing) === comparable(field, b);
+}
+
+/** Daily Excel: create missing keys, update changed SAP fields, leave the rest. */
+export function planExcelDelta(
+  kind: "pr" | "po",
+  table: ParsedTable,
+  existing: Array<Record<string, unknown>>,
+) {
+  const map = kind === "pr"
+    ? {
+        "Purch.Req.": "prNo",
+        "PR number": "prNo",
+        "PR Number": "prNo",
+        Item: "line",
+        "PR Line No.": "line",
+        "Short Text": "material",
+        "Item Description": "material",
+        Material: "materialCode",
+        "Item Code": "materialCode",
+        Quantity: "quantity",
+        "    Quantity": "quantity",
+        "Order Qty": "quantity",
+        Un: "uom",
+        UOM: "uom",
+        Plnt: "plant",
+        Plant: "plant",
+        "Created by": "createdBy",
+        "Requested By": "requester",
+        PGr: "purchasingGroup",
+        "Local/Import": "sourcing",
+        "Stock/Non-Stock": "stockType",
+        "Delay Category": "delayBand",
+        "Req.Date": "date",
+        "PR Date": "date",
+      }
+    : PO_MAP;
+  const idField = kind === "pr" ? "prNo" : "poNo";
+  const fields = kind === "pr" ? PR_DELTA_FIELDS : PO_DELTA_FIELDS;
+  const byKey = new Map<string, Record<string, unknown>>(
+    existing.map((row) => {
+      const no = String(row[idField] ?? "").replace(/\.0$/, "");
+      const line = String(row.line ?? "").replace(/\.0$/, "").padStart(5, "0");
+      return [`${no}/${line}`, row];
+    }),
+  );
+  const creates: Array<Record<string, string>> = [];
+  const updates: Array<{ recordId: string; key: string; patch: Record<string, string> }> = [];
+  const errors: string[] = [];
+  const seen = new Set<string>();
+  let unchanged = 0;
+
+  if (kind === "pr" && !table.headers.some((h) => ["purch.req.", "pr number"].includes(normHeader(h)))) {
+    errors.push("PR Excel needs a Purch.Req. or PR number column (use the Report sheet).");
+  }
+  if (kind === "po" && !table.headers.some((h) => ["po no.", "po no:", "purchasing document", "po number"].includes(normHeader(h)))) {
+    errors.push("PO Excel needs a PO No. column (use the Report sheet).");
+  }
+
+  for (const { line, payload } of mapRows(table, map)) {
+    const no = String(payload[idField] || "").replace(/\.0$/, "").replace(/,/g, "");
+    const item = String(payload.line || "").replace(/\.0$/, "").replace(/\D/g, "");
+    if (!no || !item) continue;
+    const padded = item.padStart(5, "0");
+    const key = `${no}/${padded}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const cur = byKey.get(key);
+    const normalized = { ...payload, [idField]: no, line: padded };
+    if (!cur) {
+      creates.push(normalized);
+      continue;
+    }
+    const patch: Record<string, string> = {};
+    for (const field of fields) {
+      const incoming = String(normalized[field] ?? "").trim();
+      if (!incoming) continue;
+      if (!sameDeltaValue(field, cur[field], incoming)) patch[field] = incoming;
+    }
+    if (Object.keys(patch).length) updates.push({ recordId: String(cur.recordId), key, patch });
+    else unchanged++;
+    if (line > 20000) break;
+  }
+
+  return { creates, updates, unchanged, errors, rowCount: seen.size };
+}
+
 export function integrationModule(key: string): "pr" | "po" | "grn" | null {
   if (key.includes("pr")) return "pr";
   if (key.includes("po")) return "po";

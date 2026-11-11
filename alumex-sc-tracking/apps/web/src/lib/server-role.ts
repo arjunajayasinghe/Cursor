@@ -133,6 +133,15 @@ export function allowMethod(
     if (!moduleKey) return role === "Administrator";
     return publishedAccessLevel(role, moduleKey) >= 1;
   }
+  // Daily Excel delta is allowed for anyone who can view that module.
+  if (
+    m === "POST" &&
+    (segments[0] === "pr" || segments[0] === "po") &&
+    segments[1] === "import" &&
+    segments[2] === "excel"
+  ) {
+    return publishedAccessLevel(role, segments[0]) >= 1;
+  }
   // Mutations: create/edit only
   if (!moduleKey) return false;
   return publishedAccessLevel(role, moduleKey) >= 2;

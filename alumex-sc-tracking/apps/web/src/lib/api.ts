@@ -78,6 +78,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ text }),
     }),
+  prExcelDelta: (body: { base64: string; fileName: string }) =>
+    request<ExcelDeltaResult>("/pr/import/excel", { method: "POST", body: JSON.stringify(body) }),
+  poExcelDelta: (body: { base64: string; fileName: string }) =>
+    request<ExcelDeltaResult>("/po/import/excel", { method: "POST", body: JSON.stringify(body) }),
   poList: (q = "", status = "") =>
     request<PoItem[]>(`/po?q=${encodeURIComponent(q)}&status=${encodeURIComponent(status)}`),
   poGet: (id: string) => request<PoItem>(`/po/${encodeURIComponent(id)}`),
@@ -815,6 +819,16 @@ export type IntegrationPreview = {
     recordId?: string;
     mismatches: Array<{ field: string; existing: string; incoming: string; action: string }>;
   }>;
+};
+
+export type ExcelDeltaResult = {
+  kind: "pr" | "po";
+  fileName?: string | null;
+  rowCount: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: string[];
 };
 
 export type ImportBatch = {

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Drawer } from "@/components/ui/drawer";
 import { useAuth } from "@/lib/auth";
 import { AttachmentsPanel } from "@/components/attachments-panel";
+import { ExcelDeltaUpload } from "@/components/excel-delta-upload";
 import { HistoryPanel } from "@/components/history-panel";
 import { StatusTransition } from "@/components/status-transition";
 
@@ -94,6 +95,8 @@ export default function PoPage() {
           </span>
         )}
       </div>
+
+      <ExcelDeltaUpload kind="po" onApplied={() => void load()} />
 
       {error ? (
         <div className="mb-4 rounded-panel border border-red-soft bg-red-soft p-3 text-sm text-red-ink">{error}</div>
