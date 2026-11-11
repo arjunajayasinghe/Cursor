@@ -154,9 +154,12 @@ Default `DATABASE_URL`: `postgresql://alumex:alumex@localhost:5432/alumex_scc?sc
 ## Run
 
 ```bash
-npm run start:dev -w @alumex/api   # http://localhost:4000/health
-npm run dev -w @alumex/web         # http://localhost:3000
+npm run dev:local
+# Web  http://127.0.0.1:3000   (binds 0.0.0.0 so Cursor port-forward works)
+# API  http://127.0.0.1:4000   (browser uses /api/nest — do not open :4000)
 ```
+
+`dev:local` writes `apps/web/.env.local` if missing (`LOCAL_NEST_PROXY=true`, API base `/api/nest`) and keeps both processes in the foreground. On your own Mac this is the permanent localhost. A cloud agent URL only works while Cursor **Ports** forwards **3000**; otherwise use the published app.
 
 ### Auth (local vs published)
 

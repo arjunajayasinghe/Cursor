@@ -5,12 +5,13 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 /**
- * Local-only Nest proxy (same-origin) so port-forward of :3000 alone works.
- * Enabled only when DEMO_ROLE_SWITCHING is on or NODE_ENV is development.
- * Forwards client X-Demo-Role. Not used in published builds.
+ * Local-only Nest proxy so a laptop can use :3000 alone.
+ * Hard-off in production: never proxies and never honors X-Demo-Role on the published host.
+ * Locally requires LOCAL_NEST_PROXY=true (see .env.local.example).
  */
 function localDemoEnabled() {
-  return process.env.DEMO_ROLE_SWITCHING === "true" || process.env.NODE_ENV !== "production";
+  if (process.env.NODE_ENV === "production") return false;
+  return process.env.LOCAL_NEST_PROXY === "true";
 }
 
 function backendBaseUrl(): string {
