@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Critical points · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Keep these alive</p>
+  <h1>Critical points</h1>
+</header>
+<section class="panel">
+  <h2>{% if edit %}Edit{% else %}Add{% endif %}</h2>
+  <form method="post" class="grid-2">
+    {% if edit %}<input type="hidden" name="id" value="{{ edit.id }}" />{% endif %}
+    <label>Company
+      <select name="company_id" required>
+        {% for c in companies %}<option value="{{ c.id }}" {% if (edit and edit.company_id == c.id) or (not edit and preset_company == c.id) %}selected{% endif %}>{{ c.short_name }} — {{ c.name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>Status
+      <select name="status">
+        {% for s in ['maintain','open','closed'] %}
+        <option value="{{ s }}" {% if edit and edit.status == s %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Title<input name="title" required value="{{ edit.title if edit else '' }}" /></label>
+    <label>Owner<input name="owner" value="{{ edit.owner if edit else '' }}" /></label>
+    <label>Value stream
+      <select name="value_stream_id" data-filter><option value="">None</option>{% for s in streams %}<option value="{{ s.id }}" data-company="{{ s.company_id }}" {% if edit and edit.value_stream_id == s.id %}selected{% endif %}>{{ s.company_short }} — {{ s.code }}</option>{% endfor %}</select>
+    </label>
+    <label>Workshop
+      <select name="workshop_id"><option value="">None</option>{% for w in workshops %}<option value="{{ w.id }}" {% if (edit and edit.workshop_id == w.id) or (not edit and preset_workshop == w.id) %}selected{% endif %}>{{ w.short_name }} — {{ w.title }}</option>{% endfor %}</select>
+    </label>
+    <label>Process
+      <select name="process_node_id"><option value="">None</option>{% for p in processes %}<option value="{{ p.id }}" {% if edit and edit.process_node_id == p.id %}selected{% endif %}>{{ p.short_name }} {{ p.code }} {{ p.name }}</option>{% endfor %}</select>
+    </label>
+    <label>Detail<textarea name="detail" rows="3">{{ edit.detail if edit else '' }}</textarea></label>
+    <div><button class="btn" type="submit">Save</button></div>
+  </form>
+</section>
+<section class="panel" style="margin-top:0.75rem">
+  <table>
+    <thead><tr><th>Company</th><th>Title</th><th>Process</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for p in points %}
+      <tr>
+        <td>{{ p.short_name }}</td>
+        <td>{{ p.title }}<div class="muted">{{ p.detail }}</div></td>
+        <td class="mono">{{ p.process_code or "—" }}</td>
+        <td>{{ p.status }}</td>
+        <td>
+          <a href="{{ url_for('critical_points', edit=p.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('critical_delete', point_id=p.id) }}" style="display:inline">
+            <button class="btn tiny danger" type="submit">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">None yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

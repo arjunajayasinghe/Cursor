@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}{% if company %}{{ company.name }}{% else %}New company{% endif %} · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">Company</p>
+  <h1>{% if company %}{{ company.name }}{% else %}New company{% endif %}</h1>
+</header>
+<section class="panel">
+  <form method="post" class="grid-2">
+    <label>Name<input name="name" required value="{{ form.name or '' }}" /></label>
+    <label>Short name<input name="short_name" required value="{{ form.short_name or '' }}" placeholder="ACME" /></label>
+    <label>Industry<input name="industry" value="{{ form.industry or '' }}" /></label>
+    <label>Contact name<input name="contact_name" value="{{ form.contact_name or '' }}" /></label>
+    <label>Contact email<input name="contact_email" value="{{ form.contact_email or '' }}" /></label>
+    <label>Notes<textarea name="notes" rows="3">{{ form.notes or '' }}</textarea></label>
+    <div><button class="btn" type="submit">Save company</button></div>
+  </form>
+  {% if company %}
+  <form method="post" action="{{ url_for('company_delete', company_id=company.id) }}" onsubmit="return confirm('Remove this company?')">
+    <button class="btn danger" type="submit">Delete company</button>
+  </form>
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Companies · Aetria{% endblock %}
+{% block body %}
+<header class="page-head row-head">
+  <div>
+    <p class="eyebrow">Tenants</p>
+    <h1>Companies</h1>
+    <p class="lede">Short name is used in the Excel file name, for example ACME_O2C_CP8.0.xlsx.</p>
+  </div>
+  <a class="btn" href="{{ url_for('company_form') }}">New company</a>
+</header>
+<section class="company-grid">
+  {% for c in companies %}
+  <article class="company-card">
+    <div class="mono">{{ c.short_name }}</div>
+    <h2><a href="{{ url_for('company_form', company_id=c.id) }}">{{ c.name }}</a></h2>
+    <p class="muted">{{ c.industry or "No industry" }}</p>
+    <p class="meta">{{ c.streams }} streams · {{ c.processes }} processes</p>
+    <div class="card-actions">
+      <a class="btn tiny secondary" href="{{ url_for('company_form', company_id=c.id) }}">Edit</a>
+      <a class="btn tiny secondary" href="{{ url_for('value_streams', company_id=c.id) }}">Streams</a>
+      <form method="post" action="{{ url_for('company_delete', company_id=c.id) }}" onsubmit="return confirm('Delete {{ c.name }}? Its value streams and assignments go with it.')">
+        <button class="btn tiny danger" type="submit">Delete</button>
+      </form>
+    </div>
+  </article>
+  {% else %}
+  <p class="muted">No companies yet.</p>
+  {% endfor %}
+</section>
+{% endblock %}

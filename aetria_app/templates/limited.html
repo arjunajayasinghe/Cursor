@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Limited access · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">{{ role_labels.get(me.role, me.role) }}</p>
+  <h1>This login is not the Admin workbench</h1>
+  <p class="lede">{{ me.name }} ({{ me.email }}) is a later role. Area and company filtering is not turned on yet. Sign in as admin@aetria.com to use Phase 1.</p>
+</header>
+{% endblock %}

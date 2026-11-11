@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{% if user %}Edit user{% else %}Add user{% endif %} · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">User ID</p>
+  <h1>{% if user %}Edit {{ user.name }}{% else %}Add a user{% endif %}</h1>
+</header>
+<section class="panel">
+  <form method="post" action="{% if user %}{{ url_for('user_update', user_id=user.id) }}{% else %}{{ url_for('user_create') }}{% endif %}" class="grid-2">
+    <label>Name<input name="name" required value="{{ user.name if user else '' }}" /></label>
+    <label>User ID (email)<input name="email" type="email" required value="{{ user.email if user else '' }}" /></label>
+    <label>Role
+      <select name="role">
+        {% for role, label in role_labels.items() %}
+        <option value="{{ role }}" {% if user and user.role == role %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Password<input name="password" type="password" placeholder="{% if user %}Leave blank to keep{% else %}At least 6 characters{% endif %}" {% if not user %}required{% endif %} /></label>
+    {% if user %}
+    <label>Active
+      <select name="is_active">
+        <option value="1" {% if user.is_active %}selected{% endif %}>Yes</option>
+        <option value="0" {% if not user.is_active %}selected{% endif %}>No</option>
+      </select>
+    </label>
+    {% endif %}
+    <div><button class="btn" type="submit">{% if user %}Save{% else %}Create user ID{% endif %}</button></div>
+  </form>
+</section>
+{% endblock %}

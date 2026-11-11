@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Aetria Process Mapping</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles.css') }}" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div>
+          <div class="brand">Aetria</div>
+          <div class="muted" style="color: var(--sidebar-muted); font-size: 0.8rem">
+            Process Mapping (Python)
+          </div>
+        </div>
+        <form method="post" action="{{ url_for('switch_workspace') }}">
+          <label>
+            Workspace
+            <select name="company_id" onchange="this.form.submit()">
+              {% if access.is_op %}
+              <option value="" {% if access.is_master %}selected{% endif %}>Aetria Solution (master)</option>
+              {% endif %}
+              {% for c in companies %}
+              <option value="{{ c.id }}" {% if access.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>
+              {% endfor %}
+            </select>
+          </label>
+        </form>
+        <div class="muted" style="color: var(--sidebar-muted); font-size: 0.8rem">
+          <div style="color:var(--sidebar-fg);font-weight:600;margin-bottom:0.25rem">{{ access.user.name }}</div>
+          <div>{{ access.user.email }}</div>
+          <div style="margin-top:0.5rem">
+            {% if access.is_master %}Role: Aetria operator · Master
+            {% elif access.is_op %}Role: Aetria in {{ access.company_name }}
+            {% else %}Role: {{ access.role }}{% endif %}
+          </div>
+        </div>
+        <div style="margin-top: auto">
+          <form method="post" action="{{ url_for('logout') }}">
+            <button class="btn btn-ghost" type="submit">Sign out</button>
+          </form>
+        </div>
+      </aside>
+
+      <div class="main">
+        <div class="topbar">
+          {% if access.is_master %}Viewing Aetria Solution master library
+          {% else %}Company workspace: {{ access.company_name }}{% endif %}
+        </div>
+        <div class="content">
+          <section class="panel">
+            <div class="panel-head">
+              <div style="flex:1;min-width:200px">
+                <h1>
+                  {% if access.is_master %}Aetria Solution — Master library
+                  {% else %}{{ access.company_name }}{% endif %}
+                </h1>
+                <p class="muted" style="margin:0.25rem 0 0">
+                  {% if access.is_master %}Upload at AS level, then push branches to companies.
+                  {% else %}Assigned processes only.{% endif %}
+                </p>
+              </div>
+              <form method="get" action="{{ url_for('app_home') }}">
+                <input type="search" name="q" value="{{ q }}" placeholder="Search code or name…" style="max-width:220px" />
+              </form>
+              {% if not access.is_master and access.company_id %}
+              <a class="btn" href="{{ url_for('export', company_id=access.company_id) }}">Export Excel (stub)</a>
+              {% endif %}
+            </div>
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% for cat, msg in messages %}
+                <div class="msg {% if cat == 'error' %}error{% endif %}">{{ msg }}</div>
+              {% endfor %}
+            {% endwith %}
+            <div class="panel-body" id="tree">
+              {% macro render_nodes(parent_id, depth) -%}
+                {% for n in nodes if (n.parent_id or none) == parent_id %}
+                  {% set hay = (n.code ~ ' ' ~ n.name ~ ' ' ~ (n.description or ''))|lower %}
+                  {% if not q or (q|lower) in hay %}
+                  <a class="tree-item {% if selected and selected.id == n.id %}active{% endif %}"
+                     href="{{ url_for('app_home', node=n.id, q=q) }}"
+                     style="padding-left: {{ 8 + depth * 14 }}px; text-decoration:none; color:inherit; display:flex">
+                    <div>
+                      <span class="code">{{ n.code }}</span>
+                      <span class="name">{{ n.name }}</span>
+                      {% if n.is_hidden %}<span class="badge">hidden</span>{% endif %}
+                      {% if editable is not none and n.id in editable %}<span class="badge">editable</span>{% endif %}
+                    </div>
+                  </a>
+                  {% endif %}
+                  {{ render_nodes(n.id, depth + 1) }}
+                {% endfor %}
+              {%- endmacro %}
+              {{ render_nodes(none, 0) }}
+            </div>
+          </section>
+
+          <aside class="side-stack">
+            <div class="panel">
+              <h2>Details</h2>
+              {% if not selected %}
+              <p class="muted">Select a process in the tree.</p>
+              {% else %}
+              {% set can_edit_sel = access.can_edit and (editable is none or selected.id in editable) %}
+              <form method="post" action="{{ url_for('update_process', node_id=selected.id) }}">
+                <div class="muted" style="font-size:0.75rem;text-transform:uppercase">Code</div>
+                <div style="font-family:ui-monospace,monospace;margin-bottom:0.75rem">{{ selected.code }}</div>
+                <label>Name
+                  <input name="name" type="text" value="{{ selected.name }}" {% if not can_edit_sel %}disabled{% endif %} />
+                </label>
+                <label>Description
+                  <textarea name="description" rows="3" {% if not can_edit_sel %}disabled{% endif %}>{{ selected.description }}</textarea>
+                </label>
+                <label>Value stream
+                  <select name="value_stream_id" {% if not (can_edit_sel and access.can_admin) %}disabled{% endif %}>
+                    <option value="">Unassigned</option>
+                    {% for v in streams %}
+                    <option value="{{ v.id }}" {% if selected.value_stream_id == v.id %}selected{% endif %}>{{ v.code }} — {{ v.name }}</option>
+                    {% endfor %}
+                  </select>
+                </label>
+                {% if access.can_admin %}
+                <label style="display:flex;gap:0.5rem;align-items:center;margin-top:0.75rem">
+                  <input type="checkbox" name="is_hidden" value="1" {% if selected.is_hidden %}checked{% endif %} />
+                  Hidden in company map
+                </label>
+                {% endif %}
+                {% if can_edit_sel %}
+                <button class="btn btn-block" type="submit">Save</button>
+                {% elif access.can_edit %}
+                <p class="muted" style="color:var(--warn);font-size:0.8rem;margin-top:0.75rem">Outside your area scope — view only.</p>
+                {% endif %}
+              </form>
+              {% endif %}
+            </div>
+
+            {% if access.is_master %}
+            <div class="panel">
+              <h2>Bulk upload (AS)</h2>
+              <p class="muted" style="font-size:0.8rem">CSV/Excel: code, name, description, parentCode, valueStream</p>
+              <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+                <input type="file" name="file" accept=".csv,.xlsx,.xls,.txt" required />
+                <button class="btn btn-block" type="submit">Upload</button>
+              </form>
+            </div>
+            <div class="panel">
+              <h2>Assign / push to company</h2>
+              <form method="post" action="{{ url_for('assign') }}">
+                <select name="company_id" required>
+                  {% for c in companies %}
+                  <option value="{{ c.id }}">{{ c.name }}</option>
+                  {% endfor %}
+                </select>
+                <input type="hidden" name="master_node_id" value="{{ selected.id if selected else '' }}" />
+                <button class="btn btn-block" type="submit" {% if not selected %}disabled{% endif %}>Push selected branch</button>
+              </form>
+              {% if assignments %}
+              <div class="muted" style="margin-top:0.75rem;font-size:0.8rem">
+                <div style="text-transform:uppercase;font-size:0.7rem;margin-bottom:0.35rem">Recent</div>
+                {% for a in assignments[:8] %}
+                <div>{{ a.master_code }} → {{ a.company_name }}</div>
+                {% endfor %}
+              </div>
+              {% endif %}
+            </div>
+            {% endif %}
+
+            {% if not access.is_master %}
+            <div class="stub-note">
+              <strong>Export is a stub.</strong> Value-stream Excel uses placeholder columns until the client template is provided.
+            </div>
+            {% endif %}
+          </aside>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Dashboard · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="kicker">Digital transformation meets simplicity.</p>
+  <h1>Admin dashboard</h1>
+  <p class="lede">Consumer Products master, two companies, and the processes assigned to each value stream.</p>
+</header>
+<div class="actions">
+  <a class="btn" href="{{ url_for('assign') }}">Assign processes</a>
+  <a class="textlink" href="{{ url_for('masters') }}">Masters</a>
+  <a class="textlink" href="{{ url_for('companies') }}">Companies</a>
+  <a class="textlink" href="{{ url_for('distribute') }}">Excel download</a>
+  <a class="textlink" href="{{ url_for('company_form') }}">New company</a>
+  <a class="textlink" href="{{ url_for('user_new') }}">Add user</a>
+</div>
+<div class="specs">
+  <a href="{{ url_for('masters') }}"><b>{{ "{:,}".format(stats.processes) }}</b><span>Processes in the master</span></a>
+  <a href="{{ url_for('companies') }}"><b>{{ stats.companies }}</b><span>Companies</span></a>
+  <a href="{{ url_for('value_streams') }}"><b>{{ stats.streams }}</b><span>Value streams</span></a>
+  <a href="{{ url_for('assign') }}"><b>{{ stats.assignments }}</b><span>Assigned processes</span></a>
+</div>
+<div class="company-lines">
+  {% for c in companies %}
+  <a href="{{ url_for('company_form', company_id=c.id) }}"><span><strong>{{ c.name }}</strong><em>{{ c.short_name }} · {{ c.streams }} streams</em></span><span>{{ c.processes }} processes</span></a>
+  {% else %}
+  <p class="muted">No companies yet.</p>
+  {% endfor %}
+</div>
+<p class="quiet-line">Open{% for item in attention %} · <a href="{{ url_for('critical_points' if item.kind == 'Critical point' else 'automation' if item.kind == 'Automation' else 'workshops') }}">{{ item.title }}</a>{% else %} · Nothing waiting{% endfor %}</p>
+<p class="quiet-line">{{ stats.workshops }} workshops · {{ stats.critical }} critical points · {{ stats.automation }} automation points · {{ stats.masters }} masters</p>
+{% endblock %}

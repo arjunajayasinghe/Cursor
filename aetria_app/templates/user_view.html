@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ user.name }} · Aetria{% endblock %}
+{% block body %}
+<header class="page-head">
+  <p class="eyebrow">User</p>
+  <h1>{{ user.name }}</h1>
+</header>
+<section class="panel">
+  <p><strong>User ID</strong><br />{{ user.email }}</p>
+  <p><strong>Role</strong><br />{{ role_labels.get(user.role, user.role) }}</p>
+  <p><strong>Active</strong><br />{{ "Yes" if user.is_active else "No" }}</p>
+  <p><strong>Created</strong><br />{{ user.created_at }}</p>
+  <a class="btn" href="{{ url_for('user_edit', user_id=user.id) }}">Edit</a>
+  <a class="btn secondary" href="{{ url_for('users') }}">Back to users</a>
+</section>
+{% endblock %}
