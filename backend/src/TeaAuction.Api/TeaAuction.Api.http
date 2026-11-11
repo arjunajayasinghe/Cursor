@@ -1,0 +1,13 @@
+@host = http://localhost:8080
+@apiKey = dev-tea-auction-key
+
+GET {{host}}/health
+
+###
+
+GET {{host}}/api/sales
+X-Api-Key: {{apiKey}}
+
+###
+
+# Multipart upload is easier with curl. See the repository README.
