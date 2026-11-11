@@ -10,6 +10,7 @@ import {
   analyzePrAgainstExisting,
   integrationModule,
   parseTabularPayload,
+  planExcelDelta,
   type AnalyzePlan,
 } from "./import-pipeline";
 
@@ -334,6 +335,127 @@ export class PlatformService {
       mismatchCount: plan.mismatchCount,
       plan: plan.plan.slice(0, 100),
       note: "Phase 2 — validate/preview with field-priority reconcile. Call reconcile to commit.",
+    };
+  }
+
+  /**
+   * Daily SAP Excel. Creates missing PR/PO lines and patches only changed SAP fields.
+   * Notes and status are left alone. Unchanged lines are counted, not rewritten.
+   */
+  async excelDelta(
+    kind: "pr" | "po",
+    input: { base64?: string; fileName?: string },
+    actor: string,
+  ) {
+    if (!input.base64) throw new BadRequestException("Upload an Excel file");
+    const table = parseTabularPayload({
+      base64: input.base64,
+      fileName: input.fileName || (kind === "pr" ? "pr.xlsx" : "po.xlsx"),
+      formatHint: "xlsx",
+    });
+    const existing =
+      kind === "pr"
+        ? await this.prisma.purchaseRequisition.findMany()
+        : await this.prisma.purchaseOrder.findMany();
+    const plan = planExcelDelta(kind, table, existing as unknown as Array<Record<string, unknown>>);
+    if (plan.errors.length && plan.creates.length + plan.updates.length === 0) {
+      throw new BadRequestException(plan.errors.join(" "));
+    }
+
+    let created = 0;
+    let updated = 0;
+    for (const row of plan.creates) {
+      if (kind === "pr") {
+        const recordId = `PR-IMP-${row.prNo}-${row.line}`;
+        await this.prisma.purchaseRequisition.upsert({
+          where: { recordId },
+          create: {
+            recordId,
+            prNo: row.prNo,
+            line: row.line,
+            material: row.material || "—",
+            materialCode: row.materialCode || null,
+            quantity: Number(String(row.quantity || "1").replace(/,/g, "")) || 1,
+            uom: row.uom || null,
+            plant: row.plant || null,
+            requester: row.requester || "SAP import",
+            purchasingGroup: row.purchasingGroup || null,
+            createdBy: row.createdBy || null,
+            sourcing: row.sourcing || null,
+            stockType: row.stockType || null,
+            delayBand: row.delayBand || null,
+            date: row.date ? new Date(row.date) : null,
+            status: "Pending PO",
+            imported: true,
+            department: "Imported",
+          },
+          update: {},
+        });
+      } else {
+        const recordId = `PO-IMP-${row.poNo}-${row.line}`;
+        await this.prisma.purchaseOrder.upsert({
+          where: { recordId },
+          create: {
+            recordId,
+            poNo: row.poNo,
+            line: row.line,
+            prId: row.prId || null,
+            supplier: row.supplier || "Unknown",
+            supplierCode: row.supplierCode || null,
+            material: row.material || "—",
+            materialCode: row.materialCode || null,
+            quantity: Number(String(row.quantity || "1").replace(/,/g, "")) || 1,
+            uom: row.uom || null,
+            currency: row.currency || null,
+            unitPrice: row.unitPrice ? Number(String(row.unitPrice).replace(/,/g, "")) : null,
+            date: row.date ? new Date(row.date) : null,
+            incoterm: row.incoterm || null,
+            importNo: row.importNo || null,
+            status: "Delivery pending",
+          },
+          update: {},
+        });
+      }
+      created++;
+    }
+
+    for (const row of plan.updates) {
+      const data: Record<string, unknown> = {};
+      for (const [field, value] of Object.entries(row.patch)) {
+        if (field === "quantity" || field === "unitPrice") data[field] = Number(String(value).replace(/,/g, ""));
+        else if (field === "date") {
+          const d = new Date(value);
+          if (!Number.isNaN(d.getTime())) data.date = d;
+        } else data[field] = value;
+      }
+      if (!Object.keys(data).length) continue;
+      if (kind === "pr") {
+        await this.prisma.purchaseRequisition.update({ where: { recordId: row.recordId }, data });
+      } else {
+        await this.prisma.purchaseOrder.update({ where: { recordId: row.recordId }, data });
+      }
+      updated++;
+    }
+
+    await this.prisma.auditEvent.create({
+      data: {
+        moduleKey: kind,
+        recordId: kind === "pr" ? "PR-EXCEL" : "PO-EXCEL",
+        actor,
+        action: "Excel delta",
+        source: "import",
+        detail: `${input.fileName || "excel"} +${created} ~${updated} =${plan.unchanged}`,
+      },
+    });
+
+    return {
+      kind,
+      fileName: input.fileName || null,
+      rowCount: plan.rowCount,
+      created,
+      updated,
+      unchanged: plan.unchanged,
+      errors: plan.errors,
     };
   }
 

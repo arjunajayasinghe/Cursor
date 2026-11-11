@@ -3,6 +3,7 @@ import { AccessGuard } from "../permissions/access.guard";
 import { CurrentRole, RequireAccess } from "../permissions/role.decorator";
 import { PermissionsService, RoleContext } from "../permissions/permissions.service";
 import { CreatePoDto, UpdatePoDto } from "./po.dto";
+import { PlatformService } from "../platform/platform.service";
 import { PoService } from "./po.service";
 
 @Controller("po")
@@ -11,6 +12,7 @@ export class PoController {
   constructor(
     private readonly po: PoService,
     private readonly permissions: PermissionsService,
+    private readonly platform: PlatformService,
   ) {}
 
   @Get()
@@ -18,6 +20,16 @@ export class PoController {
   async list(@CurrentRole() role: RoleContext, @Query("q") q?: string, @Query("status") status?: string) {
     const rows = await this.po.list(q, status);
     return this.permissions.filterRows(role, "po", rows as Array<{ recordId: string }>);
+  }
+
+  /** Daily SAP Excel. View access is enough: only new and changed lines are written. */
+  @Post("import/excel")
+  @RequireAccess("po", 1)
+  excel(
+    @Body() body: { base64?: string; fileName?: string },
+    @CurrentRole() role: RoleContext,
+  ) {
+    return this.platform.excelDelta("po", body, role.role);
   }
 
   @Get(":id")

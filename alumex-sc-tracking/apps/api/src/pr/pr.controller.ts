@@ -3,6 +3,7 @@ import { AccessGuard } from "../permissions/access.guard";
 import { CurrentRole, RequireAccess } from "../permissions/role.decorator";
 import { PermissionsService, RoleContext } from "../permissions/permissions.service";
 import { AnalyzePrImportDto, CreatePrDto, UpdatePrDto } from "./pr.dto";
+import { PlatformService } from "../platform/platform.service";
 import { PrService } from "./pr.service";
 
 @Controller("pr")
@@ -11,6 +12,7 @@ export class PrController {
   constructor(
     private readonly pr: PrService,
     private readonly permissions: PermissionsService,
+    private readonly platform: PlatformService,
   ) {}
 
   @Get()
@@ -45,6 +47,16 @@ export class PrController {
   @RequireAccess("pr", 2)
   commit(@Body() dto: AnalyzePrImportDto) {
     return this.pr.commitImport(dto.text);
+  }
+
+  /** Daily SAP Excel. View access is enough: only new and changed lines are written. */
+  @Post("import/excel")
+  @RequireAccess("pr", 1)
+  excel(
+    @Body() body: { base64?: string; fileName?: string },
+    @CurrentRole() role: RoleContext,
+  ) {
+    return this.platform.excelDelta("pr", body, role.role);
   }
 
   @Get(":id")
