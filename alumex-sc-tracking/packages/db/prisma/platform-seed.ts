@@ -1,0 +1,304 @@
+import { PrismaClient } from "@prisma/client";
+
+const MASTERS: Array<{ category: string; code: string; name: string; extra?: string; sortOrder: number }> = [
+  { category: "plant", code: "1100", name: "Sapugaskanda", sortOrder: 10 },
+  { category: "plant", code: "1200", name: "Ekala", sortOrder: 20 },
+  { category: "currency", code: "USD", name: "US Dollar", sortOrder: 10 },
+  { category: "currency", code: "EUR", name: "Euro", sortOrder: 20 },
+  { category: "currency", code: "LKR", name: "Sri Lankan Rupee", sortOrder: 30 },
+  { category: "uom", code: "EA", name: "Each", sortOrder: 10 },
+  { category: "uom", code: "KG", name: "Kilogram", sortOrder: 20 },
+  { category: "uom", code: "M", name: "Metre", sortOrder: 30 },
+  { category: "uom", code: "SET", name: "Set", sortOrder: 40 },
+  { category: "incoterm", code: "CIF", name: "Cost, Insurance and Freight", sortOrder: 10 },
+  { category: "incoterm", code: "FOB", name: "Free On Board", sortOrder: 20 },
+  { category: "incoterm", code: "EXW", name: "Ex Works", sortOrder: 30 },
+  { category: "incoterm", code: "DDP", name: "Delivered Duty Paid", sortOrder: 40 },
+  {
+    category: "delay_reason",
+    code: "PORT_CONGESTION",
+    name: "Port congestion",
+    extra: "Transshipment or discharge delay",
+    sortOrder: 10,
+  },
+  {
+    category: "delay_reason",
+    code: "WEATHER",
+    name: "Weather / force majeure",
+    sortOrder: 20,
+  },
+  {
+    category: "delay_reason",
+    code: "SUPPLIER_PROD",
+    name: "Supplier production slip",
+    sortOrder: 30,
+  },
+  {
+    category: "delay_reason",
+    code: "DOC_HOLD",
+    name: "Documentation hold",
+    sortOrder: 40,
+  },
+  { category: "supplier", code: "100391", name: "Solace International", sortOrder: 10 },
+  { category: "supplier", code: "100412", name: "Atlas Industrial Supply", sortOrder: 20 },
+  { category: "supplier", code: "100488", name: "Harbor Polymer", sortOrder: 30 },
+  { category: "supplier", code: "100501", name: "NexSeal Industrial", sortOrder: 40 },
+  { category: "supplier", code: "100520", name: "Pacific Surface Supply", sortOrder: 50 },
+];
+
+const INTEGRATIONS = [
+  {
+    key: "sap_pr_tsv",
+    name: "SAP PR report (TSV/CSV)",
+    kind: "sap_import",
+    channel: "csv",
+    status: "stub",
+    description: "Phase-2 authorized PR CSV/TSV import with validate → preview → reconcile.",
+    fieldPriority: {
+      prNo: "S",
+      line: "S",
+      materialCode: "S",
+      material: "S",
+      quantity: "S",
+      plant: "S",
+      requester: "S",
+      notes: "W",
+      priority: "W",
+      status: "W",
+    },
+    notes: "samples/sap-pr-report.tsv · POST /platform/integrations/sap_pr_tsv/analyze then …/batches/:id/reconcile",
+  },
+  {
+    key: "sap_po_xlsx",
+    name: "SAP PO / PI extract (XLSX)",
+    kind: "sap_import",
+    channel: "xlsx",
+    status: "stub",
+    description: "Phase-2 PO CSV/XLSX import. Field priority keeps PI/notes web-owned.",
+    fieldPriority: {
+      poNo: "S",
+      line: "S",
+      supplier: "S",
+      unitPrice: "S",
+      currency: "S",
+      piNo: "W",
+      notes: "W",
+    },
+    notes: "samples/sap-po-extract.csv (XLSX also accepted as base64 upload)",
+  },
+  {
+    key: "sap_grn_movements",
+    name: "SAP goods movements / GRN",
+    kind: "sap_import",
+    channel: "csv",
+    status: "stub",
+    description: "Phase-2 GRN import on material document + year + item. Notes stay web-owned.",
+    fieldPriority: {
+      grnNo: "S",
+      year: "S",
+      item: "S",
+      received: "S",
+      plant: "S",
+      notes: "W",
+      quality: "W",
+    },
+    notes: "samples/sap-grn-extract.csv",
+  },
+  {
+    key: "vessel_ais",
+    name: "Vessel AIS provider",
+    kind: "vessel_api",
+    channel: "api",
+    status: "configured",
+    description: "Provider-neutral REST/mock adapter already live under /vessel-tracking.",
+    fieldPriority: {
+      latitude: "E",
+      longitude: "E",
+      apiEta: "E",
+      eta: "W",
+      etaRevised: "W",
+    },
+  },
+  {
+    key: "sap_pr_api",
+    name: "SAP PR data service (API sync)",
+    kind: "sap_api",
+    channel: "api",
+    status: "configured",
+    description: "Phase-3 scheduled/on-demand PR sync stub. Demo runner pulls samples/sap-pr-report.tsv.",
+    fieldPriority: {
+      prNo: "S",
+      line: "S",
+      materialCode: "S",
+      material: "S",
+      quantity: "S",
+      plant: "S",
+      requester: "S",
+      notes: "W",
+      priority: "W",
+      status: "W",
+    },
+    notes: "POST /platform/sync-jobs/:id/run · sapClient 100",
+    sapClient: "100",
+  },
+  {
+    key: "sap_po_api",
+    name: "SAP PO / PI data service (API sync)",
+    kind: "sap_api",
+    channel: "api",
+    status: "configured",
+    description: "Phase-3 PO sync stub using sample PO extract.",
+    fieldPriority: {
+      poNo: "S",
+      line: "S",
+      supplier: "S",
+      unitPrice: "S",
+      currency: "S",
+      piNo: "W",
+      notes: "W",
+    },
+    sapClient: "100",
+  },
+];
+
+const SYNC_JOBS = [
+  {
+    integrationKey: "sap_pr_api",
+    name: "PR released report · every 6h",
+    schedule: "0 */6 * * *",
+    sapClient: "100",
+  },
+  {
+    integrationKey: "sap_po_api",
+    name: "PO / PI extract · daily",
+    schedule: "0 2 * * *",
+    sapClient: "100",
+  },
+];
+
+export async function seedPlatform(prisma: PrismaClient) {
+  for (const m of MASTERS) {
+    await prisma.masterDataEntry.upsert({
+      where: { category_code: { category: m.category, code: m.code } },
+      create: m,
+      update: { name: m.name, extra: m.extra, active: true, sortOrder: m.sortOrder },
+    });
+  }
+
+  for (const i of INTEGRATIONS) {
+    await prisma.integrationRegister.upsert({
+      where: { key: i.key },
+      create: {
+        key: i.key,
+        name: i.name,
+        kind: i.kind,
+        channel: i.channel,
+        status: i.status,
+        description: i.description,
+        fieldPriority: i.fieldPriority,
+        notes: "notes" in i ? (i as { notes?: string }).notes : null,
+        sapClient: "sapClient" in i ? (i as { sapClient?: string }).sapClient : null,
+      },
+      update: {
+        name: i.name,
+        description: i.description,
+        fieldPriority: i.fieldPriority,
+        channel: i.channel,
+        status: i.status,
+        sapClient: "sapClient" in i ? (i as { sapClient?: string }).sapClient : null,
+      },
+    });
+  }
+
+  for (const job of SYNC_JOBS) {
+    const existing = await prisma.integrationSyncJob.findFirst({
+      where: { integrationKey: job.integrationKey, name: job.name },
+    });
+    if (existing) {
+      await prisma.integrationSyncJob.update({
+        where: { id: existing.id },
+        data: {
+          schedule: job.schedule,
+          sapClient: job.sapClient,
+          enabled: true,
+          status: "idle",
+          nextRunAt: new Date(Date.now() + 6 * 3600_000),
+        },
+      });
+    } else {
+      await prisma.integrationSyncJob.create({
+        data: {
+          ...job,
+          enabled: true,
+          status: "idle",
+          nextRunAt: new Date(Date.now() + 6 * 3600_000),
+        },
+      });
+    }
+  }
+
+  // Sample audit + workflow history for demo depth
+  const pr = await prisma.purchaseRequisition.findFirst({ orderBy: { recordId: "asc" } });
+  if (pr) {
+    await prisma.auditEvent.create({
+      data: {
+        moduleKey: "pr",
+        recordId: pr.recordId,
+        actor: "seed",
+        action: "Imported",
+        detail: "Seed baseline",
+        source: "import",
+        newValue: JSON.stringify({ prNo: pr.prNo, line: pr.line, status: pr.status }),
+      },
+    });
+
+    await prisma.fieldMismatch.deleteMany({ where: { moduleKey: "pr", recordId: pr.recordId } });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "pr",
+        recordId: pr.recordId,
+        field: "quantity",
+        existingValue: String(pr.quantity),
+        incomingValue: String(Number(pr.quantity) + 5),
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_pr_api",
+        detail: "Demo mismatch — SAP quantity differs from web record",
+      },
+    });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "pr",
+        recordId: pr.recordId,
+        field: "plant",
+        existingValue: pr.plant || "",
+        incomingValue: "1100",
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_pr_api",
+        detail: "Demo mismatch — plant code from SAP sync",
+      },
+    });
+  }
+
+  const po = await prisma.purchaseOrder.findFirst({ orderBy: { recordId: "asc" } });
+  if (po) {
+    await prisma.fieldMismatch.deleteMany({ where: { moduleKey: "po", recordId: po.recordId } });
+    await prisma.fieldMismatch.create({
+      data: {
+        moduleKey: "po",
+        recordId: po.recordId,
+        field: "unitPrice",
+        existingValue: po.unitPrice != null ? String(po.unitPrice) : "",
+        incomingValue: "2499.00",
+        preferredSource: "S",
+        action: "exception",
+        status: "open",
+        integrationKey: "sap_po_api",
+        detail: "Demo mismatch — SAP unit price vs web",
+      },
+    });
+  }
+}

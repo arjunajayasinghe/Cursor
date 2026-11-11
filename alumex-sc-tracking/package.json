@@ -1,0 +1,20 @@
+{
+  "name": "alumex-sc-tracking",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:web": "npm run dev -w @alumex/web",
+    "dev:api": "npm run start:dev -w @alumex/api",
+    "build": "npm run build -w @alumex/db && npm run build -w @alumex/api && npm run build -w @alumex/web",
+    "db:generate": "npm run generate -w @alumex/db",
+    "db:migrate": "npm run migrate -w @alumex/db",
+    "db:seed": "npm run seed -w @alumex/db",
+    "db:seed:real": "npm run seed:real -w @alumex/api",
+    "db:reset": "npm run reset -w @alumex/db"
+  }
+}

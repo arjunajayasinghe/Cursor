@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: alumex-scc-db
+    environment:
+      POSTGRES_USER: alumex
+      POSTGRES_PASSWORD: alumex
+      POSTGRES_DB: alumex_scc
+    ports:
+      - "5432:5432"
+    volumes:
+      - alumex_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U alumex -d alumex_scc"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  alumex_pg:

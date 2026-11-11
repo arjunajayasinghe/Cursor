@@ -1,0 +1,4 @@
+PGr	Purch.Req.	Req.Date	Chngd	Release Dt	PR Received Date	Report Date	Delay in Days	Delay Category	Item	Material	Short Text	Un	Quantity	Created by	Local/Import	Stock/Non-Stock	Material Group Desc.	Plnt
+A01	100009901	09-Nov-26	09-Nov-26	10-Nov-26	10-Nov-26	11-Nov-26	1	On track	10	ALX-901	Demo import billet 6063	MT	25	NPERERA	Import	Stock	Raw materials	1100
+A01	100009901	09-Nov-26	09-Nov-26	10-Nov-26	10-Nov-26	11-Nov-26	1	On track	20	ALX-902	Demo import billet 6060	MT	10	NPERERA	Import	Stock	Raw materials	1100
+A02	100009902	08-Nov-26			09-Nov-26	11-Nov-26	2	Watch	10	ALX-903	Demo gasket strip	KG	500	SSILVA	Local	Non-Stock	Production supplies	1200
