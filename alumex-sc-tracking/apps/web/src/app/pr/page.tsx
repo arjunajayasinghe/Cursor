@@ -73,7 +73,7 @@ export default function PrPage() {
   }, [selected?.recordId]);
 
   const statuses = useMemo(
-    () => Array.from(new Set(groups.flatMap((g) => g.statuses))).sort(),
+    () => Array.from(new Set(groups.flatMap((g) => g.statuses || []))).sort(),
     [groups],
   );
 
@@ -223,7 +223,7 @@ export default function PrPage() {
                       <td className="px-3.5 py-2.5">{g.priority || "—"}</td>
                       <td className="px-3.5 py-2.5">
                         <div className="flex flex-wrap gap-1">
-                          {g.statuses.map((s) => (
+                          {(g.statuses || []).map((s) => (
                             <StatusBadge key={s} status={s} />
                           ))}
                         </div>
